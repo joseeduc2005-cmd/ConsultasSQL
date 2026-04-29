@@ -1,0 +1,33 @@
+{
+  "databases": [
+    {
+      "id": "pg_main",
+      "label": "Postgres Principal",
+      "type": "postgres",
+      "primary": true,
+      "host": "postgres",
+      "port": 5432,
+      "database": "knowledge_base",
+      "user": "postgres",
+      "password": "admin123",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "oracle_test",
+      "label": "Oracle XE 21c",
+      "type": "oracle",
+      "enabled": true,
+      "host": "oracle",
+      "port": 1521,
+      "database": "XEPDB1",
+      "user": "APP",
+      "password": "1234",
+      "schema": {
+        "tables": []
+      }
+    }
+  ]
+}

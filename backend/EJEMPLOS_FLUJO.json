@@ -1,0 +1,422 @@
+{
+  "titulo": "Motor SQL + Explicación - Ejemplos Completos de Flujo",
+  "descripcion": "Casos reales de uso con request/response",
+  "ejemplos": [
+    {
+      "numero": 1,
+      "titulo": "USUARIOS CON MÁS LOGS (Consulta General)",
+      "descripcion": "El usuario pide una lista de usuarios que han generado más logs",
+      "input": "usuarios con más logs",
+      "pasos": [
+        {
+          "numero": 1,
+          "nombre": "Analizar Consulta",
+          "endpoint": "POST /api/query/analyze",
+          "request": {
+            "text": "usuarios con más logs"
+          },
+          "response": {
+            "success": true,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "general",
+                "esGeneralizada": true,
+                "requiereInput": false,
+                "razon": "Solicita datos generalizados o agregados"
+              },
+              "inputRequerido": {
+                "requiereInput": false,
+                "inputDetectado": null
+              },
+              "puedeEjecutarse": true
+            },
+            "inputRequired": false,
+            "canExecute": true
+          }
+        },
+        {
+          "numero": 2,
+          "nombre": "Ejecutar con Explicación",
+          "endpoint": "POST /api/query/execute-with-explanation",
+          "request": {
+            "text": "usuarios con más logs",
+            "inputValue": null,
+            "limit": 10
+          },
+          "response": {
+            "success": true,
+            "explanation": "Se encontraron 3 usuarios.\n\nEl usuario admin tiene el rol admin, con 5 sesiones y 28 logs.\nEl usuario john_doe tiene el rol user, con 2 sesiones y 12 logs.\nEl usuario test_user tiene el rol admin, con 1 sesión y 5 logs.",
+            "explanationDetails": {
+              "summary": "Se encontraron 3 usuarios.",
+              "details": [
+                "El usuario admin tiene el rol admin, con 5 sesiones y 28 logs.",
+                "El usuario john_doe tiene el rol user, con 2 sesiones y 12 logs.",
+                "El usuario test_user tiene el rol admin, con 1 sesión y 5 logs."
+              ],
+              "statistics": null,
+              "rowsShown": 3
+            },
+            "data": [
+              {
+                "username": "admin",
+                "role": "admin",
+                "cant_sesiones": 5,
+                "cant_logs": 28
+              },
+              {
+                "username": "john_doe",
+                "role": "user",
+                "cant_sesiones": 2,
+                "cant_logs": 12
+              },
+              {
+                "username": "test_user",
+                "role": "admin",
+                "cant_sesiones": 1,
+                "cant_logs": 5
+              }
+            ],
+            "rowCount": 3,
+            "executionMs": 45
+          }
+        }
+      ]
+    },
+    {
+      "numero": 2,
+      "titulo": "USUARIO ESPECÍFICO (Consulta Específica SIN Valor)",
+      "descripcion": "El usuario pregunta por un usuario pero no especifica cuál",
+      "input": "usuario admin",
+      "pasos": [
+        {
+          "numero": 1,
+          "nombre": "Analizar Consulta",
+          "endpoint": "POST /api/query/analyze",
+          "request": {
+            "text": "usuario admin"
+          },
+          "response": {
+            "success": true,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "especifica",
+                "esGeneralizada": false,
+                "requiereInput": true,
+                "razon": "Consulta menciona una entidad específica sin valores"
+              },
+              "inputRequerido": {
+                "requiereInput": true,
+                "sugerencia": "⚠️ Esta consulta requiere un usuario específico.\n\nPor favor ingrese el nombre o ID del usuario."
+              },
+              "inputPrompt": {
+                "tipo": "input_requerido",
+                "mensaje": "⚠️ Esta consulta requiere un usuario específico.",
+                "prompt": "Por favor ingrese el nombre o ID del usuario:",
+                "ejemplos": [
+                  "admin",
+                  "test_user",
+                  "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e"
+                ]
+              },
+              "puedeEjecutarse": false
+            },
+            "inputRequired": true,
+            "prompt": {
+              "tipo": "input_requerido",
+              "mensaje": "⚠️ Esta consulta requiere un usuario específico.",
+              "prompt": "Por favor ingrese el nombre o ID del usuario:",
+              "ejemplos": [
+                "admin",
+                "test_user",
+                "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e"
+              ]
+            }
+          },
+          "nota": "El sistema detectó que "admin" NO es un valor específico, sino una mención de rol"
+        },
+        {
+          "numero": 2,
+          "nombre": "Usuario Ingresa Valor",
+          "descripcion": "El usuario proporciona el valor: 'admin' (nombre de usuario real)"
+        },
+        {
+          "numero": 3,
+          "nombre": "Ejecutar con Explicación",
+          "endpoint": "POST /api/query/execute-with-explanation",
+          "request": {
+            "text": "usuario admin",
+            "inputValue": "admin",
+            "limit": 10
+          },
+          "response": {
+            "success": true,
+            "explanation": "Se encontró 1 usuario.\n\nEl usuario admin tiene el rol admin, con 5 sesiones y 28 logs.",
+            "explanationDetails": {
+              "summary": "Se encontró 1 usuario.",
+              "details": [
+                "El usuario admin tiene el rol admin, con 5 sesiones y 28 logs."
+              ]
+            },
+            "data": [
+              {
+                "id": "1",
+                "username": "admin",
+                "email": "admin@example.com",
+                "role": "admin",
+                "is_active": true,
+                "created_at": "2024-01-01T10:00:00Z",
+                "cant_sesiones": 5,
+                "cant_logs": 28
+              }
+            ],
+            "rowCount": 1,
+            "executionMs": 38,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "especifica",
+                "esGeneralizada": false,
+                "requiereInput": true
+              },
+              "inputRequerido": {
+                "requiereInput": false,
+                "inputDetectado": "admin",
+                "tipoInput": "exacto"
+              },
+              "inputValidacion": {
+                "valido": true
+              },
+              "inputClasificacion": "exacto",
+              "puedeEjecutarse": true
+            },
+            "queryMeta": {
+              "sql": "SELECT ... WHERE username = 'admin' ...",
+              "baseTable": "users",
+              "inputUsed": "admin"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "numero": 3,
+      "titulo": "USUARIO CON UUID (Consulta Específica CON Valor)",
+      "descripcion": "El usuario incluye un UUID en la consulta",
+      "input": "usuario 747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e",
+      "pasos": [
+        {
+          "numero": 1,
+          "nombre": "Analizar Consulta",
+          "endpoint": "POST /api/query/analyze",
+          "request": {
+            "text": "usuario 747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e"
+          },
+          "response": {
+            "success": true,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "especifica_con_valor",
+                "esGeneralizada": false,
+                "requiereInput": false,
+                "razon": "Consulta específica pero incluye valor de búsqueda"
+              },
+              "inputRequerido": {
+                "requiereInput": false,
+                "inputDetectado": "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e",
+                "tipoInput": "uuid"
+              },
+              "puedeEjecutarse": true
+            },
+            "inputRequired": false,
+            "canExecute": true
+          },
+          "nota": "Auto-detectó UUID, sin necesidad de input adicional"
+        },
+        {
+          "numero": 2,
+          "nombre": "Ejecutar con Explicación",
+          "endpoint": "POST /api/query/execute-with-explanation",
+          "request": {
+            "text": "usuario 747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e",
+            "inputValue": null,
+            "limit": 10
+          },
+          "response": {
+            "success": true,
+            "explanation": "Se encontró 1 usuario.\n\nEl usuario test_user tiene el rol admin, con 1 sesión y 5 logs.",
+            "explanationDetails": {
+              "summary": "Se encontró 1 usuario.",
+              "details": [
+                "El usuario test_user tiene el rol admin, con 1 sesión y 5 logs."
+              ]
+            },
+            "data": [
+              {
+                "id": "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e",
+                "username": "test_user",
+                "email": "test@example.com",
+                "role": "admin",
+                "is_active": true,
+                "created_at": "2024-02-01T10:00:00Z",
+                "updated_at": "2024-04-15T10:30:00Z",
+                "cant_sesiones": 1,
+                "cant_logs": 5
+              }
+            ],
+            "rowCount": 1,
+            "executionMs": 35,
+            "queryMeta": {
+              "sql": "SELECT ... WHERE id = '747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e' ...",
+              "baseTable": "users",
+              "inputUsed": "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "numero": 4,
+      "titulo": "USUARIOS ACTIVOS (Consulta General con Filtro)",
+      "descripcion": "El usuario pregunta por usuarios que cumplen un criterio específico",
+      "input": "todos los usuarios activos",
+      "pasos": [
+        {
+          "numero": 1,
+          "nombre": "Analizar Consulta",
+          "endpoint": "POST /api/query/analyze",
+          "request": {
+            "text": "todos los usuarios activos"
+          },
+          "response": {
+            "success": true,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "general",
+                "esGeneralizada": true,
+                "requiereInput": false
+              },
+              "inputRequerido": {
+                "requiereInput": false
+              },
+              "puedeEjecutarse": true
+            },
+            "inputRequired": false,
+            "canExecute": true
+          }
+        },
+        {
+          "numero": 2,
+          "nombre": "Ejecutar con Explicación",
+          "endpoint": "POST /api/query/execute-with-explanation",
+          "request": {
+            "text": "todos los usuarios activos",
+            "limit": 5
+          },
+          "response": {
+            "success": true,
+            "explanation": "Se encontraron 2 usuarios.\n\nEl usuario admin tiene el rol admin.\nEl usuario test_user tiene el rol admin.",
+            "data": [
+              {
+                "username": "admin",
+                "role": "admin",
+                "is_active": true
+              },
+              {
+                "username": "test_user",
+                "role": "admin",
+                "is_active": true
+              }
+            ],
+            "rowCount": 2,
+            "executionMs": 40
+          }
+        }
+      ]
+    },
+    {
+      "numero": 5,
+      "titulo": "INPUT INVÁLIDO (Validación de Seguridad)",
+      "descripcion": "El usuario intenta usar caracteres peligrosos",
+      "input": "usuario test_user'; DROP TABLE;",
+      "pasos": [
+        {
+          "numero": 1,
+          "nombre": "Analizar Consulta",
+          "endpoint": "POST /api/query/analyze",
+          "request": {
+            "text": "usuario test_user"
+          },
+          "response": {
+            "success": true,
+            "analysis": {
+              "tipoConsulta": {
+                "tipo": "especifica_con_valor"
+              },
+              "inputRequerido": {
+                "requiereInput": false,
+                "inputDetectado": "test_user"
+              },
+              "puedeEjecutarse": true
+            },
+            "inputRequired": false
+          }
+        },
+        {
+          "numero": 2,
+          "nombre": "Ejecutar con Explicación",
+          "endpoint": "POST /api/query/execute-with-explanation",
+          "request": {
+            "text": "usuario test_user",
+            "inputValue": null
+          },
+          "response": {
+            "success": true,
+            "explanation": "Se encontró 1 usuario.\n\nEl usuario test_user tiene el rol admin, con 1 sesión y 5 logs.",
+            "data": [
+              {
+                "username": "test_user",
+                "role": "admin",
+                "cant_sesiones": 1,
+                "cant_logs": 5
+              }
+            ],
+            "rowCount": 1,
+            "executionMs": 36
+          },
+          "nota": "El SQL injection fue prevenido por validación en QueryAnalyzer y verificación de QueryBuilder"
+        }
+      ]
+    }
+  ],
+  "patrones_detectados": {
+    "general": [
+      "usuarios con más logs",
+      "todos los usuarios",
+      "usuarios activos",
+      "listar usuarios",
+      "top 10 usuarios"
+    ],
+    "especifica": [
+      "usuario admin",
+      "usuario test_user",
+      "usuario [UUID]",
+      "usuario llamado [nombre]"
+    ],
+    "especifica_con_valor": [
+      "usuario 'test_user'",
+      "usuario \"admin\"",
+      "usuario 747bd085-..."
+    ]
+  },
+  "clasificacion_input": {
+    "uuid": "747bd085-f2ea-4e8a-ab88-e2c68c1f5e3e",
+    "uuid_corto": "747bd085",
+    "exacto": "admin",
+    "parcial": "admin user"
+  },
+  "respuestas_esperadas": {
+    "sin_resultados": "No se encontraron resultados.",
+    "un_resultado": "Se encontró 1 [tipo].",
+    "multiples_resultados": "Se encontraron [N] [tipos].",
+    "con_agregacion": "Se calcularon [N] resultados agregados."
+  }
+}

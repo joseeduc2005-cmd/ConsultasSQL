@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --input-type=module)",
+      "Bash(node -e \"import\\('./src/routes/QueryRoute.js'\\).catch\\(e => console.error\\(e.message\\)\\)\")"
+    ]
+  }
+}

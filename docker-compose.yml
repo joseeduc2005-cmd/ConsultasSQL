@@ -1,0 +1,126 @@
+version: '3.9'
+
+# ═══════════════════════════════════════════════════════════════════
+#  PRACTICASPREPROFESIONALES — Motor SQL Multi-DB con IA
+#
+#  Servicios:
+#    postgres  → PostgreSQL 15
+#    oracle    → Oracle XE 21c  (gvenzl/oracle-xe imagen ligera)
+#    ollama    → IA local deepseek-coder
+#    backend   → API Express Node.js 20
+#    frontend  → Next.js 15
+#
+#  Uso:
+#    1. docker compose up --build
+#    2. (primera vez, esperar ~3 min a Oracle) luego:
+#       docker exec -it practicas-ollama ollama pull deepseek-coder
+#
+#  Puertos expuestos:
+#    3000 → Frontend
+#    3002 → Backend API
+#    5432 → PostgreSQL
+#    1521 → Oracle
+#   11434 → Ollama
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL 15 ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: practicas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: knowledge_base
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database_schema_complete.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d knowledge_base"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Oracle XE 21c ────────────────────────────────────────────────
+  # Imagen ligera sin necesidad de cuenta Oracle Container Registry.
+  # Primera vez: tarda ~3-5 min en inicializar el PDB.
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: practicas-oracle
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: SysAdmin123       # Contraseña de SYS y SYSTEM
+      ORACLE_DATABASE: XEPDB1            # PDB a crear
+      APP_USER: APP                      # Usuario de app (creado automáticamente)
+      APP_USER_PASSWORD: "1234"          # Contraseña del usuario APP
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./docker/oracle/02-create-tables.sql:/container-entrypoint-initdb.d/02-create-tables.sql:ro
+    ports:
+      - "1521:1521"
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 3m
+
+  # ── Ollama (IA local) ─────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: practicas-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # Cargar modelo la primera vez:
+    #   docker exec -it practicas-ollama ollama pull deepseek-coder
+
+  # ── Backend (Express API) ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: practicas-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.docker
+    environment:
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      postgres:
+        condition: service_healthy
+      oracle:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "3002:3002"
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: practicas-frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:3002
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+# ── Volúmenes persistentes ────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  oracle_data:
+    driver: local
+  ollama_data:
+    driver: local

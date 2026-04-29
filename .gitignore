@@ -1,0 +1,69 @@
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log
+frontend/yarn-debug.log
+frontend/yarn-error.log
+frontend/.idea/
+
+# Backend (Node.js)
+backend/node_modules/
+backend/dist/
+backend/build/
+backend/.env
+backend/.env.local
+backend/.env.*.local
+backend/npm-debug.log
+backend/yarn-debug.log
+backend/yarn-error.log
+backend/.idea/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Multibase registry with credentials (use example file as template)
+backend/config/multidb.databases.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Environment (root level)
+.env
+.env.local
+.env.*.local
+
+# Key files
+*.pem
+*.key
+
+# Docker — no subir credenciales reales de entorno Docker
+backend/.env.docker
+
+# Docker runtime artifacts
+docker-compose.override.yml

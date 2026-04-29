@@ -1,0 +1,63 @@
+{
+  "databases": [
+    {
+      "_comment": "TODAS las bases con enabled:true son iguales para el sistema. La IA y el motor SQL consultan todas.",
+      "id": "oracle_rrhh",
+      "label": "Oracle RRHH",
+      "type": "oracle",
+      "enabled": true,
+      "host": "10.0.0.25",
+      "port": 1521,
+      "database": "XEPDB1",
+      "user": "hr",
+      "password": "reemplazar_aqui",
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "pg_operaciones",
+      "label": "Postgres Operaciones",
+      "type": "postgres",
+      "enabled": true,
+      "host": "localhost",
+      "port": 5432,
+      "database": "operaciones",
+      "user": "postgres",
+      "password": "reemplazar_aqui",
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "mysql_ventas",
+      "label": "MySQL Ventas",
+      "type": "mysql",
+      "enabled": true,
+      "host": "10.0.0.30",
+      "port": 3306,
+      "database": "ventas",
+      "user": "app_user",
+      "password": "reemplazar_aqui",
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "_comment_pg_internal": "OPCIONAL: si quieres que el backend guarde su historial de consultas y aprendizaje semántico en un postgres separado, marcalo con primary:true. Si no lo pones, el sistema usa el primer postgres disponible.",
+      "id": "pg_backend_internal",
+      "label": "Postgres Backend (historial y aprendizaje)",
+      "type": "postgres",
+      "primary": true,
+      "enabled": true,
+      "host": "localhost",
+      "port": 5432,
+      "database": "knowledge_base",
+      "user": "postgres",
+      "password": "reemplazar_aqui",
+      "schema": {
+        "tables": []
+      }
+    }
+  ]
+}

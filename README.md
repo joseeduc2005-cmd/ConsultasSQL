@@ -27,7 +27,7 @@ Sistema de consultas en lenguaje natural sobre múltiples bases de datos (Postgr
 ```
 frontend/   →  Next.js 15 (App Router)
 backend/    →  Node.js + Express
-               ├── Motor IA (Ollama local, llama3)
+               ├── Motor IA (Ollama local, deepseek-coder)
                ├── Motor SQL determinístico (QueryBuilder)
                ├── Motor distribuido multibase (MultiDatabaseEngine)
                ├── Motor PL/SQL procedural (PlSqlInterpreter)
@@ -49,7 +49,7 @@ El sistema tiene **dos capas de inteligencia**:
 | npm | 9+ |
 | PostgreSQL | 12+ (base principal del backend) |
 | Ollama | cualquier versión estable |
-| Modelo IA | llama3 (o el que configures en `.env`) |
+| Modelo IA | deepseek-coder (o el que configures en `backend/.env`) |
 
 Oracle y MySQL son opcionales; solo se necesitan si los registras como bases distribuidas.
 
@@ -121,7 +121,7 @@ psql -U tu_usuario -d nombre_de_tu_base -f ../database_schema_complete.sql
 
 ```bash
 # Instalar Ollama desde https://ollama.com
-ollama pull llama3
+ollama pull deepseek-coder
 ```
 
 ---

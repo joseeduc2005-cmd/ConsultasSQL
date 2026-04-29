@@ -405,15 +405,14 @@ Suite de tests cubiertos:
 ```
 ConsultasSQL/
 ├── README.md                          ← este archivo
-├── database_schema_complete.sql       ← schema inicial de la BD principal
+├── database_schema_complete.sql       ← schema inicial usado por docker-compose para Postgres
 ├── start-dev.ps1                      ← script de inicio rápido (Windows)
 │
 ├── backend/
 │   ├── .env                           ← configuración de runtime
 │   ├── config/
 │   │   ├── multidb.databases.json     ← registro de todas las bases (fuente de verdad)
-│   │   ├── multidb.databases.example.json
-│   │   └── README.md
+│   │   └── multidb.databases.example.json
 │   ├── src/
 │   │   ├── app.js                     ← entrypoint del backend
 │   │   ├── bootstrap.js               ← arranque multibase

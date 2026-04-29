@@ -1,6 +1,6 @@
 $uri = "http://localhost:11434/api/generate"
 $body = @{
-    model = "llama3"
+    model = "deepseek-coder"
     prompt = "What is 2+2?"
     stream = $false
 } | ConvertTo-Json

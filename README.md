@@ -245,7 +245,7 @@ El archivo `backend/.env` controla el runtime del backend, **no** el registro de
 | `JWT_SECRET` | Secreto para firmar tokens | — (obligatorio) |
 | `JWT_EXPIRE` | Duración del token | `7d` |
 | `OLLAMA_URL` | URL del servicio Ollama | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Modelo a usar | `llama3` |
+| `OLLAMA_MODEL` | Modelo a usar | `deepseek-coder` |
 | `OLLAMA_TIMEOUT_MS` | Timeout de respuesta IA | `2800` |
 | `MULTI_DB_CONFIG_FILE` | Ruta al archivo de registro multibase | `./config/multidb.databases.json` |
 | `FORCE_DISTRIBUTED_MULTI_ENTITY` | Forzar resolución distribuida para consultas multi-entidad | `true` |

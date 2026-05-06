@@ -2,6 +2,7 @@ node_modules
 npm-debug.log*
 .env
 .env.local
+.env.docker
 .env.*.local
 dist
 build

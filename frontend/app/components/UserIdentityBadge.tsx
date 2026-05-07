@@ -93,7 +93,11 @@ export default function UserIdentityBadge({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2.5 rounded-2xl border border-white/40 bg-white/55 px-2.5 py-2 text-left shadow-[0_10px_25px_rgba(15,23,42,0.08)] backdrop-blur-md transition hover:bg-white/70"
+        className={`flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 text-left backdrop-blur-md transition ${
+          isLightTheme
+            ? 'border-white/40 bg-white/55 shadow-[0_10px_25px_rgba(15,23,42,0.08)] hover:bg-white/70'
+            : 'border-[rgba(56,189,248,0.22)] bg-[rgba(10,18,44,0.72)] shadow-[0_10px_25px_rgba(0,4,18,0.35)] hover:bg-[rgba(14,24,56,0.82)] hover:border-[rgba(56,189,248,0.38)]'
+        }`}
       >
         <div
           className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-md ${
@@ -126,8 +130,12 @@ export default function UserIdentityBadge({
 
       {shouldRenderMenu && (
         <div
-          className={`absolute right-0 top-[calc(100%+0.55rem)] z-[80] min-w-[210px] overflow-hidden rounded-2xl border border-white/50 bg-white/95 p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.14)] backdrop-blur-md transition-all duration-200 ${
+          className={`absolute right-0 top-[calc(100%+0.55rem)] z-[80] min-w-[210px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-md transition-all duration-200 ${
             open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-1 scale-95 opacity-0'
+          } ${
+            isLightTheme
+              ? 'border-white/50 bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.14)]'
+              : 'border-[rgba(56,189,248,0.22)] bg-[rgba(8,14,36,0.90)] shadow-[0_18px_40px_rgba(0,4,18,0.55)]'
           }`}
         >
           {primaryActionLabel && onPrimaryAction && (
@@ -137,7 +145,11 @@ export default function UserIdentityBadge({
                 setOpen(false);
                 onPrimaryAction();
               }}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
+                isLightTheme
+                  ? 'text-sky-700 hover:bg-sky-50'
+                  : 'text-cyan-300 hover:bg-[rgba(6,182,212,0.12)]'
+              }`}
             >
               <span>{primaryActionLabel}</span>
               <span aria-hidden="true">↗</span>
@@ -151,7 +163,11 @@ export default function UserIdentityBadge({
                 setOpen(false);
                 onLogout();
               }}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
+                isLightTheme
+                  ? 'text-rose-600 hover:bg-rose-50'
+                  : 'text-rose-400 hover:bg-[rgba(244,63,94,0.12)]'
+              }`}
             >
               <span>Cerrar sesión</span>
               <span aria-hidden="true">↗</span>

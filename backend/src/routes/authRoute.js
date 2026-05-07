@@ -63,28 +63,58 @@ export function createAuthRouter({ pool }) {
   });
 
   // POST /api/auth/register
-  router.post('/register', (req, res) => {
+  router.post('/register', async (req, res) => {
     try {
-      const { username, email, password } = req.body;
+      const { username, email, password, role } = req.body;
 
-      if (!username || !email || !password) {
-        return res.status(400).json({ error: 'Usuario, email y contraseña requeridos' });
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
       }
 
-      const token = 'mock-jwt-token-' + Date.now();
+      // Verificar si el usuario ya existe
+      const existing = await pool.query(
+        'SELECT id FROM users WHERE username = $1',
+        [username]
+      );
+      if (existing.rowCount > 0) {
+        return res.status(409).json({ success: false, error: 'El usuario ya existe' });
+      }
 
-      return res.status(201).json({
-        success: true,
-        token,
-        user: {
-          id: Date.now(),
-          username,
-          email,
-          name: username,
-          role: 'user',
-        },
-      });
-    } catch {
+      // Hash de la contraseña con bcrypt (10 rounds)
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Insertar en la BD — el rol solo puede ser 'user' salvo que se pase explícitamente
+      const allowedRole = role === 'admin' ? 'admin' : 'user';
+      const insertResult = await pool.query(
+        `INSERT INTO users (username, password, role)
+         VALUES ($1, $2, $3)
+         RETURNING id, username, role`,
+        [username, hashedPassword, allowedRole]
+      );
+
+      const newUser = insertResult.rows[0];
+      const token = 'mock-jwt-token-' + Date.now();
+      const sessionUser = {
+        id: newUser.id,
+        username: newUser.username,
+        name: newUser.username,
+        role: newUser.role,
+      };
+
+      // Guardar sesión en memoria y en BD
+      sessions.set(token, sessionUser);
+      try {
+        await pool.query(
+          'INSERT INTO sessions (user_id, token, activo) VALUES ($1, $2, true)',
+          [newUser.id, token]
+        );
+      } catch (dbErr) {
+        console.warn('[AUTH] ⚠️ No se pudo guardar sesión en BD:', dbErr?.message);
+      }
+
+      return res.status(201).json({ success: true, token, user: sessionUser });
+    } catch (error) {
+      console.error('[AUTH] ❌ Error registro:', error);
       return res.status(500).json({ error: 'Error en registro' });
     }
   });

@@ -449,9 +449,19 @@ function DashboardPage() {
     return isLightTheme ? 'border-red-300 bg-red-50 text-red-700' : 'border-red-500/40 bg-red-500/15 text-red-300';
   };
 
+  // ── Theme-aware chart primitives ──────────────────────────────────
+  const chartTooltipStyle = isLightTheme
+    ? { background: '#ffffff', border: '1px solid #bae6fd', borderRadius: 12, color: '#1e293b', fontSize: 12 }
+    : { background: '#020617', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0', fontSize: 12 };
+  const chartGridStroke = isLightTheme ? '#e0f2fe' : '#334155';
+  const chartTickStyle = { fill: isLightTheme ? '#64748b' : '#94a3b8', fontSize: 11 };
+  const chartLegendStyle = { color: isLightTheme ? '#64748b' : '#cbd5e1', fontSize: 12 };
+  const areaColor = isLightTheme ? '#2363eb' : '#22d3ee';
+  const skeletonClass = `animate-pulse rounded ${isLightTheme ? 'bg-sky-200' : 'bg-slate-800'}`;
+
   const shellClass = isLightTheme
     ? 'dashboard-shell min-h-screen bg-gradient-to-br from-sky-100 via-blue-100 to-cyan-100 text-slate-900'
-    : 'dashboard-shell min-h-screen bg-[#0f172a] text-slate-100';
+    : 'dashboard-shell min-h-screen bg-transparent text-slate-100';
   const panelClass = isLightTheme
     ? 'dashboard-panel dashboard-elevate dashboard-animate rounded-2xl border border-sky-200 p-4'
     : 'dashboard-panel dashboard-elevate dashboard-animate rounded-2xl border border-slate-700/70 p-4';
@@ -557,7 +567,7 @@ function DashboardPage() {
             )}
 
             {error && (
-              <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${isLightTheme ? 'border-red-200 bg-red-50 text-red-700' : 'border-red-500/40 bg-red-500/10 text-red-300'}`}>
                 {error}
               </div>
             )}
@@ -623,8 +633,8 @@ function DashboardPage() {
             <div className="mt-3 h-[320px] min-h-0">
               {loadingQuery ? (
                 <div className="space-y-2">
-                  <div className="h-8 animate-pulse rounded bg-slate-800" />
-                  <div className="h-56 animate-pulse rounded bg-slate-800" />
+                  <div className={`h-8 ${skeletonClass}`} />
+                  <div className={`h-56 ${skeletonClass}`} />
                 </div>
               ) : activeDashboard?.chartType === 'kpi' && Array.isArray(result?.data) && result.data.length > 0 ? (
                 <div className={`h-full overflow-auto rounded-2xl border p-4 ${isLightTheme ? 'border-emerald-200 bg-emerald-50/60 text-slate-700' : 'border-emerald-500/30 bg-emerald-500/10 text-slate-100'}`}>
@@ -646,11 +656,11 @@ function DashboardPage() {
                 <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartRows}>
-                      <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => truncateLabel(String(value), 14)} interval={0} angle={-10} textAnchor="end" height={48} />
-                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' }} />
-                      <Legend wrapperStyle={{ color: '#cbd5e1' }} />
+                      <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={chartTickStyle} axisLine={false} tickLine={false} tickFormatter={(value) => truncateLabel(String(value), 14)} interval={0} angle={-10} textAnchor="end" height={48} />
+                      <YAxis tick={chartTickStyle} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Legend wrapperStyle={chartLegendStyle} />
                       <Bar dataKey="value" name="Valor" radius={[8, 8, 2, 2]}>
                         {chartRows.map((entry, idx) => (
                           <Cell key={`bar-cell-${entry.name}-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
@@ -665,15 +675,15 @@ function DashboardPage() {
                     <AreaChart data={chartRows}>
                       <defs>
                         <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                          <stop offset="5%" stopColor={areaColor} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={areaColor} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => truncateLabel(String(value), 14)} />
-                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' }} />
-                      <Area type="monotone" dataKey="value" stroke="#22d3ee" fill="url(#lineFill)" strokeWidth={3} />
+                      <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={chartTickStyle} axisLine={false} tickLine={false} tickFormatter={(value) => truncateLabel(String(value), 14)} />
+                      <YAxis tick={chartTickStyle} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Area type="monotone" dataKey="value" stroke={areaColor} fill="url(#lineFill)" strokeWidth={3} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -681,8 +691,8 @@ function DashboardPage() {
                 <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' }} />
-                      <Legend wrapperStyle={{ color: '#cbd5e1' }} formatter={(value) => truncateLabel(String(value), 18)} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Legend wrapperStyle={chartLegendStyle} formatter={(value) => truncateLabel(String(value), 18)} />
                       <Pie data={chartRows} dataKey="value" nameKey="name" outerRadius={90} innerRadius={38} labelLine={false}>
                         {chartRows.map((entry, idx) => (
                           <Cell key={`pie-cell-${entry.name}-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
@@ -695,11 +705,11 @@ function DashboardPage() {
                 <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartRows}>
-                      <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={56} tickFormatter={(value) => truncateLabel(String(value), 20)} />
-                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' }} />
-                      <Legend wrapperStyle={{ color: '#cbd5e1' }} />
+                      <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ ...chartTickStyle, fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={56} tickFormatter={(value) => truncateLabel(String(value), 20)} />
+                      <YAxis tick={chartTickStyle} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Legend wrapperStyle={chartLegendStyle} />
                       <Bar dataKey="value" name="Frecuencia" radius={[8, 8, 2, 2]} fill={HISTOGRAM_BAR_COLOR} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -916,7 +926,7 @@ function DashboardPage() {
               {historyLoading ? (
                 <div className="space-y-2 p-3">
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={`hist-skeleton-${i}`} className="h-8 animate-pulse rounded bg-slate-800" />
+                    <div key={`hist-skeleton-${i}`} className={`h-8 ${skeletonClass}`} />
                   ))}
                 </div>
               ) : (
@@ -938,7 +948,7 @@ function DashboardPage() {
                             {row.status}
                           </span>
                           {row.was_cached ? (
-                            <span className="ml-1 rounded-full border border-cyan-500/40 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-cyan-300">
+                            <span className={`ml-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${isLightTheme ? 'border-sky-300 bg-sky-100 text-sky-700' : 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'}`}>
                               cache
                             </span>
                           ) : null}

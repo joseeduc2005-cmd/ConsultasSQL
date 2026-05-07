@@ -70,7 +70,20 @@ cp backend/.env.docker.example backend/.env.docker
 
 # 2. Levantar todos los servicios
 #    (PostgreSQL, Oracle XE 21c, Ollama, Backend, Frontend)
-docker compose up --build
+docker build --platform linux/amd64 -t consultas-sql-backend:pruebas ./backend
+docker build --platform linux/amd64 -t consultas-sql-frontend:pruebas ./frontend
+docker save -o imagen-consultas-sql-backend.tar consultas-sql-backend:pruebas 
+docker save -o imagen-consultas-sql-frontend.tar consultas-sql-frontend:pruebas 
+
+scp -P 1222 imagen-consultas-sql-backend.tar admapl@172.20.91.3:/opt/dockerApp/consultas/backend/
+scp -P 1222 imagen-consultas-sql-frontend.tar admapl@172.20.91.3:/opt/dockerApp/consultas/frontend/
+
+scp -P 1222 database_schema_complete.sql admapl@172.20.91.3:/opt/dockerApp/consultas/
+scp -P 1222 docker-compose.yml admapl@172.20.91.3:/opt/dockerApp/consultas/
+
+scp -P 1222 ./backend/.env admapl@172.20.91.3:/opt/dockerApp/consultas/backend/
+scp -P 1222 ./frontend/.env admapl@172.20.91.3:/opt/dockerApp/consultas/frontend/
+9qbi0GcK89,
 
 # 3. Primera vez — cargar el modelo de IA
 #    (en otra terminal mientras Oracle inicializa ~3-5 min)

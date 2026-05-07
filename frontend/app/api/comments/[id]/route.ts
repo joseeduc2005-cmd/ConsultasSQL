@@ -12,7 +12,7 @@ export async function DELETE(
   }
 
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const response = await fetch(`${backendUrl}/api/comments/${id}`, {
       method: 'DELETE',
     });

@@ -11,10 +11,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# NEXT_PUBLIC_BACKEND_URL is only used in server-side API routes (route.ts),
-# so the build-time value does not matter — runtime env overrides it.
-# We set a placeholder so the build doesn't warn.
-ENV NEXT_PUBLIC_BACKEND_URL=http://backend:3002
+# Remove local .env so only Dockerfile ENV values are used at build time
+RUN rm -f .env .env.local .env.production .env.production.local
+
+ENV BACKEND_URL=http://backend:3002
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

@@ -25,7 +25,7 @@ function shouldSkipRedactionForRequest(req, key, excludeTokenPaths = []) {
   const normalizedKey = normalizeKey(key);
   if (normalizedKey !== 'token') return false;
 
-  const requestPath = String(req?.path || req?.originalUrl || '').split('?')[0];
+  const requestPath = String(req?.originalUrl || req?.path || '').split('?')[0];
   return excludeTokenPaths.some((prefix) => requestPath.startsWith(prefix));
 }
 

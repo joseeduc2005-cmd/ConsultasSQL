@@ -25,6 +25,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV BACKEND_URL=http://backend:3002
 
 # Copy everything needed to run `next start`
 COPY --from=builder /app/.next ./.next

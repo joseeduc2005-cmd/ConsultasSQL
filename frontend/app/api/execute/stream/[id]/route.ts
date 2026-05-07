@@ -5,9 +5,9 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
   const search = request.nextUrl.searchParams.toString();
   const suffix = search ? `?${search}` : '';
 

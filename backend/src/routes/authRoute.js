@@ -42,7 +42,18 @@ export function createAuthRouter({ pool }) {
         role: user.role,
       };
 
+      // Guardar en memoria (cache rápido)
       sessions.set(token, sessionUser);
+
+      // Guardar en BD (persiste reinicios del backend)
+      try {
+        await pool.query(
+          'INSERT INTO sessions (user_id, token, activo) VALUES ($1, $2, true)',
+          [user.id, token]
+        );
+      } catch (dbErr) {
+        console.warn('[AUTH] ⚠️ No se pudo guardar sesión en BD:', dbErr?.message);
+      }
 
       return res.status(200).json({ success: true, token, user: sessionUser });
     } catch (error) {
@@ -79,7 +90,7 @@ export function createAuthRouter({ pool }) {
   });
 
   // GET /api/auth/me
-  router.get('/me', (req, res) => {
+  router.get('/me', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) {
@@ -87,14 +98,33 @@ export function createAuthRouter({ pool }) {
       }
 
       const token = authHeader.replace('Bearer ', '').trim();
-      const user = sessions.get(token);
 
+      // 1. Buscar en cache en memoria
+      let user = sessions.get(token);
+
+      // 2. Si no está en memoria, buscar en BD (por si el backend se reinició)
       if (!user) {
-        return res.status(401).json({ error: 'Sesión no válida o expirada' });
+        const dbResult = await pool.query(
+          `SELECT u.id, u.username, u.role
+           FROM sessions s
+           JOIN users u ON s.user_id = u.id
+           WHERE s.token = $1 AND s.activo = true
+           LIMIT 1`,
+          [token]
+        );
+
+        if (dbResult.rowCount === 0) {
+          return res.status(401).json({ error: 'Sesión no válida o expirada' });
+        }
+
+        const row = dbResult.rows[0];
+        user = { id: row.id, username: row.username, name: row.username, role: row.role };
+        sessions.set(token, user); // Restaurar en cache
       }
 
       return res.status(200).json({ success: true, user });
-    } catch {
+    } catch (error) {
+      console.error('[AUTH] ❌ Error /me:', error);
       return res.status(500).json({ error: 'Error obteniendo usuario' });
     }
   });

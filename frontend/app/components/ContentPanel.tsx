@@ -7,7 +7,9 @@ import { KnowledgeArticle } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from './ThemeProvider';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+// SSE calls go through the Next.js proxy (/api/execute/stream/[id])
+// so the browser never needs to know the backend URL.
+const BACKEND_URL = '';
 const SCRIPT_VARIABLE_REGEX = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
 const SQL_NAMED_PARAM_REGEX = /(^|[^:]):([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
@@ -968,7 +970,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
       extraQuery.set('databaseId', executionTarget.databaseId);
     }
 
-    const url = `${BACKEND_URL}/api/execute/stream/${selectedArticle!.id}?params=${paramsStr}${extraQuery.toString() ? `&${extraQuery.toString()}` : ''}`;
+    const url = `/api/execute/stream/${selectedArticle!.id}?params=${paramsStr}${extraQuery.toString() ? `&${extraQuery.toString()}` : ''}`;
 
     const parsedScript = parseStructuredScript(selectedArticle?.script_json);
     const sqlPreview = String((parsedScript as Record<string, unknown> | null)?.sql || '').trim();

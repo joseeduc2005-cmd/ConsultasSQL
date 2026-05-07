@@ -1,15 +1,8 @@
-// app/api/categories/route.ts
-
-import { NextResponse } from 'next/server';
+import { B, err500, proxyJson } from '@/app/lib/backend-client';
 
 export async function GET() {
   try {
-    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
-    const response = await fetch(`${backendUrl}/api/categories`);
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('Error obteniendo categorías:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
-  }
+    const res = await fetch(`${B}/api/categories`);
+    return proxyJson(res);
+  } catch (e) { return err500('categories', e); }
 }

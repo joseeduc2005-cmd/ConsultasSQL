@@ -1,5 +1,4 @@
 // app/components/ContentPanel.tsx
-
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -7,11 +6,24 @@ import { KnowledgeArticle } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from './ThemeProvider';
 
+// ─── Lib imports ──────────────────────────────────────────────────────────────
+import { ProgressStep, ExecutionResultPayload } from '../lib/contentPanel/types';
+import {
+  parseStructuredScript, getScriptExecutionFields, getScriptPreviewText,
+  getBusinessScriptDetails, scriptRequiresWriteConfirmation, inferArticleExecutionTarget,
+} from '../lib/contentPanel/scriptInspector';
+import { validateExecutionFieldValue, buildNormalizedParamsPayload, buildPreExecutionSummary } from '../lib/contentPanel/fieldUtils';
+import {
+  sanitizeExecutionData, getFinalExecutionPayload, buildExecutionFindings,
+  buildExecutionSummary, buildHumanExecutionExplanation, getResultRows,
+} from '../lib/contentPanel/executionResultHelpers';
+import {
+  getTimelineToneClasses, isTechnicalProgressMessage,
+  buildHumanExecutionSteps, buildAnnotatedSqlScript,
+} from '../lib/contentPanel/timelineUtils';
+
 // SSE calls go through the Next.js proxy (/api/execute/stream/[id])
 // so the browser never needs to know the backend URL.
-const BACKEND_URL = '';
-const SCRIPT_VARIABLE_REGEX = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
-const SQL_NAMED_PARAM_REGEX = /(^|[^:]):([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
 interface ContentPanelProps {
   selectedArticle: KnowledgeArticle | null;
@@ -20,858 +32,7 @@ interface ContentPanelProps {
   onExecuteSolution: (articleId: number | string, formData: Record<string, any>) => Promise<string>;
 }
 
-interface ProgressStep {
-  message: string;
-  type: 'progress' | 'error';
-}
-
-interface ExecutionResultPayload {
-  success?: boolean;
-  message?: string;
-  affectedRows?: number;
-  data?: unknown;
-  resultado_final?: unknown;
-  resultado?: unknown[];
-  resumenHumano?: string;
-  steps?: string[];
-  explicacion?: string;
-  workflow?: {
-    steps?: Array<{ step?: string; title?: string; executedQuery?: string; executionMs?: number }>;
-    context?: Record<string, unknown>;
-    final?: unknown;
-  };
-  workflowContext?: Record<string, unknown>;
-  executedQueries?: Array<{ step?: string; title?: string; executedQuery?: string; executionMs?: number }>;
-}
-
-type TimelineTone = 'select' | 'validation' | 'update' | 'error' | 'info';
-
-interface ParsedTimelineStep {
-  title: string;
-  detail: string;
-  tone: TimelineTone;
-  icon: string;
-}
-
-interface ExecutionField {
-  name: string;
-  label: string;
-  type: 'text' | 'number' | 'checkbox' | 'password' | 'email' | 'date';
-  required: boolean;
-}
-
-interface HumanExecutionStep {
-  key: string;
-  startLabel: string;
-  completeLabel: string;
-  tone: TimelineTone;
-  icon: string;
-}
-
-
-function parseStructuredScript(scriptJson: KnowledgeArticle['script_json']) {
-  if (!scriptJson) return null;
-  if (typeof scriptJson === 'object') return scriptJson;
-
-  try {
-    return JSON.parse(scriptJson);
-  } catch {
-    return null;
-  }
-}
-
-function collectScriptVariables(node: unknown, variables = new Set<string>()) {
-  if (typeof node === 'string') {
-    let match;
-    while ((match = SCRIPT_VARIABLE_REGEX.exec(node)) !== null) {
-      variables.add(match[1]);
-    }
-    SCRIPT_VARIABLE_REGEX.lastIndex = 0;
-
-    let sqlMatch;
-    while ((sqlMatch = SQL_NAMED_PARAM_REGEX.exec(node)) !== null) {
-      variables.add(sqlMatch[2]);
-    }
-    SQL_NAMED_PARAM_REGEX.lastIndex = 0;
-
-    return variables;
-  }
-
-  if (Array.isArray(node)) {
-    node.forEach((item) => collectScriptVariables(item, variables));
-    return variables;
-  }
-
-  if (node && typeof node === 'object') {
-    Object.values(node).forEach((value) => collectScriptVariables(value, variables));
-  }
-
-  return variables;
-}
-
-function extractVariables(scriptJson: unknown): string[] {
-  const parsedScript = typeof scriptJson === 'object' ? scriptJson : parseStructuredScript(scriptJson as KnowledgeArticle['script_json']);
-  if (!parsedScript || typeof parsedScript !== 'object') {
-    return [];
-  }
-
-  return Array.from(collectScriptVariables(parsedScript));
-}
-
-function inferScriptFieldType(name: string): ExecutionField['type'] {
-  const normalized = name.toLowerCase();
-  if (normalized.includes('date') || normalized.includes('fecha')) return 'date';
-  if (normalized.includes('password') || normalized.includes('contrasena') || normalized.includes('clave')) return 'password';
-  if (normalized.includes('email') || normalized.includes('correo')) return 'email';
-  if (/^(es_|is_|has_|incluir_|activo|enabled|flag)/.test(normalized)) return 'checkbox';
-  if (/(codigo|code|horas|dias|minutos|monto|amount|cantidad|numero|count|edad)/.test(normalized) && !normalized.includes('id')) return 'number';
-  return 'text';
-}
-
-function formatScriptFieldLabel(name: string) {
-  const normalized = String(name || '').trim().toLowerCase();
-  if (normalized === 'user_id' || normalized === 'usuario_id') return 'Ingrese ID de usuario';
-  if (normalized.includes('identificacion')) return 'Ingrese identificación';
-  if (normalized.includes('codigo') || normalized === 'code') return 'Ingrese código';
-  if (normalized === 'username' || normalized === 'usuario' || normalized === 'user') return 'Ingrese nombre de usuario';
-  if (normalized === 'role' || normalized === 'rol') return 'Ingrese rol';
-  if (normalized.includes('date') || normalized.includes('fecha')) return 'Ingrese fecha';
-  if (normalized.includes('id')) return `Ingrese ${normalized.replace(/_/g, ' ')}`;
-  return `Ingrese ${normalized.replace(/_/g, ' ')}`;
-}
-
-function inferParamSemantic(name: string) {
-  const normalized = String(name || '').trim().toLowerCase();
-
-  if (normalized.includes('date') || normalized.includes('fecha')) return 'date';
-  if (normalized.includes('role') || normalized.includes('rol')) return 'role';
-  if (normalized.includes('codigo') || normalized.includes('code')) return 'code';
-  if (normalized.includes('log')) return 'log';
-  if (normalized.includes('id')) return 'id';
-  if (normalized.includes('name') || normalized.includes('user') || normalized.includes('usuario')) return 'user_text';
-  return 'text';
-}
-
-function validateExecutionFieldValue(field: ExecutionField, rawValue: string | undefined): string | null {
-  const value = String(rawValue ?? '');
-  const trimmed = value.trim();
-
-  if (field.required && field.type !== 'checkbox' && !trimmed) {
-    return `El campo "${field.label}" es obligatorio`;
-  }
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const semantic = inferParamSemantic(field.name);
-  const normalizedName = String(field.name || '').trim().toLowerCase();
-  if (semantic === 'id') {
-    // IDs should preserve exact string semantics; disallow internal spaces.
-    if (/\s/.test(trimmed)) {
-      return `El campo "${field.label}" no puede contener espacios`;
-    }
-
-    const requiresUuid = normalizedName === 'user_id' || normalizedName.endsWith('_uuid') || normalizedName.includes('uuid');
-    if (requiresUuid) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(trimmed)) {
-        return 'El campo ID debe ser un UUID válido';
-      }
-    }
-  }
-
-  if (semantic === 'role') {
-    if (!/^[\w\s-]{2,40}$/i.test(trimmed)) {
-      return `El campo "${field.label}" contiene un formato inválido`;
-    }
-  }
-
-  if (semantic === 'code') {
-    if (!/^[\w-]{1,60}$/i.test(trimmed)) {
-      return `El campo "${field.label}" contiene un formato inválido`;
-    }
-  }
-
-  if (semantic === 'date') {
-    const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) {
-      return `El campo "${field.label}" debe tener una fecha válida`;
-    }
-  }
-
-  if (field.type === 'number') {
-    if (!Number.isFinite(Number(trimmed))) {
-      return `El campo "${field.label}" debe ser numérico`;
-    }
-  }
-
-  return null;
-}
-
-function normalizeExecutionFieldValue(field: ExecutionField, rawValue: string | undefined) {
-  if (field.type === 'checkbox') {
-    return rawValue === 'true';
-  }
-
-  const trimmed = String(rawValue ?? '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  if (field.type === 'number') {
-    return Number(trimmed);
-  }
-
-  if (field.type === 'date') {
-    return trimmed;
-  }
-
-  return trimmed;
-}
-
-function buildNormalizedParamsPayload(fields: ExecutionField[], inputs: Record<string, string>) {
-  return fields.reduce<Record<string, unknown>>((acc, field) => {
-    const normalizedValue = normalizeExecutionFieldValue(field, inputs[field.name]);
-    if (normalizedValue !== '' && normalizedValue !== undefined && normalizedValue !== null) {
-      acc[field.name] = normalizedValue;
-    }
-    return acc;
-  }, {});
-}
-
-function buildPreExecutionSummary(fields: ExecutionField[], inputs: Record<string, string>) {
-  const details = fields
-    .map((field) => {
-      const raw = inputs[field.name];
-      if (raw === undefined || raw === null || String(raw).trim() === '') return null;
-      if (field.type === 'password') return `${field.name} = ******`;
-      return `${field.name} = ${String(raw).trim()}`;
-    })
-    .filter(Boolean);
-
-  if (details.length === 0) {
-    return 'Se ejecutará la consulta sin parámetros de entrada.';
-  }
-
-  return `Se ejecutará búsqueda con ${details.join(', ')}`;
-}
-
-function scriptHasMutation(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return false;
-
-  if (Array.isArray(node)) {
-    return node.some((item) => scriptHasMutation(item));
-  }
-
-  const current = node as Record<string, unknown>;
-  const tipo = String(current.tipo || '').trim().toLowerCase();
-  if (tipo === 'update' || tipo === 'delete' || tipo === 'insert') {
-    return true;
-  }
-
-  const modo = String(current.modo || '').trim().toLowerCase();
-  const origen = String(current.origen || '').trim().toLowerCase();
-  const sql = String(current.sql || '').trim().toLowerCase();
-  if (modo === 'script' && origen === 'manual-sql' && /^(update|delete|insert)\b/.test(sql)) {
-    return true;
-  }
-
-  return Object.values(current).some((value) => scriptHasMutation(value));
-}
-
-const PLSQL_MARKER_RE = /\b(DECLARE|EXCEPTION|ELSIF)\b|\bIF\b[\s\S]{0,600}\bTHEN\b|\bFOR\b\s+\w+\s+IN\b|\bBEGIN\b[\s\S]{5,}\bEND\b/i;
-
-function isComplexSqlScript(sql: string): boolean {
-  return PLSQL_MARKER_RE.test(String(sql || ''));
-}
-
-/** Extract {{variable}} names from PL/SQL text, excluding step/loopRow internal references. */
-function extractInputVarsFromPlSql(sql: string): string[] {
-  const vars = new Set<string>();
-  for (const m of String(sql || '').matchAll(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g)) {
-    const name = m[1];
-    if (!/^(step\d+\.|loopRow\.)/i.test(name)) vars.add(name);
-  }
-  // Also detect :named_param style (not ::cast)
-  const namedRe = /(?<![:])[:]([a-zA-Z_][a-zA-Z0-9_]*)/g;
-  for (const m of String(sql || '').matchAll(namedRe)) {
-    vars.add(m[1]);
-  }
-  return Array.from(vars);
-}
-
-function scriptRequiresWriteConfirmation(article: KnowledgeArticle | null) {
-  const parsed = parseStructuredScript(article?.script_json);
-  return scriptHasMutation(parsed);
-}
-
-function getScriptExecutionFields(article: KnowledgeArticle | null): ExecutionField[] {
-  const parsed = parseStructuredScript(article?.script_json);
-  if (!parsed || typeof parsed !== 'object') return [];
-
-  const scriptObject = parsed as Record<string, unknown>;
-
-  // For complex PL/SQL scripts, parse input vars from the raw SQL text directly
-  const sqlText = String(scriptObject.sql || '').trim();
-  if (
-    String(scriptObject.modo || '').trim().toLowerCase() === 'script' &&
-    String(scriptObject.origen || '').trim().toLowerCase() === 'manual-sql' &&
-    isComplexSqlScript(sqlText)
-  ) {
-    const fromSql = extractInputVarsFromPlSql(sqlText);
-    const requiredParams = Array.isArray(scriptObject.parametros_requeridos)
-      ? scriptObject.parametros_requeridos.map((item) => String(item || '').trim()).filter(Boolean)
-      : [];
-    const mergedParams = Array.from(new Set([...requiredParams, ...fromSql]));
-    return mergedParams.map((name) => ({
-      name,
-      label: formatScriptFieldLabel(name),
-      type: inferScriptFieldType(name),
-      required: false,
-    }));
-  }
-
-  const requiredParams = Array.isArray(scriptObject.parametros_requeridos)
-    ? scriptObject.parametros_requeridos
-        .map((item) => String(item || '').trim())
-        .filter(Boolean)
-    : [];
-
-  const autoDetected = extractVariables(parsed)
-    .map((item) => String(item || '').trim())
-    .filter((item) => Boolean(item) && !item.includes('.'));
-
-  const mergedParams = Array.from(new Set([...requiredParams, ...autoDetected]));
-
-  return mergedParams.map((name) => ({
-    name,
-    label: formatScriptFieldLabel(name),
-    type: inferScriptFieldType(name),
-    required: false,
-  }));
-}
-
-function getScriptPreviewText(article: KnowledgeArticle | null): string {
-  const parsed = parseStructuredScript(article?.script_json);
-  if (!parsed || typeof parsed !== 'object') return '';
-
-  const script = parsed as Record<string, unknown>;
-  const modo = String(script.modo || '').trim().toLowerCase();
-
-  // Manual SQL script: extract sql field
-  if (modo === 'script') {
-    const origen = String(script.origen || '').trim().toLowerCase();
-    if (origen === 'manual-sql') {
-      const sql = String(script.sql || '').trim();
-      if (sql) {
-        if (isComplexSqlScript(sql)) {
-          return `-- [Motor PL/SQL híbrido]\n-- Este script será interpretado y ejecutado paso a paso.\n\n${sql}`;
-        }
-        return sql;
-      }
-    }
-    // Fallback: dump readable JSON
-    return JSON.stringify(parsed, null, 2);
-  }
-
-  // Any other structured script: pretty JSON
-  return JSON.stringify(parsed, null, 2);
-}
-
-function getBusinessScriptDetails(article: KnowledgeArticle | null) {
-  const parsed = parseStructuredScript(article?.script_json);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-
-  const script = parsed as Record<string, unknown>;
-  if (String(script.modo || '').trim().toLowerCase() !== 'script') return null;
-
-  const pasos = Array.isArray(script.pasos)
-    ? script.pasos
-        .map((step, index) => {
-          const item = step as Record<string, unknown>;
-          return {
-            orden: Number(item.orden) > 0 ? Number(item.orden) : index + 1,
-            descripcion: String(item.descripcion || ''),
-            accion: String(item.accion || ''),
-          };
-        })
-        .sort((a, b) => a.orden - b.orden)
-    : [];
-
-  return {
-    script: String(script.script || ''),
-    descripcion: String(script.descripcion || ''),
-    pasos,
-  };
-}
-
-function inferArticleExecutionTarget(article: KnowledgeArticle | null): { databaseId?: string } {
-  const parsed = parseStructuredScript(article?.script_json);
-  const parsedRecord = parsed as Record<string, unknown> | null;
-  const explicitDatabaseId = String(
-    parsedRecord?.databaseId
-      || parsedRecord?.database_id
-      || parsedRecord?.targetDatabaseId
-      || parsedRecord?.target_database_id
-      || ''
-  ).trim();
-  if (explicitDatabaseId) {
-    return { databaseId: explicitDatabaseId };
-  }
-
-  return {};
-}
-
-function parseTimelineStep(step: ProgressStep): ParsedTimelineStep {
-  const raw = (step.message || '').trim();
-  const match = raw.match(/^\[STEP\s+(\d+)\]\s*(.+)$/i);
-  const content = (match?.[2] || raw).trim();
-  const upper = content.toUpperCase();
-
-  if (step.type === 'error' || upper.includes('ERROR') || upper.includes('❌')) {
-    return {
-      title: content || 'Error de ejecución',
-      detail: raw,
-      tone: 'error',
-      icon: '❌',
-    };
-  }
-
-  if (upper.includes('VALIDACION')) {
-    return {
-      title: content,
-      detail: raw,
-      tone: 'validation',
-      icon: '✔',
-    };
-  }
-
-  if (upper.includes('SELECT')) {
-    return {
-      title: content,
-      detail: raw,
-      tone: 'select',
-      icon: '🔍',
-    };
-  }
-
-  if (upper.includes('UPDATE') || upper.includes('INSERT') || upper.includes('DELETE')) {
-    return {
-      title: content,
-      detail: raw,
-      tone: 'update',
-      icon: '⚙',
-    };
-  }
-
-  return {
-    title: content || 'Paso de ejecución',
-    detail: raw,
-    tone: 'info',
-    icon: '•',
-  };
-}
-
-function getTimelineToneClasses(tone: TimelineTone) {
-  if (tone === 'select') {
-    return {
-      row: 'border-blue-200 bg-blue-50/60',
-      icon: 'bg-blue-600 text-white',
-      title: 'text-blue-800',
-    };
-  }
-  if (tone === 'validation') {
-    return {
-      row: 'border-emerald-200 bg-emerald-50/60',
-      icon: 'bg-emerald-600 text-white',
-      title: 'text-emerald-800',
-    };
-  }
-  if (tone === 'update') {
-    return {
-      row: 'border-violet-200 bg-violet-50/60',
-      icon: 'bg-violet-600 text-white',
-      title: 'text-violet-800',
-    };
-  }
-  if (tone === 'error') {
-    return {
-      row: 'border-red-200 bg-red-50/60',
-      icon: 'bg-red-600 text-white',
-      title: 'text-red-800',
-    };
-  }
-  return {
-    row: 'border-slate-200 bg-slate-50/70',
-    icon: 'bg-slate-500 text-white',
-    title: 'text-slate-700',
-  };
-}
-
-function sanitizeExecutionData(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeExecutionData(item));
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => !['password', 'token', 'secret', 'authorization'].includes(key.toLowerCase()))
-        .map(([key, nestedValue]) => [key, sanitizeExecutionData(nestedValue)])
-    );
-  }
-
-  return value;
-}
-
-function getFinalExecutionPayload(result: ExecutionResultPayload | null): ExecutionResultPayload | null {
-  if (!result) return null;
-
-  const finalResult = result.resultado_final;
-  if (finalResult && typeof finalResult === 'object' && !Array.isArray(finalResult)) {
-    return finalResult as ExecutionResultPayload;
-  }
-
-  return result;
-}
-
-function getResultRows(result: ExecutionResultPayload | null): Record<string, unknown>[] {
-  const finalPayload = getFinalExecutionPayload(result);
-  const rows = finalPayload?.data;
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'));
-}
-
-function describeRecord(record: Record<string, unknown>): string[] {
-  const details: string[] = [];
-
-  for (const [key, value] of Object.entries(record)) {
-    const lower = key.toLowerCase();
-    if (/(^id$|_id$|token|password|secret)/.test(lower)) continue;
-    if (value === null || value === undefined || String(value).trim() === '') continue;
-
-    const label = key.replace(/_/g, ' ').toLowerCase();
-    if (typeof value === 'boolean') {
-      details.push(`${label}: ${value ? 'sí' : 'no'}`);
-    } else {
-      details.push(`${label}: ${String(value)}`);
-    }
-
-    if (details.length >= 3) break;
-  }
-
-  return details;
-}
-
-function buildExecutionFindings(result: ExecutionResultPayload | null): string[] {
-  const rows = getResultRows(result);
-  if (rows.length === 0) {
-    return [];
-  }
-
-  const record = rows[0];
-  const findings: string[] = [];
-
-  for (const [key, value] of Object.entries(record)) {
-    const lower = key.toLowerCase();
-    if (/(^id$|_id$|token|password|secret)/.test(lower)) continue;
-    if (value === null || value === undefined || String(value).trim() === '') continue;
-
-    const label = key.replace(/_/g, ' ');
-    if (typeof value === 'boolean') {
-      findings.push(`${label}: ${value ? 'Sí' : 'No'}`);
-    } else if (/(date|fecha|time|created|updated)/i.test(key) && typeof value === 'string') {
-      const parsedDate = new Date(value);
-      const formatted = Number.isNaN(parsedDate.getTime())
-        ? value
-        : parsedDate.toLocaleString('es-ES');
-      findings.push(`${label}: ${formatted}`);
-    } else {
-      findings.push(`${label}: ${String(value)}`);
-    }
-
-    if (findings.length >= 5) break;
-  }
-
-  return findings;
-}
-
-function buildExecutionSummary(
-  progressSteps: ProgressStep[],
-  execSuccess: boolean,
-  executionResult: ExecutionResultPayload | null,
-): string {
-  const combined = progressSteps.map((step) => step.message.toLowerCase()).join(' | ');
-  const finalPayload = getFinalExecutionPayload(executionResult);
-  const rows = getResultRows(executionResult);
-
-  if (execSuccess && rows.length > 0) {
-    const details = describeRecord(rows[0]);
-    const base = rows.length === 1
-      ? 'El proceso finalizó correctamente y encontró 1 resultado.'
-      : `El proceso finalizó correctamente y encontró ${rows.length} resultados.`;
-
-    if (details.length > 0) {
-      return `${base} Resultado principal: ${details.join(', ')}.`;
-    }
-
-    return base;
-  }
-
-  if (execSuccess && typeof finalPayload?.affectedRows === 'number') {
-    const count = finalPayload.affectedRows;
-    return `El proceso finalizó correctamente y aplicó cambios en ${count} ${count === 1 ? 'fila' : 'filas'}.`;
-  }
-
-  if (execSuccess) {
-    if (combined.includes('usuario no existe') || combined.includes('no se encontraron')) {
-      return 'La ejecución terminó correctamente, pero no se encontraron datos del usuario para aplicar cambios.';
-    }
-    if (combined.includes('update ejecutado') || combined.includes('filas afectadas')) {
-      return 'El usuario fue validado y se aplicaron los cambios esperados sin errores.';
-    }
-    if (combined.includes('validacion ok')) {
-      return 'Todas las validaciones del flujo se cumplieron y el proceso finalizó de forma correcta.';
-    }
-
-    return 'El proceso finalizó correctamente y el resultado está listo.';
-  }
-
-  const backendMessage = String(executionResult?.message || '').trim();
-  if (backendMessage) {
-    return backendMessage;
-  }
-
-  if (combined.includes('falta parámetro')) {
-    return 'La ejecución falló porque faltan datos obligatorios en el formulario.';
-  }
-  if (combined.includes('usuario no existe')) {
-    return 'La ejecución se detuvo porque el usuario indicado no existe en el sistema.';
-  }
-  if (combined.includes('clave') || combined.includes('password') || combined.includes('contrase')) {
-    return 'Se detectó un problema relacionado con credenciales. Revisa usuario y contraseña.';
-  }
-  if (combined.includes('login') || combined.includes('sesion')) {
-    return 'La ejecución reportó un problema en autenticación o sesión.';
-  }
-
-  return 'No fue posible completar el proceso. Revisa los datos ingresados o intenta nuevamente.';
-}
-
-function buildHumanExecutionExplanation(result: ExecutionResultPayload | null, fallbackSummary: string) {
-  if (!result) return fallbackSummary;
-  if (typeof result.resumenHumano === 'string' && result.resumenHumano.trim()) {
-    return result.resumenHumano.trim();
-  }
-  if (typeof result.explicacion === 'string' && result.explicacion.trim()) {
-    return result.explicacion.trim();
-  }
-
-  const rows = getResultRows(result);
-  if (rows.length === 0) {
-    return fallbackSummary;
-  }
-
-  const first = rows[0];
-  const parts: string[] = [];
-
-  const entries = Object.entries(first)
-    .filter(([key, value]) => {
-      const lower = key.toLowerCase();
-      if (/(^id$|_id$|token|password|secret)/.test(lower)) return false;
-      return value !== null && value !== undefined && String(value).trim() !== '';
-    })
-    .slice(0, 4);
-
-  for (const [key, value] of entries) {
-    const label = key.replace(/_/g, ' ').toLowerCase();
-    if (typeof value === 'number' && /(count|total|cantidad|monto|importe|amount|price|precio|valor)/i.test(key)) {
-      parts.push(`El total de ${label} es ${value}.`);
-      continue;
-    }
-    if (typeof value === 'boolean') {
-      parts.push(`${label}: ${value ? 'sí' : 'no'}.`);
-      continue;
-    }
-    parts.push(`${label}: ${String(value)}.`);
-  }
-
-  if (parts.length === 0) return fallbackSummary;
-  return parts.join(' ').replace(/\s+/g, ' ').trim();
-}
-
-function inferQueryTitle(sql: string): string {
-  const upper = (sql || '').trim().toUpperCase();
-  const lower = (sql || '').toLowerCase();
-  if (/\bCOUNT\b/.test(upper)) return 'Análisis de actividad';
-  if (/\bjoin\b.*\broles?\b|\broles?\b.*\bjoin\b/i.test(lower)) return 'Obtener rol';
-  if (/\bselect\b.*\busers?\b|\bfrom\b.*\busers?\b/i.test(lower)) return 'Buscar usuario';
-  if (/\bUPDATE\b/.test(upper)) return 'Actualizar registro';
-  if (/\bINSERT\b/.test(upper)) return 'Insertar registro';
-  if (/\bDELETE\b/.test(upper)) return 'Eliminar registro';
-  if (/\bSELECT\b/.test(upper)) return 'Consultar datos';
-  return 'Ejecutar query';
-}
-
-function isTechnicalProgressMessage(message: string): boolean {
-  const normalized = String(message || '').trim();
-  const upper = normalized.toUpperCase();
-
-  return (
-    upper.includes('SQL OPERATION')
-    || upper.includes('SQL PARAMS')
-    || upper.includes('SQL PLACEHOLDERS')
-    || upper.startsWith('[SQL]')
-    || upper.startsWith('[PARAMS]')
-    || upper.startsWith('[PARAM ')
-    || upper.includes('PLACEHOLDER')
-    || upper.includes('CANONICAL')
-    || upper.includes('PREPARED')
-    || upper.includes('MOTOR SQL')
-    || upper.includes('WORKFLOW COMPLETADO')
-    || upper.includes('SCRIPT EMPRESARIAL DETECTADO')
-  );
-}
-
-function inferHumanExecutionStep(rawText: string, index: number, total: number): HumanExecutionStep {
-  const text = String(rawText || '').trim();
-  const lower = text.toLowerCase();
-
-  if (/\bjoin\b.*\brol|\brol\b.*\bjoin\b|\broles?\b/.test(lower)) {
-    return {
-      key: 'role',
-      startLabel: 'Obteniendo rol del usuario...',
-      completeLabel: 'Rol obtenido',
-      tone: 'select',
-      icon: '🔍',
-    };
-  }
-
-  if (/\bcount\b|\blogs?\b|\bm[eé]tric|\btotal\b|\ban[aá]lis|\bgroup by\b|\bsum\b|\bavg\b/.test(lower)) {
-    return {
-      key: 'analysis',
-      startLabel: 'Analizando datos...',
-      completeLabel: 'Datos procesados',
-      tone: 'validation',
-      icon: '📊',
-    };
-  }
-
-  if (/\bupdate\b|\binsert\b|\bdelete\b|\bproces|\bactualiz|\bmodific/.test(lower)) {
-    return {
-      key: 'processing',
-      startLabel: 'Procesando registros...',
-      completeLabel: 'Cambios aplicados',
-      tone: 'update',
-      icon: '⚙️',
-    };
-  }
-
-  if (/\bif\b|\bthen\b|\bvalid|\bverific|\bcondici/.test(lower)) {
-    return {
-      key: 'validation',
-      startLabel: 'Validando información...',
-      completeLabel: 'Validación completada',
-      tone: 'validation',
-      icon: '🛡️',
-    };
-  }
-
-  if (index === total - 1 || /\bresultado\b|\bfinal\b|\bgenerando\b/.test(lower)) {
-    return {
-      key: 'result',
-      startLabel: 'Generando resultado...',
-      completeLabel: 'Resultado listo',
-      tone: 'info',
-      icon: '📈',
-    };
-  }
-
-  if (/\busers?\b|\busername\b|\busuario\b|\bbuscando usuario\b/.test(lower)) {
-    return {
-      key: 'user',
-      startLabel: 'Buscando usuario...',
-      completeLabel: 'Usuario encontrado',
-      tone: 'select',
-      icon: '🔍',
-    };
-  }
-
-  if (/\bselect\b|\bfrom\b/.test(lower)) {
-    return {
-      key: `query-${index}`,
-      startLabel: 'Consultando información...',
-      completeLabel: 'Información obtenida',
-      tone: 'select',
-      icon: '🔍',
-    };
-  }
-
-  return {
-    key: `generic-${index}`,
-    startLabel: 'Procesando solicitud...',
-    completeLabel: 'Proceso completado',
-    tone: 'info',
-    icon: '📌',
-  };
-}
-
-function limitHumanExecutionSteps(steps: HumanExecutionStep[]): HumanExecutionStep[] {
-  if (steps.length <= 5) return steps;
-  const lastStep = steps[steps.length - 1];
-  const head = steps.slice(0, 4);
-  if (head.some((step) => step.key === lastStep.key)) {
-    return head;
-  }
-  return [...head, lastStep];
-}
-
-function buildHumanExecutionSteps(
-  progressSteps: ProgressStep[],
-  result: ExecutionResultPayload | null,
-): HumanExecutionStep[] {
-  const executedQueries = Array.isArray(result?.executedQueries) ? result.executedQueries : [];
-
-  const rawItems = executedQueries.length > 0
-    ? executedQueries
-        .map((item) => String(item?.title || item?.executedQuery || '').trim())
-        .filter(Boolean)
-    : progressSteps
-        .filter((step) => !isTechnicalProgressMessage(step.message) && step.type !== 'error')
-        .map((step) => String(step.message || '').replace(/^\[STEP\s+\d+\]\s*/i, '').trim())
-        .filter(Boolean);
-
-  const uniqueSteps: HumanExecutionStep[] = [];
-  const seen = new Set<string>();
-
-  rawItems.forEach((item, index) => {
-    const step = inferHumanExecutionStep(item, index, rawItems.length);
-    if (seen.has(step.key)) return;
-    seen.add(step.key);
-    uniqueSteps.push(step);
-  });
-
-  return limitHumanExecutionSteps(uniqueSteps);
-}
-
-function buildAnnotatedSqlScript(
-  executedQueries: Array<{ step?: string; title?: string; executedQuery?: string; executionMs?: number }>,
-): string {
-  if (!executedQueries || executedQueries.length === 0) return '';
-  return executedQueries
-    .map((item, index) => {
-      const sql = String(item?.executedQuery || '').trim();
-      const title = inferQueryTitle(sql);
-      return `-- Paso ${index + 1}: ${title}\n${sql}`;
-    })
-    .join('\n\n');
-}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function ContentPanel({ selectedArticle, loading }: ContentPanelProps) {
   const { theme } = useTheme();
@@ -902,9 +63,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
   const annotatedSqlScript = buildAnnotatedSqlScript(executedQueriesList);
   const scriptPreviewText = getScriptPreviewText(selectedArticle);
   const [execView, setExecView] = useState<'script' | 'execute'>('script');
-  const latestVisibleError = [...progressSteps]
-    .reverse()
-    .find((step) => step.type === 'error' && !isTechnicalProgressMessage(step.message));
+  const latestVisibleError = [...progressSteps].reverse().find((step) => step.type === 'error' && !isTechnicalProgressMessage(step.message));
   const executionTarget = inferArticleExecutionTarget(selectedArticle);
 
   useEffect(() => {
@@ -923,10 +82,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
   }, [progressSteps.length]);
 
   const handleInputChange = (name: string, value: string) => {
-    setDynamicInputs((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setDynamicInputs((prev) => ({ ...prev, [name]: value }));
   };
 
   const resetExec = () => {
@@ -941,12 +97,8 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
   const handleExecute = () => {
     for (const field of executionFields) {
-      const value = dynamicInputs[field.name];
-      const validationError = validateExecutionFieldValue(field, value);
-      if (validationError) {
-        alert(validationError);
-        return;
-      }
+      const validationError = validateExecutionFieldValue(field, dynamicInputs[field.name]);
+      if (validationError) { alert(validationError); return; }
     }
 
     if (requiresWriteConfirmation && !writeConfirmed) {
@@ -966,20 +118,13 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
     };
     const paramsStr = encodeURIComponent(JSON.stringify(paramsPayload));
     const extraQuery = new URLSearchParams();
-    if (executionTarget.databaseId) {
-      extraQuery.set('databaseId', executionTarget.databaseId);
-    }
+    if (executionTarget.databaseId) extraQuery.set('databaseId', executionTarget.databaseId);
 
     const url = `/api/execute/stream/${selectedArticle!.id}?params=${paramsStr}${extraQuery.toString() ? `&${extraQuery.toString()}` : ''}`;
 
     const parsedScript = parseStructuredScript(selectedArticle?.script_json);
     const sqlPreview = String((parsedScript as Record<string, unknown> | null)?.sql || '').trim();
-    console.info('[ContentPanel][execute] dispatch', {
-      articleId: selectedArticle?.id,
-      databaseId: executionTarget.databaseId || '',
-      sql: sqlPreview.slice(0, 500),
-      url,
-    });
+    console.info('[ContentPanel][execute] dispatch', { articleId: selectedArticle?.id, databaseId: executionTarget.databaseId || '', sql: sqlPreview.slice(0, 500), url });
 
     const es = new EventSource(url);
     let closed = false;
@@ -1015,10 +160,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
       setExecDone(true);
       setExecSuccess(false);
       setExecutionResult(null);
-      setProgressSteps((prev) => [
-        ...prev,
-        { message: '❌ Error de conexión con el servidor', type: 'error' },
-      ]);
+      setProgressSteps((prev) => [...prev, { message: '❌ Error de conexión con el servidor', type: 'error' }]);
       es.close();
     };
   };
@@ -1051,15 +193,10 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
   const mdPanelClass = isLightTheme
     ? 'dashboard-panel dashboard-elevate rounded-2xl border border-sky-200 bg-white/90 p-6 mb-6 overflow-hidden'
     : 'dashboard-panel dashboard-elevate rounded-2xl border border-slate-700/70 bg-slate-950/55 p-6 mb-6 overflow-hidden';
-
-  const mdPanelSubtitleClass = isLightTheme
-    ? 'text-[11px] text-slate-500'
-    : 'text-[11px] text-slate-400';
-
+  const mdPanelSubtitleClass = isLightTheme ? 'text-[11px] text-slate-500' : 'text-[11px] text-slate-400';
   const mdInlineCodeClass = isLightTheme
     ? 'inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sm font-mono text-sky-800'
     : 'inline-flex items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-sm font-mono text-cyan-200';
-
   const mdBlockquoteClass = isLightTheme
     ? 'my-4 border-l-4 border-sky-500 bg-sky-50/70 pl-4 italic text-slate-700'
     : 'my-4 border-l-4 border-cyan-400 bg-slate-900/70 pl-4 italic text-slate-300';
@@ -1109,9 +246,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                   code: ({ className, children }) => {
                     const text = String(children);
                     const isBlockCode = Boolean(className) || text.includes('\n');
-                    if (!isBlockCode) {
-                      return <code className={mdInlineCodeClass}>{children}</code>;
-                    }
+                    if (!isBlockCode) return <code className={mdInlineCodeClass}>{children}</code>;
                     return <code className={className}>{children}</code>;
                   },
                   pre: ({ children }) => (
@@ -1134,10 +269,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-[color:var(--ink-900)] uppercase tracking-wide">🔧 Ejecutar Solución</h2>
               {execDone && (
-                <button
-                  onClick={resetExec}
-                  className="text-xs text-[color:var(--accent-strong)] hover:text-[color:var(--ink-900)] font-medium glass-pill px-3 py-1 rounded-lg transition-colors"
-                >
+                <button onClick={resetExec} className="text-xs text-[color:var(--accent-strong)] hover:text-[color:var(--ink-900)] font-medium glass-pill px-3 py-1 rounded-lg transition-colors">
                   🔄 Reiniciar
                 </button>
               )}
@@ -1148,21 +280,13 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               <div className="flex gap-1 mb-5 glass-pill rounded-lg p-1 w-fit">
                 <button
                   onClick={() => setExecView('script')}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                    execView === 'script'
-                      ? 'bg-[color:var(--accent)] text-white'
-                      : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'
-                  }`}
+                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${execView === 'script' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
                 >
                   📋 Ver Script
                 </button>
                 <button
                   onClick={() => setExecView('execute')}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                    execView === 'execute'
-                      ? 'bg-[color:var(--accent)] text-white'
-                      : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'
-                  }`}
+                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${execView === 'execute' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
                 >
                   ▶ Ejecutar
                 </button>
@@ -1174,10 +298,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               <div className="mb-5 rounded-lg border border-slate-700 bg-[#1e1e2e] overflow-hidden">
                 <div className="px-3 py-2 bg-[#2a2a3d] border-b border-slate-700 text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center justify-between">
                   <span>📋 Script configurado</span>
-                  <button
-                    onClick={() => setExecView('execute')}
-                    className="text-[10px] text-blue-400 hover:text-blue-200 font-medium transition-colors"
-                  >
+                  <button onClick={() => setExecView('execute')} className="text-[10px] text-blue-400 hover:text-blue-200 font-medium transition-colors">
                     ▶ Ir a ejecutar →
                   </button>
                 </div>
@@ -1187,7 +308,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               </div>
             )}
 
-            {/* Execution panel (form + progress + results) */}
+            {/* Execution panel */}
             {(execView === 'execute' || execDone) && (
             <div>
 
@@ -1195,9 +316,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               <div className="mb-5 rounded-lg glass-panel p-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--ink-900)] mb-1">Script</p>
                 {businessScriptDetails.script && (
-                  <p className="text-sm text-[color:var(--ink-800)] mb-1">
-                    <span className="font-semibold">Proceso:</span> {businessScriptDetails.script}
-                  </p>
+                  <p className="text-sm text-[color:var(--ink-800)] mb-1"><span className="font-semibold">Proceso:</span> {businessScriptDetails.script}</p>
                 )}
                 {businessScriptDetails.descripcion && (
                   <p className="text-sm text-[color:var(--ink-700)] mb-2">{businessScriptDetails.descripcion}</p>
@@ -1230,34 +349,14 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
                     {field.type === 'textarea' ? (
-                      <textarea
-                        value={dynamicInputs[field.name] || ''}
-                        onChange={(e) => handleInputChange(field.name, e.target.value)}
-                        placeholder={`Ingresa ${field.label.toLowerCase()}`}
-                        disabled={executing}
-                        rows={3}
-                        className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70 resize-none"
-                      />
+                      <textarea value={dynamicInputs[field.name] || ''} onChange={(e) => handleInputChange(field.name, e.target.value)} placeholder={`Ingresa ${field.label.toLowerCase()}`} disabled={executing} rows={3} className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70 resize-none" />
                     ) : field.type === 'checkbox' ? (
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={dynamicInputs[field.name] === 'true' || false}
-                          onChange={(e) => handleInputChange(field.name, e.target.checked ? 'true' : 'false')}
-                          disabled={executing}
-                          className="w-4 h-4 text-[#2363eb] rounded border-[#cfe0ff] focus:ring-2 focus:ring-[#2363eb] disabled:opacity-50"
-                        />
+                        <input type="checkbox" checked={dynamicInputs[field.name] === 'true' || false} onChange={(e) => handleInputChange(field.name, e.target.checked ? 'true' : 'false')} disabled={executing} className="w-4 h-4 text-[#2363eb] rounded border-[#cfe0ff] focus:ring-2 focus:ring-[#2363eb] disabled:opacity-50" />
                         <span className="text-sm text-[color:var(--ink-800)]">{field.label}</span>
                       </label>
                     ) : (
-                      <input
-                        type={field.type || 'text'}
-                        value={dynamicInputs[field.name] || ''}
-                        onChange={(e) => handleInputChange(field.name, e.target.value)}
-                        placeholder={`Ingresa ${field.label.toLowerCase()}`}
-                        disabled={executing}
-                        className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70"
-                      />
+                      <input type={field.type || 'text'} value={dynamicInputs[field.name] || ''} onChange={(e) => handleInputChange(field.name, e.target.value)} placeholder={`Ingresa ${field.label.toLowerCase()}`} disabled={executing} className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70" />
                     )}
                   </div>
                 ))}
@@ -1274,13 +373,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
                 <p className="font-semibold">Esta acción modificará datos en la base de datos.</p>
                 <label className="mt-2 flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={writeConfirmed}
-                    onChange={(e) => setWriteConfirmed(e.target.checked)}
-                    disabled={executing}
-                    className="h-4 w-4 rounded border-amber-300"
-                  />
+                  <input type="checkbox" checked={writeConfirmed} onChange={(e) => setWriteConfirmed(e.target.checked)} disabled={executing} className="h-4 w-4 rounded border-amber-300" />
                   <span>Confirmo que deseo continuar con UPDATE/DELETE/INSERT</span>
                 </label>
               </div>
@@ -1295,9 +388,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
             {/* Real-time progress log */}
             {(humanWorkflowSteps.length > 0 || Boolean(latestVisibleError)) && (
               <div className="mb-4 glass-panel rounded-lg p-4">
-                <p className="text-xs font-bold text-[color:var(--ink-900)] uppercase tracking-wide mb-2">
-                  Progreso del proceso
-                </p>
+                <p className="text-xs font-bold text-[color:var(--ink-900)] uppercase tracking-wide mb-2">Progreso del proceso</p>
                 <div className="max-h-64 overflow-y-auto pr-1">
                   <div className="space-y-3">
                     {humanWorkflowSteps.map((step, index) => {
@@ -1305,12 +396,9 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                       const isDone = execDone && execSuccess;
                       const isCurrent = !execDone && index === humanWorkflowSteps.length - 1;
                       const isCompleted = isDone || (!execDone && index < humanWorkflowSteps.length - 1);
-
                       return (
                         <div key={`${step.key}-${index}`} className={`rounded-lg border ${tone.row} px-4 py-3`}>
-                          <p className={`text-sm font-semibold ${tone.title}`}>
-                            {step.icon} Paso {index + 1}: {step.startLabel}
-                          </p>
+                          <p className={`text-sm font-semibold ${tone.title}`}>{step.icon} Paso {index + 1}: {step.startLabel}</p>
                           <p className={`mt-1 text-sm ${isCompleted || isDone ? 'text-emerald-700' : 'text-[color:var(--ink-700)]'}`}>
                             {isCompleted || isDone ? `✅ ${step.completeLabel}` : isCurrent ? '⏳ En proceso' : '⏳ Pendiente'}
                           </p>
@@ -1339,13 +427,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
             {/* Final result */}
             {execDone && (
-              <div
-                className={`mb-2 p-3 rounded-lg text-sm font-semibold ${
-                  execSuccess
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}
-              >
+              <div className={`mb-2 p-3 rounded-lg text-sm font-semibold ${execSuccess ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
                 {execSuccess ? '✅ Ejecución completada exitosamente' : '❌ La ejecución encontró errores'}
               </div>
             )}
@@ -1415,13 +497,11 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               const res = executionResult;
               const rows = Array.isArray(res?.resultado) ? res.resultado as Record<string, unknown>[] : [];
               const hasRows = rows.length > 0;
-              // If no rows and resumenHumano is multi-line (already shown as notice log above), skip this section
               const resumen = String(res?.resumenHumano || '').trim();
               const isNoticeOutput = !hasRows && resumen.includes('\n');
               if (isNoticeOutput) return null;
               if (!hasRows) return null;
 
-              // Oracle DBMS_OUTPUT pattern: all rows have a single "output" key
               const cols = Object.keys(rows[0] || {});
               const isDbmsOutput = cols.length === 1 && cols[0] === 'output';
               if (isDbmsOutput) {
@@ -1459,9 +539,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                       <thead>
                         <tr className="bg-slate-50 dark:bg-slate-800">
                           {cols.map((col) => (
-                            <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              {col}
-                            </th>
+                            <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">{col}</th>
                           ))}
                         </tr>
                       </thead>
@@ -1469,9 +547,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                         {rows.slice(0, 50).map((row, i) => (
                           <tr key={i} className="border-t border-slate-100 dark:border-slate-700">
                             {cols.map((col) => (
-                              <td key={col} className="px-3 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                                {String(row[col] ?? '')}
-                              </td>
+                              <td key={col} className="px-3 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{String(row[col] ?? '')}</td>
                             ))}
                           </tr>
                         ))}
@@ -1484,22 +560,8 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
             {/* Execute button */}
             {!execDone && (
-              <button
-                onClick={handleExecute}
-                disabled={executing}
-                className="btn-accent w-full disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-              >
-                {executing ? (
-                  <>
-                    <span className="animate-spin">⏳</span>
-                    Ejecutando...
-                  </>
-                ) : (
-                  <>
-                    <span>🔧</span>
-                    Ejecutar Solución
-                  </>
-                )}
+              <button onClick={handleExecute} disabled={executing} className="btn-accent w-full disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2">
+                {executing ? (<><span className="animate-spin">⏳</span>Ejecutando...</>) : (<><span>🔧</span>Ejecutar Solución</>)}
               </button>
             )}
 
@@ -1518,5 +580,3 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
     </div>
   );
 }
-
-

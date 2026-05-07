@@ -1,39 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { B, err500, proxyJson } from '@/app/lib/backend-client';
 
-// GET /api/comments?article_id=xxx
 export async function GET(request: NextRequest) {
   const articleId = request.nextUrl.searchParams.get('article_id');
-  if (!articleId) {
-    return NextResponse.json({ error: 'article_id requerido' }, { status: 400 });
-  }
-
+  if (!articleId) return NextResponse.json({ error: 'article_id requerido' }, { status: 400 });
   try {
-    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
-    const response = await fetch(`${backendUrl}/api/comments?article_id=${encodeURIComponent(articleId)}`);
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('[COMMENTS GET] Error:', error);
-    return NextResponse.json({ error: 'Error al obtener comentarios' }, { status: 500 });
-  }
+    const res = await fetch(`${B}/api/comments?article_id=${encodeURIComponent(articleId)}`);
+    return proxyJson(res);
+  } catch (e) { return err500('comments/GET', e); }
 }
 
-// POST /api/comments
 export async function POST(request: NextRequest) {
   try {
-    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const body = await request.json();
-    const response = await fetch(`${backendUrl}/api/comments`, {
+    const res = await fetch(`${B}/api/comments`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('[COMMENTS POST] Error:', error);
-    return NextResponse.json({ error: 'Error al guardar comentario' }, { status: 500 });
-  }
+    return proxyJson(res);
+  } catch (e) { return err500('comments/POST', e); }
 }

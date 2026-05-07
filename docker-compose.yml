@@ -1,5 +1,3 @@
-version: '3.9'
-
 # ═══════════════════════════════════════════════════════════════════
 #  PRACTICASPREPROFESIONALES — Motor SQL Multi-DB con IA
 #
@@ -34,9 +32,11 @@ services:
       POSTGRES_DB: knowledge_base
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin123
+      POSTGRES_INITDB_ARGS: "--locale=en_US.UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database_schema_complete.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ${SCHEMA_PATH:-./database_schema_complete.sql}:/docker-entrypoint-initdb.d/01-schema.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -45,29 +45,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Oracle XE 21c ────────────────────────────────────────────────
-  # Imagen ligera sin necesidad de cuenta Oracle Container Registry.
-  # Primera vez: tarda ~3-5 min en inicializar el PDB.
-  oracle:
-    image: gvenzl/oracle-xe:21-slim
-    container_name: practicas-oracle
-    restart: unless-stopped
-    environment:
-      ORACLE_PASSWORD: SysAdmin123       # Contraseña de SYS y SYSTEM
-      ORACLE_DATABASE: XEPDB1            # PDB a crear
-      APP_USER: APP                      # Usuario de app (creado automáticamente)
-      APP_USER_PASSWORD: "1234"          # Contraseña del usuario APP
-    volumes:
-      - oracle_data:/opt/oracle/oradata
-      - ./docker/oracle/02-create-tables.sql:/container-entrypoint-initdb.d/02-create-tables.sql:ro
-    ports:
-      - "1521:1521"
-    healthcheck:
-      test: ["CMD-SHELL", "healthcheck.sh"]
-      interval: 30s
-      timeout: 10s
-      retries: 20
-      start_period: 3m
+  
 
   # ── Ollama (IA local) ─────────────────────────────────────────────
   ollama:
@@ -83,19 +61,20 @@ services:
 
   # ── Backend (Express API) ─────────────────────────────────────────
   backend:
+    image: consultas-sql-backend:pruebas
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: practicas-backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env.docker
+      - ${BACKEND_ENV_PATH:-./backend/.env}
     environment:
       - OLLAMA_URL=http://ollama:11434/api/generate
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002,http://172.20.91.3:3000,http://172.20.91.3:3002
+      - DATABASE_URL=postgres://postgres:admin123@postgres:5432/knowledge_base
     depends_on:
       postgres:
-        condition: service_healthy
-      oracle:
         condition: service_healthy
       ollama:
         condition: service_started
@@ -104,6 +83,7 @@ services:
 
   # ── Frontend (Next.js) ────────────────────────────────────────────
   frontend:
+    image: consultas-sql-frontend:pruebas
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -111,6 +91,7 @@ services:
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://backend:3002
+      - BACKEND_URL=http://backend:3002
     depends_on:
       - backend
     ports:
@@ -124,3 +105,7 @@ volumes:
     driver: local
   ollama_data:
     driver: local
+
+networks:
+  default:
+    driver: bridge

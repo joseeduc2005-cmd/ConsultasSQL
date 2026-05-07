@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const response = await fetch(`${backendUrl}/api/comments?article_id=${encodeURIComponent(articleId)}`);
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 // POST /api/comments
 export async function POST(request: NextRequest) {
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const body = await request.json();
     const response = await fetch(`${backendUrl}/api/comments`, {
       method: 'POST',

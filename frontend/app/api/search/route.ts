@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q') || '';
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const response = await fetch(`${backendUrl}/api/search?q=${encodeURIComponent(query)}`);
     const data = await response.json();
 

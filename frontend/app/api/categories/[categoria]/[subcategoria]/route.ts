@@ -9,7 +9,7 @@ export async function GET(
   try {
     void request;
     const { categoria, subcategoria } = await params;
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
     const response = await fetch(`${backendUrl}/api/categories/${categoria}/${subcategoria}`);
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });

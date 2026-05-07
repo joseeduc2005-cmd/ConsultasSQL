@@ -1,49 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
-
-function buildForwardHeaders(request: NextRequest) {
-  return {
-    Authorization: request.headers.get('Authorization') || '',
-    'x-user-role': request.headers.get('x-user-role') || '',
-  };
-}
+import { NextRequest } from 'next/server';
+import { B, fwd, err500, proxyJson } from '@/app/lib/backend-client';
 
 export async function GET(request: NextRequest) {
   try {
     const limit = request.nextUrl.searchParams.get('limit') || '50';
-    const response = await fetch(`${backendUrl}/api/query-history?limit=${encodeURIComponent(limit)}`, {
-      method: 'GET',
-      headers: buildForwardHeaders(request),
-      cache: 'no-store',
-    });
-
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('[API][query-history] Error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
-    );
-  }
+    const res = await fetch(`${B}/api/query-history?limit=${encodeURIComponent(limit)}`, { headers: fwd(request), cache: 'no-store' });
+    return proxyJson(res);
+  } catch (e) { return err500('query-history/GET', e); }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const response = await fetch(`${backendUrl}/api/query-history`, {
-      method: 'DELETE',
-      headers: buildForwardHeaders(request),
-      cache: 'no-store',
-    });
-
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('[API][query-history][DELETE] Error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
-    );
-  }
+    const res = await fetch(`${B}/api/query-history`, { method: 'DELETE', headers: fwd(request), cache: 'no-store' });
+    return proxyJson(res);
+  } catch (e) { return err500('query-history/DELETE', e); }
 }

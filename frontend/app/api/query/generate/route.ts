@@ -1,29 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-const backendUrl = process.env.BACKEND_URL || (process.env.BACKEND_URL || (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL)) || 'http://localhost:3002';
+import { NextRequest } from 'next/server';
+import { B, fwdJson, err500, proxyJson } from '@/app/lib/backend-client';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
-    const response = await fetch(`${backendUrl}/api/query/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: request.headers.get('Authorization') || '',
-        'x-user-role': request.headers.get('x-user-role') || '',
-      },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
-
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error('[API][query/generate] Error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
-    );
-  }
+    const res = await fetch(`${B}/api/query/generate`, { method: 'POST', headers: fwdJson(request), body: JSON.stringify(body), cache: 'no-store' });
+    return proxyJson(res);
+  } catch (e) { return err500('query/generate', e); }
 }

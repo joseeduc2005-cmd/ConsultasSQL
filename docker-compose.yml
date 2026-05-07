@@ -25,7 +25,7 @@ services:
 
   # ── PostgreSQL 15 ─────────────────────────────────────────────────
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: practicas-postgres
     restart: unless-stopped
     environment:

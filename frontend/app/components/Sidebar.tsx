@@ -127,12 +127,6 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
     })),
   }));
 
-  if (articles && articles.length > 0) {
-    console.log('[Sidebar] Total articles received:', articles.length);
-    console.log('[Sidebar] Articles:', articles);
-    console.log('[Sidebar] Article map:', articleMap);
-  }
-
   return (
     <div className="w-full h-full overflow-hidden flex flex-col transition-all duration-200">
       {/* Header */}
@@ -166,10 +160,10 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                   localActiveCategory === category.categoria
                     ? (isLightTheme
                       ? 'bg-white text-[color:var(--ink-900)] shadow-sm ring-1 ring-[color:var(--line)]'
-                      : 'bg-slate-900 text-white shadow-sm ring-1 ring-slate-600')
+                      : 'bg-[rgba(6,182,212,0.14)] text-cyan-100 shadow-sm ring-1 ring-[rgba(6,182,212,0.35)]')
                     : (isLightTheme
                       ? 'text-[color:var(--ink-800)] hover:bg-white/75'
-                      : 'text-slate-200 hover:bg-slate-800/80')
+                      : 'text-slate-300 hover:bg-[rgba(56,189,248,0.07)] hover:text-cyan-100')
                 }`}
               >
                 <span>{category.categoria}</span>
@@ -205,10 +199,10 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                                 localActiveCategory === category.categoria && localActiveSubcategory === subgroup.subcategoria
                                   ? (isLightTheme
                                     ? 'bg-white text-[color:var(--ink-900)] ring-1 ring-[color:var(--line)]'
-                                    : 'bg-slate-900 text-white ring-1 ring-slate-600')
+                                    : 'bg-[rgba(6,182,212,0.13)] text-cyan-100 ring-1 ring-[rgba(6,182,212,0.30)]')
                                   : (isLightTheme
                                     ? 'text-[color:var(--ink-700)] hover:bg-white/70'
-                                    : 'text-slate-300 hover:bg-slate-800/70')
+                                    : 'text-slate-400 hover:bg-[rgba(56,189,248,0.07)] hover:text-slate-200')
                               }`}
                             >
                               {subgroup.subcategoria}
@@ -224,10 +218,12 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                               }}
                               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                                 selectedArticle?.id === article.id
-                                  ? 'bg-gradient-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
+                                  ? (isLightTheme
+                                    ? 'bg-gradient-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
+                                    : 'bg-gradient-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
                                   : (isLightTheme
                                     ? 'text-[color:var(--ink-700)] hover:bg-white/75 hover:text-[color:var(--ink-900)]'
-                                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white')
+                                    : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100')
                               }`}
                             >
                               {article.titulo}

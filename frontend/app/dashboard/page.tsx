@@ -46,6 +46,9 @@ function DashboardPage() {
   const [historyStatus, setHistoryStatus] = useState<'all' | 'ok' | 'error'>('all');
   const [clearingHistory, setClearingHistory] = useState(false);
 
+  const [selectedDatabase, setSelectedDatabase] = useState('');
+  const [availableDatabases, setAvailableDatabases] = useState<{ id: string; label: string; type: string }[]>([]);
+
   const isDebugMode = result?.mode === 'debug';
   const debugResult = (isDebugMode && result?.resultado && typeof result.resultado === 'object' && !Array.isArray(result.resultado)
     ? result.resultado
@@ -124,7 +127,7 @@ function DashboardPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           'x-user-role': role,
         },
-        body: JSON.stringify({ query: text, limit: 80 }),
+        body: JSON.stringify({ query: text, limit: 80, ...(selectedDatabase ? { databaseId: selectedDatabase } : {}) }),
       });
 
       const intelligentPayload = await intelligentResponse.json();
@@ -262,6 +265,20 @@ function DashboardPage() {
   useEffect(() => {
     void loadHistory();
   }, [currentUser?.role]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch('/api/distributed/databases', {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data?.databases)) {
+          setAvailableDatabases(data.databases);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const metrics = useMemo(() => {
     const rows = Array.isArray(result?.data) ? result.data : [];
@@ -550,6 +567,27 @@ function DashboardPage() {
               >
                 {loadingQuery ? 'Consultando...' : 'Ejecutar consulta'}
               </button>
+            </div>
+
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`text-xs font-medium ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Base de datos:</span>
+              <select
+                value={selectedDatabase}
+                onChange={(e) => setSelectedDatabase(e.target.value)}
+                className={`rounded-xl border px-3 py-1.5 text-xs ${isLightTheme ? 'border-sky-200 bg-white text-slate-700' : 'border-slate-700 bg-slate-950/80 text-slate-200'}`}
+              >
+                <option value="">Automático</option>
+                {availableDatabases.map((db) => (
+                  <option key={db.id} value={db.id}>
+                    {db.label} ({db.type})
+                  </option>
+                ))}
+              </select>
+              {selectedDatabase && (
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'}`}>
+                  ✓ seleccionada
+                </span>
+              )}
             </div>
 
             {suggestions.length > 0 && (

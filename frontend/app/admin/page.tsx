@@ -802,18 +802,6 @@ function AdminPage() {
             {currentUser?.role === 'admin' ? (
               <div className="flex flex-wrap gap-2">
                 <button onClick={openUploadModal} className="btn-accent px-4 py-2 rounded-xl text-sm font-semibold">Subir Nueva Solucion MD</button>
-                <button
-                  onClick={() => setShowDbModal(true)}
-                  className="glass-pill px-4 py-2 rounded-xl text-sm font-semibold text-[color:var(--ink-900)] transition-colors hover:bg-white/85 flex items-center gap-1.5"
-                  title="Gestionar bases de datos externas"
-                >
-                  🗄 Bases de datos
-                  {allDatabases.filter(d => !d.primary).length > 0 && (
-                    <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${allDatabases.filter(d => !d.primary && d.connected).length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {allDatabases.filter(d => !d.primary && d.connected).length}/{allDatabases.filter(d => !d.primary).length}
-                    </span>
-                  )}
-                </button>
                 {selectedArticle && (
                   <>
                     <button onClick={() => openEditModal(selectedArticle)} className="glass-pill px-4 py-2 rounded-xl text-[color:var(--ink-900)] transition-colors hover:bg-white/85">Editar articulo</button>

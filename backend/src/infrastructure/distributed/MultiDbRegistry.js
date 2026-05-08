@@ -717,23 +717,34 @@ export class MultiDbRegistry {
   async introspectEmptySchemas() {
     const results = [];
     for (const [id, db] of this.databases.entries()) {
-      if (db.enabled === false) continue;
+      if (db.enabled === false) {
+        console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] SKIP (disabled)`);
+        continue;
+      }
       const tables = db.schema?.tables;
       const hasSchema = Array.isArray(tables) && tables.length > 0;
       if (hasSchema) {
+        console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] SKIP (ya tiene ${tables.length} tablas en config)`);
         results.push({ id, status: 'skipped-has-schema', tableCount: tables.length });
         continue;
       }
+      console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] iniciando introspección (${db.type} ${db.host}:${db.port}/${db.database})`);
       let connectionResult = null;
       try {
         connectionResult = await connectDatabase(db);
+        console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] conexión OK, obteniendo schema...`);
         const schema = await getSchema(connectionResult.dbId);
         const updated = this.normalizeDatabase({ ...db, schema });
         this.databases.set(id, updated);
         const tableCount = updated.schema.tables.length;
+        console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✔ ${tableCount} tablas cargadas`);
+        if (tableCount === 0) {
+          console.warn(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ⚠ 0 tablas — usuario "${db.user}" puede no tener permisos sobre los esquemas de esta base`);
+        }
         results.push({ id, status: 'ok', tableCount });
       } catch (err) {
         const errMsg = String(err?.message || err);
+        console.error(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✘ FAIL: ${errMsg}`);
         results.push({ id, status: 'fail', error: errMsg });
       } finally {
         if (connectionResult?.dbId) {

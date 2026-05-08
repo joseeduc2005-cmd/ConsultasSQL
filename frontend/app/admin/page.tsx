@@ -60,7 +60,12 @@ function AdminPage() {
   const [uploadError, setUploadError] = useState('');
   const [editError, setEditError] = useState('');
   const [assistantQuery, setAssistantQuery] = useState<any | null>(null);
-  const [availableDatabases, setAvailableDatabases] = useState<Array<{ id: string; label: string; type: string }>>([]);
+  const [availableDatabases, setAvailableDatabases] = useState<Array<{ id: string; label: string; type: string; connected?: boolean; primary?: boolean }>>([]);
+  const [showDbModal, setShowDbModal] = useState(false);
+  const [dbForm, setDbForm] = useState({ id: '', label: '', type: 'postgres', host: '', port: '5432', database: '', user: '', password: '' });
+  const [dbSaving, setDbSaving] = useState(false);
+  const [dbError, setDbError] = useState('');
+  const [allDatabases, setAllDatabases] = useState<Array<{ id: string; label: string; type: string; connected?: boolean; primary?: boolean }>>([]);
   const [, startWorkflowSyncTransition] = useTransition();
 
   const handleUploadWorkflowChange = useCallback((data: any) => {
@@ -143,15 +148,19 @@ function AdminPage() {
 
     fetchArticles();
 
-    // Cargar bases de datos disponibles: solo las conectadas y no primarias (el backend ya filtra)
-    fetch('/api/distributed/databases')
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d?.databases)) {
-          setAvailableDatabases(d.databases);
-        }
-      })
-      .catch(() => {/* silencioso */});
+    // Cargar bases de datos: para el selector de artículos solo las conectadas/no primarias.
+    // Para el panel de gestión de admin se carga con showAll=true.
+    const refreshDatabases = () => {
+      fetch('/api/distributed/databases')
+        .then((r) => r.json())
+        .then((d) => { if (Array.isArray(d?.databases)) setAvailableDatabases(d.databases); })
+        .catch(() => {});
+      fetch('/api/distributed/databases?showAll=true')
+        .then((r) => r.json())
+        .then((d) => { if (Array.isArray(d?.databases)) setAllDatabases(d.databases); })
+        .catch(() => {});
+    };
+    refreshDatabases();
   }, []);
 
   useEffect(() => {
@@ -464,6 +473,54 @@ function AdminPage() {
     }
   };
 
+  const handleAddDatabase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDbSaving(true);
+    setDbError('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/distributed/databases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': currentUser?.role || 'user',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ ...dbForm, port: Number(dbForm.port) }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDbError(data.error || 'Error al agregar'); return; }
+      setShowDbModal(false);
+      setDbForm({ id: '', label: '', type: 'postgres', host: '', port: '5432', database: '', user: '', password: '' });
+      // Esperar ~3s para que el watcher detecte el cambio y haga el probe
+      setTimeout(() => {
+        fetch('/api/distributed/databases').then(r => r.json()).then(d => { if (Array.isArray(d?.databases)) setAvailableDatabases(d.databases); });
+        fetch('/api/distributed/databases?showAll=true').then(r => r.json()).then(d => { if (Array.isArray(d?.databases)) setAllDatabases(d.databases); });
+      }, 3500);
+    } catch { setDbError('Error de red'); }
+    finally { setDbSaving(false); }
+  };
+
+  const handleDeleteDatabase = async (dbId: string) => {
+    if (!confirm(`¿Eliminar la base "${dbId}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/distributed/databases/${dbId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': currentUser?.role || 'user',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Error al eliminar'); return; }
+      setTimeout(() => {
+        fetch('/api/distributed/databases').then(r => r.json()).then(d => { if (Array.isArray(d?.databases)) setAvailableDatabases(d.databases); });
+        fetch('/api/distributed/databases?showAll=true').then(r => r.json()).then(d => { if (Array.isArray(d?.databases)) setAllDatabases(d.databases); });
+      }, 3500);
+    } catch { alert('Error de red'); }
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (!value.trim()) setSelectedArticle(null);
@@ -743,8 +800,20 @@ function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <input value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Buscar..." className="input-glass flex-1 min-w-[220px] p-2 rounded-xl" />
             {currentUser?.role === 'admin' ? (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button onClick={openUploadModal} className="btn-accent px-4 py-2 rounded-xl text-sm font-semibold">Subir Nueva Solucion MD</button>
+                <button
+                  onClick={() => setShowDbModal(true)}
+                  className="glass-pill px-4 py-2 rounded-xl text-sm font-semibold text-[color:var(--ink-900)] transition-colors hover:bg-white/85 flex items-center gap-1.5"
+                  title="Gestionar bases de datos externas"
+                >
+                  🗄 Bases de datos
+                  {allDatabases.filter(d => !d.primary).length > 0 && (
+                    <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${allDatabases.filter(d => !d.primary && d.connected).length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {allDatabases.filter(d => !d.primary && d.connected).length}/{allDatabases.filter(d => !d.primary).length}
+                    </span>
+                  )}
+                </button>
                 {selectedArticle && (
                   <>
                     <button onClick={() => openEditModal(selectedArticle)} className="glass-pill px-4 py-2 rounded-xl text-[color:var(--ink-900)] transition-colors hover:bg-white/85">Editar articulo</button>
@@ -1138,6 +1207,88 @@ function AdminPage() {
                 <button type="submit" disabled={editSaving || !editEnterpriseValidation.isValid} className="rounded-lg bg-[#25295c] px-5 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">{editSaving ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Gestión de Bases de Datos ───────────────────────────────── */}
+      {showDbModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden ${isLightTheme ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-700'}`}>
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
+              <div>
+                <h2 className="text-lg font-bold text-[color:var(--ink-900)]">🗄 Gestión de Bases de Datos</h2>
+                <p className="text-xs text-[color:var(--ink-600)] mt-0.5">Los cambios se aplican automáticamente — sin reiniciar el sistema.</p>
+              </div>
+              <button onClick={() => setShowDbModal(false)} className="text-[color:var(--ink-600)] hover:text-[color:var(--ink-900)] text-xl font-bold leading-none">×</button>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              {/* Lista de BDs actuales */}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-[color:var(--ink-900)]">Bases configuradas</p>
+                <div className="space-y-2">
+                  {allDatabases.map((db) => (
+                    <div key={db.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
+                      <span className={`shrink-0 w-2 h-2 rounded-full ${db.connected ? 'bg-emerald-400' : 'bg-slate-400'}`} title={db.connected ? 'Conectada' : 'Sin conexión'} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[color:var(--ink-900)] truncate">{db.label}</p>
+                        <p className="text-xs text-[color:var(--ink-600)]">{db.type} · {db.id} {db.primary ? '· BD primaria del sistema' : ''}</p>
+                      </div>
+                      <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${db.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {db.connected ? 'conectada' : 'sin conexión'}
+                      </span>
+                      {!db.primary && (
+                        <button
+                          onClick={() => handleDeleteDatabase(db.id)}
+                          className="shrink-0 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2 py-1 transition-colors"
+                          title="Eliminar esta base de datos"
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {allDatabases.length === 0 && (
+                    <p className="text-sm text-[color:var(--ink-600)] text-center py-4">No hay bases configuradas aún.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Formulario para agregar nueva BD */}
+              <div className={`rounded-xl border p-4 space-y-4 ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
+                <p className="text-sm font-semibold text-[color:var(--ink-900)]">Agregar nueva base de datos</p>
+                {dbError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{dbError}</p>}
+                <form onSubmit={handleAddDatabase} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input required placeholder="ID único (ej: oracle_prod)" value={dbForm.id} onChange={e => setDbForm(p => ({...p, id: e.target.value.toLowerCase().replace(/\s/g,'_')}))} className={modalInputClass} />
+                    <input placeholder="Nombre visible (ej: Oracle Producción)" value={dbForm.label} onChange={e => setDbForm(p => ({...p, label: e.target.value}))} className={modalInputClass} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <select value={dbForm.type} onChange={e => setDbForm(p => ({...p, type: e.target.value, port: e.target.value === 'oracle' ? '1521' : e.target.value === 'mysql' ? '3306' : '5432'}))} className={modalInputClass}>
+                      <option value="postgres">PostgreSQL</option>
+                      <option value="oracle">Oracle</option>
+                      <option value="mysql">MySQL</option>
+                    </select>
+                    <input required placeholder="Host / IP" value={dbForm.host} onChange={e => setDbForm(p => ({...p, host: e.target.value}))} className={modalInputClass} />
+                    <input required placeholder="Puerto" type="number" value={dbForm.port} onChange={e => setDbForm(p => ({...p, port: e.target.value}))} className={modalInputClass} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <input required placeholder="Base de datos / SID / Service" value={dbForm.database} onChange={e => setDbForm(p => ({...p, database: e.target.value}))} className={modalInputClass} />
+                    <input required placeholder="Usuario" value={dbForm.user} onChange={e => setDbForm(p => ({...p, user: e.target.value}))} className={modalInputClass} />
+                    <input required placeholder="Contraseña" type="password" value={dbForm.password} onChange={e => setDbForm(p => ({...p, password: e.target.value}))} className={modalInputClass} />
+                  </div>
+                  <p className="text-xs text-[color:var(--ink-600)]">
+                    💡 Al guardar, el sistema conectará automáticamente en segundos. El estado aparecerá actualizado sin reiniciar nada.
+                  </p>
+                  <div className="flex justify-end">
+                    <button type="submit" disabled={dbSaving} className="rounded-lg bg-[#25295c] px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                      {dbSaving ? 'Guardando...' : 'Agregar base de datos'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
       )}

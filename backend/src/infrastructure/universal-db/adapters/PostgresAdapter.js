@@ -36,6 +36,8 @@ export default class PostgresAdapter extends BaseAdapter {
 
   async introspectSchema() {
     const pool = await this.createPool();
+    const dbLabel = `${this.config.host}:${this.config.port}/${this.config.database}`;
+    console.log(`[PostgresAdapter] introspectSchema → iniciando para ${dbLabel}`);
 
     const [tablesRes, columnsRes, pkRes, fkRes] = await Promise.all([
       pool.query(POSTGRES_SCHEMA_QUERIES.tables),
@@ -44,34 +46,56 @@ export default class PostgresAdapter extends BaseAdapter {
       pool.query(POSTGRES_SCHEMA_QUERIES.foreignKeys),
     ]);
 
-    return this.normalizeSchema({
+    console.log(`[PostgresAdapter] introspectSchema → ${dbLabel}: tablas=${tablesRes.rows.length} columnas=${columnsRes.rows.length} PKs=${pkRes.rows.length} FKs=${fkRes.rows.length}`);
+
+    // Log esquemas encontrados agrupados
+    const schemaGroups = {};
+    for (const row of tablesRes.rows) {
+      const s = row.table_schema;
+      schemaGroups[s] = (schemaGroups[s] || 0) + 1;
+    }
+    console.log(`[PostgresAdapter] introspectSchema → ${dbLabel}: esquemas detectados:`, schemaGroups);
+
+    const result = this.normalizeSchema({
       tablesRows: tablesRes.rows,
       columnsRows: columnsRes.rows,
       primaryKeyRows: pkRes.rows,
       foreignKeyRows: fkRes.rows,
     });
+
+    console.log(`[PostgresAdapter] introspectSchema → ${dbLabel}: tablas normalizadas=${Object.keys(result.tables).length}`);
+    return result;
+  }
+
+  // Convierte "schema"+"table_name" en una clave: si el schema es 'public' usa solo
+  // el nombre de tabla (compatibilidad hacia atrás); para otros schemas usa schema.tabla
+  _tableKey(schema, tableName) {
+    const s = String(schema || '').toLowerCase();
+    const t = String(tableName || '').toLowerCase();
+    return s === 'public' ? t : `${s}.${t}`;
   }
 
   normalizeSchema(raw = {}) {
     const tables = {};
 
     for (const row of raw.tablesRows || []) {
-      const tableName = String(row.table_name || '').toLowerCase();
-      if (!tableName) continue;
+      const key = this._tableKey(row.table_schema, row.table_name);
+      if (!key) continue;
 
-      tables[tableName] = {
+      tables[key] = {
         columns: [],
         primaryKey: null,
         primaryKeys: [],
         foreignKeys: [],
+        schema: String(row.table_schema || 'public').toLowerCase(),
       };
     }
 
     for (const row of raw.columnsRows || []) {
-      const tableName = String(row.table_name || '').toLowerCase();
-      if (!tables[tableName]) continue;
+      const key = this._tableKey(row.table_schema, row.table_name);
+      if (!tables[key]) continue;
 
-      tables[tableName].columns.push({
+      tables[key].columns.push({
         name: String(row.column_name || '').toLowerCase(),
         type: String(row.data_type || '').toLowerCase(),
         nullable: toBooleanNullable(row.is_nullable),
@@ -80,23 +104,23 @@ export default class PostgresAdapter extends BaseAdapter {
     }
 
     for (const row of raw.primaryKeyRows || []) {
-      const tableName = String(row.table_name || '').toLowerCase();
-      if (!tables[tableName]) continue;
+      const key = this._tableKey(row.table_schema, row.table_name);
+      if (!tables[key]) continue;
 
       const pkColumn = String(row.column_name || '').toLowerCase();
       if (!pkColumn) continue;
 
-      tables[tableName].primaryKeys.push(pkColumn);
-      if (!tables[tableName].primaryKey) {
-        tables[tableName].primaryKey = pkColumn;
+      tables[key].primaryKeys.push(pkColumn);
+      if (!tables[key].primaryKey) {
+        tables[key].primaryKey = pkColumn;
       }
     }
 
     for (const row of raw.foreignKeyRows || []) {
-      const tableName = String(row.table_name || '').toLowerCase();
-      if (!tables[tableName]) continue;
+      const key = this._tableKey(row.table_schema, row.table_name);
+      if (!tables[key]) continue;
 
-      tables[tableName].foreignKeys.push({
+      tables[key].foreignKeys.push({
         column: String(row.column_name || '').toLowerCase(),
         referencesTable: String(row.referenced_table || '').toLowerCase(),
         referencesColumn: String(row.referenced_column || '').toLowerCase(),

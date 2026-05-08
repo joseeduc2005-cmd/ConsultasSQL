@@ -1902,6 +1902,12 @@ function extractRequestedDatabasesFromText(text, availableDatabases = []) {
   const mentionsPostgres = /\bpostgres(?:ql)?\b|\bpg\b/.test(input);
   const mentionsMySql = /\bmysql\b/.test(input);
 
+  // Extrae nombres de esquema de referencias SQL tipo "schema.tabla" o "schema.tabla alias"
+  const schemaRefs = new Set(
+    (input.match(/\b([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)/g) || [])
+      .map((m) => m.split('.')[0])
+  );
+
   for (const db of availableDatabases || []) {
     const dbId = String(db?.id || '').trim();
     const dbType = String(db?.type || '').trim().toLowerCase();
@@ -1912,9 +1918,22 @@ function extractRequestedDatabasesFromText(text, availableDatabases = []) {
       continue;
     }
 
-    if (mentionsOracle && dbType === 'oracle') ids.add(dbId);
-    if (mentionsPostgres && dbType === 'postgres') ids.add(dbId);
-    if (mentionsMySql && dbType === 'mysql') ids.add(dbId);
+    if (mentionsOracle && dbType === 'oracle') { ids.add(dbId); continue; }
+    if (mentionsPostgres && dbType === 'postgres') { ids.add(dbId); continue; }
+    if (mentionsMySql && dbType === 'mysql') { ids.add(dbId); continue; }
+
+    // Detección por schema: si el SQL menciona "bpc_ordenes.algo" y la BD tiene tablas
+    // con schema="bpc_ordenes", esta BD es el destino correcto
+    if (schemaRefs.size > 0 && !db.primary) {
+      const dbSchemas = new Set(
+        (db?.schema?.tables || []).map((t) => String(t?.schema || 'public').toLowerCase())
+      );
+      const matched = [...schemaRefs].some((s) => dbSchemas.has(s));
+      if (matched) {
+        console.log(`[routing] Schema match: "${[...schemaRefs].join(',')}" → ${dbId}`);
+        ids.add(dbId);
+      }
+    }
   }
 
   return [...ids];

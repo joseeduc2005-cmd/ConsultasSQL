@@ -276,6 +276,7 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
     try {
       const result = await probeUniversalConnection(database);
       console.log(`${label} ✅ OK (${database.host}:${database.port}/${database.database})`);
+      multiDbRegistry.setConnectionStatus(id, 'ok');
       summary.push({ id, type, status: 'ok' });
 
       if (result?.dbId && !result?.reused) {
@@ -283,6 +284,7 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
       }
     } catch (error) {
       console.error(`${label} ❌ FAIL:`, error?.message || error);
+      multiDbRegistry.setConnectionStatus(id, 'fail');
       summary.push({ id, type, status: 'fail', error: String(error?.message || error) });
     }
   }
@@ -5306,20 +5308,8 @@ app.get('/api', (req, res) => {
   });
 });
 
-app.get('/api/distributed/databases', (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      databases: multiDbRegistry.getDatabaseSummaries(),
-      note: 'Configurar MULTI_DB_CONFIG_FILE (por defecto ./config/multidb.databases.json) y marcar una entrada con primary=true para definir la base principal del backend',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error?.message || 'No se pudo leer el registro distribuido',
-    });
-  }
-});
+// Nota: esta ruta está cubierta por distributedRouter montado en /api/distributed más abajo.
+// Se elimina el handler duplicado para que el filtro de BDs conectadas/no-primarias funcione.
 
 // POST /api/query/distributed → distributedRoute.js
 

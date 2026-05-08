@@ -96,7 +96,7 @@ export function getPanelPreferenceKey(username: string, role: string) {
 export function createInitialFormState(): BuilderFormState {
   return {
     titulo: '', categoria: '', subcategoria: '', tags: '',
-    descripcion: '', contenido_md: '',
+    descripcion: '', contenido_md: '', target_database: '',
     tipo_solucion: 'database', archivo_md: null,
     workflow_rows: [createEmptyWorkflowRow(1)],
     script_json: null, script_creation_mode: 'visual_builder',

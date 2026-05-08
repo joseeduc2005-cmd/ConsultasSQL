@@ -142,6 +142,9 @@ export function getBusinessScriptDetails(article: { script_json?: KnowledgeArtic
 export function inferArticleExecutionTarget(article: { script_json?: KnowledgeArticle['script_json'] } | null): { databaseId?: string } {
   const parsed = parseStructuredScript(article?.script_json);
   const p = parsed as Record<string, unknown> | null;
-  const id = String(p?.databaseId || p?.database_id || p?.targetDatabaseId || p?.target_database_id || '').trim();
+  const id = String(
+    p?.databaseId || p?.database_id || p?.targetDatabaseId ||
+    p?.target_database_id || p?.target_database || ''
+  ).trim();
   return id ? { databaseId: id } : {};
 }

@@ -39,6 +39,7 @@ export type BuilderFormState = {
   descripcion: string;
   contenido_md: string;
   tipo_solucion: SolutionType;
+  target_database: string;
   archivo_md?: File | null;
   workflow_rows: WorkflowRow[];
   script_json?: unknown;

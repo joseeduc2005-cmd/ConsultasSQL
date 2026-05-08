@@ -29,7 +29,21 @@
         "tables": []
       }
     },
-     {
+    {
+      "id": "oracle_test",
+      "label": "Oracle XE Docker",
+      "type": "oracle",
+      "enabled": true,
+      "host": "localhost",
+      "port": 1521,
+      "database": "XEPDB1",
+      "user": "system",
+      "password": "Oracle123",
+      "schema": {
+        "tables": []
+      }
+    },
+    {
       "id": "boton",
       "label": "Postgres Boton",
       "type": "postgres",

@@ -83,12 +83,19 @@ export function createDistributedRouter({
   }
 
   // GET /api/distributed/databases
+  // Devuelve solo las BDs que conectaron exitosamente y no son la BD primaria del sistema.
+  // La BD primaria es interna (artículos, usuarios, sesiones) y no debe exponerse a consultas de usuario.
   router.get('/databases', (req, res) => {
     try {
+      const all = multiDbRegistry.getDatabaseSummaries();
+      // showAll=true permite ver todas (para admin/debug); por defecto solo conectadas y no primarias
+      const showAll = req.query.showAll === 'true';
+      const databases = showAll
+        ? all
+        : all.filter((db) => db.connected === true && db.primary !== true);
       return res.status(200).json({
         success: true,
-        databases: multiDbRegistry.getDatabaseSummaries(),
-        note: 'Configurar MULTI_DB_CONFIG_FILE (por defecto ./config/multidb.databases.json) y marcar una entrada con primary=true para definir la base principal del backend',
+        databases,
       });
     } catch (error) {
       return res.status(500).json({ success: false, error: error?.message || 'No se pudo leer el registro distribuido' });

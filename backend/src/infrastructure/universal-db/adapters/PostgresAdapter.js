@@ -67,22 +67,16 @@ export default class PostgresAdapter extends BaseAdapter {
     return result;
   }
 
-  // Convierte "schema"+"table_name" en una clave: si el schema es 'public' usa solo
-  // el nombre de tabla (compatibilidad hacia atrás); para otros schemas usa schema.tabla
-  _tableKey(schema, tableName) {
-    const s = String(schema || '').toLowerCase();
-    const t = String(tableName || '').toLowerCase();
-    return s === 'public' ? t : `${s}.${t}`;
-  }
-
   normalizeSchema(raw = {}) {
     const tables = {};
 
     for (const row of raw.tablesRows || []) {
-      const key = this._tableKey(row.table_schema, row.table_name);
-      if (!key) continue;
+      // Clave = solo el nombre de tabla (compatible con el routing existente)
+      // Se guarda el schema como metadato separado para routing inteligente
+      const tableName = String(row.table_name || '').toLowerCase();
+      if (!tableName) continue;
 
-      tables[key] = {
+      tables[tableName] = {
         columns: [],
         primaryKey: null,
         primaryKeys: [],
@@ -92,10 +86,10 @@ export default class PostgresAdapter extends BaseAdapter {
     }
 
     for (const row of raw.columnsRows || []) {
-      const key = this._tableKey(row.table_schema, row.table_name);
-      if (!tables[key]) continue;
+      const tableName = String(row.table_name || '').toLowerCase();
+      if (!tables[tableName]) continue;
 
-      tables[key].columns.push({
+      tables[tableName].columns.push({
         name: String(row.column_name || '').toLowerCase(),
         type: String(row.data_type || '').toLowerCase(),
         nullable: toBooleanNullable(row.is_nullable),
@@ -104,23 +98,23 @@ export default class PostgresAdapter extends BaseAdapter {
     }
 
     for (const row of raw.primaryKeyRows || []) {
-      const key = this._tableKey(row.table_schema, row.table_name);
-      if (!tables[key]) continue;
+      const tableName = String(row.table_name || '').toLowerCase();
+      if (!tables[tableName]) continue;
 
       const pkColumn = String(row.column_name || '').toLowerCase();
       if (!pkColumn) continue;
 
-      tables[key].primaryKeys.push(pkColumn);
-      if (!tables[key].primaryKey) {
-        tables[key].primaryKey = pkColumn;
+      tables[tableName].primaryKeys.push(pkColumn);
+      if (!tables[tableName].primaryKey) {
+        tables[tableName].primaryKey = pkColumn;
       }
     }
 
     for (const row of raw.foreignKeyRows || []) {
-      const key = this._tableKey(row.table_schema, row.table_name);
-      if (!tables[key]) continue;
+      const tableName = String(row.table_name || '').toLowerCase();
+      if (!tables[tableName]) continue;
 
-      tables[key].foreignKeys.push({
+      tables[tableName].foreignKeys.push({
         column: String(row.column_name || '').toLowerCase(),
         referencesTable: String(row.referenced_table || '').toLowerCase(),
         referencesColumn: String(row.referenced_column || '').toLowerCase(),

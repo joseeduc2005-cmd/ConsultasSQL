@@ -115,6 +115,8 @@ function normalizeSchemaTable(table = {}) {
 
   return {
     name,
+    // Preserva el schema de origen para routing inteligente (bpc_ordenes, bpc_comercios, etc.)
+    schema: String(table.schema || 'public').toLowerCase(),
     columns,
     keyColumns,
     foreignKeys,

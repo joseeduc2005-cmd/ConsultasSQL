@@ -147,8 +147,19 @@ export class MultiDbRegistry {
     this.databases = new Map();
     this.clients = new Map();
     this.runtimeLearning = new Map();
+    this.connectionStatus = new Map(); // id → 'ok' | 'fail' | 'unknown'
     this.queryTimeoutMs = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 8000);
     this.loadConfig(config || this.readConfigFromEnv());
+  }
+
+  /** Marca el resultado del último probe de conectividad para una BD */
+  setConnectionStatus(id, status /* 'ok' | 'fail' */) {
+    if (id) this.connectionStatus.set(String(id).trim(), status);
+  }
+
+  /** Devuelve true si la BD tiene status 'ok' confirmado */
+  isConnected(id) {
+    return this.connectionStatus.get(String(id || '').trim()) === 'ok';
   }
 
   resolveConfigFilePath() {
@@ -421,7 +432,9 @@ export class MultiDbRegistry {
       id: database.id,
       label: database.label,
       type: database.type,
+      primary: database.primary === true,
       fingerprint: database.fingerprint,
+      connected: this.isConnected(database.id),
       tables: database.schema.tables.map((table) => table.name),
     }));
   }

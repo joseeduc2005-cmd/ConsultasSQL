@@ -60,6 +60,7 @@ function AdminPage() {
   const [uploadError, setUploadError] = useState('');
   const [editError, setEditError] = useState('');
   const [assistantQuery, setAssistantQuery] = useState<any | null>(null);
+  const [availableDatabases, setAvailableDatabases] = useState<Array<{ id: string; label: string; type: string }>>([]);
   const [, startWorkflowSyncTransition] = useTransition();
 
   const handleUploadWorkflowChange = useCallback((data: any) => {
@@ -141,6 +142,16 @@ function AdminPage() {
     };
 
     fetchArticles();
+
+    // Cargar bases de datos disponibles: solo las conectadas y no primarias (el backend ya filtra)
+    fetch('/api/distributed/databases')
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d?.databases)) {
+          setAvailableDatabases(d.databases);
+        }
+      })
+      .catch(() => {/* silencioso */});
   }, []);
 
   useEffect(() => {
@@ -269,6 +280,10 @@ function AdminPage() {
     setEditAttempted(false);
     setEditSaving(false);
     setEditError('');
+    const existingTargetDb = String(
+      (parsedSource as Record<string, unknown> | null)?.target_database || ''
+    ).trim();
+
     setEditForm({
       id: article.id,
       titulo: article.titulo || '',
@@ -278,6 +293,7 @@ function AdminPage() {
       descripcion: article.descripcion || '',
       contenido_md: article.contenido_md || '',
       tipo_solucion: effectiveType,
+      target_database: existingTargetDb,
       workflow_rows: adaptRowsForSolutionType(parseWorkflowRowsFromScript(article.script_json), effectiveType),
       script_json: parsedSource,
       script_creation_mode: normalizedCreationMode,
@@ -300,11 +316,17 @@ function AdminPage() {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const content = evt.target?.result as string;
-      setUploadForm((prev) => ({ ...prev, contenido_md: content }));
+      const updates: Partial<BuilderFormState> = { contenido_md: content };
+
+      // Auto-extraer título del .md si aún no hay título
       const titleMatch = content.match(/^#\s+(.+)$/m);
-      if (titleMatch && !uploadForm.titulo) {
-        setUploadForm((prev) => ({ ...prev, titulo: titleMatch[1].trim() }));
-      }
+      if (titleMatch && !uploadForm.titulo) updates.titulo = titleMatch[1].trim();
+
+      // Auto-detectar directiva -- database: <id>
+      const dbMatch = content.match(/^--\s*database\s*:\s*(\S+)/im);
+      if (dbMatch) updates.target_database = dbMatch[1].trim();
+
+      setUploadForm((prev) => ({ ...prev, ...updates }));
     };
     reader.readAsText(file);
   };
@@ -351,7 +373,11 @@ function AdminPage() {
       return;
     }
 
-    const scriptJson = modeResult.scriptJson;
+    // Inyectar target_database en script_json para que el motor lo use al ejecutar
+    const baseScriptJson = modeResult.scriptJson as Record<string, unknown> | null;
+    const scriptJson = form.target_database
+      ? { ...(baseScriptJson || {}), target_database: form.target_database }
+      : baseScriptJson;
 
     setSaving(true);
     try {
@@ -788,8 +814,34 @@ function AdminPage() {
                           ))}
                         </datalist>
                       </div>
+                      <div>
+                        <input type="text" value={uploadForm.subcategoria} onChange={(e) => setUploadForm((prev) => ({ ...prev, subcategoria: e.target.value }))} placeholder="Subcategoría (ej: Consultas, Reportes...)" className={modalInputClass} />
+                      </div>
                     </div>
-                    <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
+                    {/* Base de datos destino */}
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Base de datos destino</p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Si el .md contiene <code className="rounded bg-slate-100 px-1 text-xs">-- database: id</code> se detecta automáticamente.</p>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={uploadForm.target_database}
+                          onChange={(e) => setUploadForm((prev) => ({ ...prev, target_database: e.target.value }))}
+                          className={modalInputClass}
+                        >
+                          <option value="">— Sin base específica (usa la principal) —</option>
+                          {availableDatabases.length === 0
+                            ? <option disabled value="">Sin bases externas conectadas en este momento</option>
+                            : availableDatabases.map((db) => (
+                                <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
+                              ))
+                          }
+                        </select>
+                        {uploadForm.target_database && (
+                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">✓ detectada</span>
+                        )}
+                      </div>
+                    </div>
+                    <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD — puedes incluir SQL con {{parametros}} para que el usuario los complete" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
                       <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 1 · Modo de ejecución</p>
                       <div className={modeSwitchContainerClass}>
@@ -939,6 +991,27 @@ function AdminPage() {
                           ))}
                         </datalist>
                       </div>
+                      <div>
+                        <input type="text" value={editForm.subcategoria} onChange={(e) => setEditForm((prev) => ({ ...prev, subcategoria: e.target.value }))} placeholder="Subcategoría" className={modalInputClass} />
+                      </div>
+                    </div>
+                    {/* Base de datos destino */}
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Base de datos destino</p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa.</p>
+                      <select
+                        value={editForm.target_database}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, target_database: e.target.value }))}
+                        className={modalInputClass}
+                      >
+                        <option value="">— Sin base específica (usa la principal) —</option>
+                        {availableDatabases.length === 0
+                          ? <option disabled value="">Sin bases externas conectadas en este momento</option>
+                          : availableDatabases.map((db) => (
+                              <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
+                            ))
+                        }
+                      </select>
                     </div>
                     <textarea value={editForm.contenido_md} onChange={(e) => setEditForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">

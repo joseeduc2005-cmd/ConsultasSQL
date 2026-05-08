@@ -75,8 +75,10 @@ export default class UniversalDatabaseConnector {
   async connectDatabase(config = {}) {
     const safeConfig = validateConfig(config);
     const dbId = createDatabaseId(safeConfig);
+    const dbLabel = `[${safeConfig.type}] ${safeConfig.host}:${safeConfig.port}/${safeConfig.database} (id=${dbId})`;
 
     if (this.dbContexts.has(dbId)) {
+      console.log(`[UniversalDatabaseConnector] connectDatabase → reutilizando contexto existente para ${dbLabel}`);
       return {
         dbId,
         reused: true,
@@ -85,14 +87,27 @@ export default class UniversalDatabaseConnector {
     }
 
     const secretValues = [safeConfig.password];
+    console.log(`[UniversalDatabaseConnector] connectDatabase → iniciando conexión a ${dbLabel}`);
 
     try {
       const adapter = pickAdapter(safeConfig);
+      console.log(`[UniversalDatabaseConnector] createPool → ${dbLabel}`);
       await adapter.createPool();
-      await adapter.ping();
 
+      console.log(`[UniversalDatabaseConnector] ping → ${dbLabel}`);
+      await adapter.ping();
+      console.log(`[UniversalDatabaseConnector] ping OK → ${dbLabel}`);
+
+      console.log(`[UniversalDatabaseConnector] introspectSchema → ${dbLabel}`);
       const schema = await adapter.introspectSchema();
       const tableNames = Object.keys(schema?.tables || {});
+      console.log(`[UniversalDatabaseConnector] introspectSchema OK → ${dbLabel}: ${tableNames.length} tablas encontradas`);
+      if (tableNames.length === 0) {
+        console.warn(`[UniversalDatabaseConnector] ⚠ ADVERTENCIA: 0 tablas encontradas para ${dbLabel}. Verificar permisos del usuario o esquemas disponibles.`);
+      } else {
+        console.log(`[UniversalDatabaseConnector] tablas: ${tableNames.slice(0, 10).join(', ')}${tableNames.length > 10 ? ` ... (+${tableNames.length - 10} más)` : ''}`);
+      }
+
       const fingerprint = buildDatabaseFingerprint({
         type: safeConfig.type,
         database: safeConfig.database,
@@ -124,17 +139,20 @@ export default class UniversalDatabaseConnector {
         connectedAt: new Date().toISOString(),
       });
 
+      console.log(`[UniversalDatabaseConnector] ✔ conexión establecida → ${dbLabel}`);
       return {
         dbId,
         reused: false,
         fingerprint,
       };
     } catch (error) {
-      throw buildSafeError(error, {
+      const safeErr = buildSafeError(error, {
         defaultCode: 'DATABASE_CONNECTION_FAILED',
         defaultMessage: `Failed to connect to ${safeConfig.type} database`,
         secretValues,
       });
+      console.error(`[UniversalDatabaseConnector] ✘ conexión FALLIDA → ${dbLabel}: [${safeErr.code}] ${safeErr.message}`);
+      throw safeErr;
     }
   }
 

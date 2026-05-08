@@ -1,30 +1,40 @@
+// Schemas del sistema que nunca deben incluirse en la introspección
+const PG_SYSTEM_SCHEMAS = `(
+  'information_schema', 'pg_catalog', 'pg_toast',
+  'pg_temp_1', 'pg_toast_temp_1'
+)`;
+
 export const POSTGRES_SCHEMA_QUERIES = {
   tables: `
-    SELECT table_name
+    SELECT table_schema, table_name
     FROM information_schema.tables
-    WHERE table_schema = 'public'
+    WHERE table_schema NOT IN ${PG_SYSTEM_SCHEMAS}
+      AND table_schema NOT LIKE 'pg_%'
       AND table_type = 'BASE TABLE'
-    ORDER BY table_name
+    ORDER BY table_schema, table_name
   `,
   columns: `
-    SELECT table_name, column_name, data_type, is_nullable, column_default
+    SELECT table_schema, table_name, column_name, data_type, is_nullable, column_default
     FROM information_schema.columns
-    WHERE table_schema = 'public'
-    ORDER BY table_name, ordinal_position
+    WHERE table_schema NOT IN ${PG_SYSTEM_SCHEMAS}
+      AND table_schema NOT LIKE 'pg_%'
+    ORDER BY table_schema, table_name, ordinal_position
   `,
   primaryKeys: `
-    SELECT tc.table_name, kcu.column_name
+    SELECT tc.table_schema, tc.table_name, kcu.column_name
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
       ON tc.constraint_name = kcu.constraint_name
       AND tc.table_schema = kcu.table_schema
       AND tc.table_name = kcu.table_name
-    WHERE tc.table_schema = 'public'
+    WHERE tc.table_schema NOT IN ${PG_SYSTEM_SCHEMAS}
+      AND tc.table_schema NOT LIKE 'pg_%'
       AND tc.constraint_type = 'PRIMARY KEY'
-    ORDER BY tc.table_name, kcu.ordinal_position
+    ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position
   `,
   foreignKeys: `
     SELECT
+      tc.table_schema,
       tc.table_name,
       kcu.column_name,
       tc.constraint_name,
@@ -37,9 +47,10 @@ export const POSTGRES_SCHEMA_QUERIES = {
     JOIN information_schema.constraint_column_usage ccu
       ON ccu.constraint_name = tc.constraint_name
       AND ccu.table_schema = tc.table_schema
-    WHERE tc.table_schema = 'public'
+    WHERE tc.table_schema NOT IN ${PG_SYSTEM_SCHEMAS}
+      AND tc.table_schema NOT LIKE 'pg_%'
       AND tc.constraint_type = 'FOREIGN KEY'
-    ORDER BY tc.table_name, kcu.ordinal_position
+    ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position
   `,
 };
 

@@ -1,5 +1,7 @@
 // ─── Distributed routes: /api/distributed/*, /api/query/distributed ──────────
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * @param {{
@@ -99,6 +101,77 @@ export function createDistributedRouter({
       });
     } catch (error) {
       return res.status(500).json({ success: false, error: error?.message || 'No se pudo leer el registro distribuido' });
+    }
+  });
+
+  // ── Helpers para leer/escribir el JSON de configuración ──────────────────────
+  function getConfigFilePath() {
+    const configFile = String(
+      process.env.MULTI_DB_CONFIG_FILE || process.env.DATABASES_CONFIG_FILE || './config/multidb.databases.json'
+    ).trim();
+    return path.isAbsolute(configFile) ? configFile : path.resolve(process.cwd(), configFile);
+  }
+
+  function readConfigFile() {
+    const filePath = getConfigFilePath();
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return { filePath, config: JSON.parse(raw) };
+  }
+
+  function writeConfigFile(filePath, config) {
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
+  }
+
+  // POST /api/distributed/databases — agregar nueva BD (solo admin)
+  router.post('/databases', (req, res) => {
+    try {
+      const role = String(req.headers['x-user-role'] || '').toLowerCase();
+      if (role !== 'admin') return res.status(403).json({ success: false, error: 'Solo admin puede agregar bases de datos' });
+
+      const { id, label, type, host, port, database, user, password, enabled = true } = req.body || {};
+
+      if (!id || !type || !host || !port || !database || !user || !password) {
+        return res.status(400).json({ success: false, error: 'Faltan campos: id, type, host, port, database, user, password' });
+      }
+
+      const { filePath, config } = readConfigFile();
+
+      // Verificar que no exista ya
+      if ((config.databases || []).some((db) => db.id === id)) {
+        return res.status(409).json({ success: false, error: `Ya existe una base con id "${id}"` });
+      }
+
+      config.databases = config.databases || [];
+      config.databases.push({ id, label: label || id, type, host, port: Number(port), database, user, password, enabled, schema: { tables: [] } });
+      writeConfigFile(filePath, config);
+
+      // El file watcher del backend detectará el cambio en ~2s y hará reload+probe automático
+      return res.status(201).json({ success: true, message: `Base "${id}" agregada. El sistema la conectará en segundos.` });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: error?.message || 'Error al guardar la configuración' });
+    }
+  });
+
+  // DELETE /api/distributed/databases/:id — eliminar BD (solo admin, no puede eliminar la primaria)
+  router.delete('/databases/:id', (req, res) => {
+    try {
+      const role = String(req.headers['x-user-role'] || '').toLowerCase();
+      if (role !== 'admin') return res.status(403).json({ success: false, error: 'Solo admin puede eliminar bases de datos' });
+
+      const targetId = String(req.params.id || '').trim();
+      if (!targetId) return res.status(400).json({ success: false, error: 'Se requiere el id de la base' });
+
+      const { filePath, config } = readConfigFile();
+      const existing = (config.databases || []).find((db) => db.id === targetId);
+      if (!existing) return res.status(404).json({ success: false, error: `No existe base con id "${targetId}"` });
+      if (existing.primary === true) return res.status(400).json({ success: false, error: 'No se puede eliminar la base primaria del sistema' });
+
+      config.databases = config.databases.filter((db) => db.id !== targetId);
+      writeConfigFile(filePath, config);
+
+      return res.status(200).json({ success: true, message: `Base "${targetId}" eliminada.` });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: error?.message || 'Error al guardar la configuración' });
     }
   });
 

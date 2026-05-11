@@ -2,23 +2,21 @@
 #  PRACTICASPREPROFESIONALES — Motor SQL Multi-DB con IA
 #
 #  Servicios:
-#    postgres  → PostgreSQL 15
-#    oracle    → Oracle XE 21c  (gvenzl/oracle-xe imagen ligera)
-#    ollama    → IA local deepseek-coder
-#    backend   → API Express Node.js 20
-#    frontend  → Next.js 15
+#    postgres   → PostgreSQL 16  (base primaria del sistema)
+#    mysql-test → MySQL 8        (pruebas multi-base: SELECT/INSERT/UPDATE/DELETE/CALL)
+#    ollama     → IA local deepseek-coder
+#    backend    → API Express Node.js 20
+#    frontend   → Next.js 15
 #
-#  Uso:
-#    1. docker compose up --build
-#    2. (primera vez, esperar ~3 min a Oracle) luego:
-#       docker exec -it practicas-ollama ollama pull deepseek-coder
+#  Uso (desarrollo local):
+#    docker compose up --build
 #
 #  Puertos expuestos:
-#    3000 → Frontend
-#    3002 → Backend API
-#    5432 → PostgreSQL
-#    1521 → Oracle
-#   11434 → Ollama
+#    3000  → Frontend
+#    3002  → Backend API
+#    5432  → PostgreSQL
+#    3306  → MySQL (pruebas)
+#   11434  → Ollama
 # ═══════════════════════════════════════════════════════════════════
 
 services:
@@ -47,6 +45,28 @@ services:
       retries: 10
 
   
+
+  # ── MySQL 8 (pruebas multi-base) ─────────────────────────────────
+  mysql-test:
+    image: mysql:8.0
+    container_name: practicas-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql_root_123
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass123
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/db-init/mysql-test-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "testuser", "-ptestpass123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # ── Ollama (IA local) ─────────────────────────────────────────────
   ollama:
@@ -79,6 +99,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mysql-test:
+        condition: service_healthy
       ollama:
         condition: service_started
     ports:
@@ -104,7 +126,7 @@ services:
 volumes:
   postgres_data:
     driver: local
-  oracle_data:
+  mysql_data:
     driver: local
   ollama_data:
     driver: local

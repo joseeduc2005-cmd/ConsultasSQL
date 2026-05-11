@@ -373,6 +373,11 @@ function AdminPage() {
       return;
     }
 
+    if (!form.target_database.trim()) {
+      alert('Debes seleccionar una Base de datos destino.');
+      return;
+    }
+
     const modeResult = isExecutableSolutionType(form.tipo_solucion)
       ? computeScriptForMode(form)
       : { valid: true, error: '', scriptJson: null };
@@ -862,41 +867,34 @@ function AdminPage() {
                 <div className={modalTopSectionClass}>
                   <input type="file" accept=".md" onChange={handleFileChange} required className={modalFileClass} />
                   <input type="text" value={uploadForm.titulo} onChange={(e) => setUploadForm((prev) => ({ ...prev, titulo: e.target.value }))} placeholder="Título" className={modalInputClass} required />
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div>
-                        <input type="text" value={uploadForm.categoria} onChange={(e) => setUploadForm((prev) => ({ ...prev, categoria: e.target.value }))} placeholder="Categoría" list="upload-category-options" className={modalInputClass} required />
-                        <datalist id="upload-category-options">
-                          {categoryOptions.map((category) => (
-                            <option key={category} value={category} />
-                          ))}
-                        </datalist>
-                      </div>
-                      <div>
-                        <input type="text" value={uploadForm.subcategoria} onChange={(e) => setUploadForm((prev) => ({ ...prev, subcategoria: e.target.value }))} placeholder="Subcategoría (ej: Consultas, Reportes...)" className={modalInputClass} />
-                      </div>
+                    <div>
+                      <input type="text" value={uploadForm.categoria} onChange={(e) => setUploadForm((prev) => ({ ...prev, categoria: e.target.value }))} placeholder="Categoría" list="upload-category-options" className={modalInputClass} required />
+                      <datalist id="upload-category-options">
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category} />
+                        ))}
+                      </datalist>
                     </div>
                     {/* Base de datos destino */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Base de datos destino</p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Si el .md contiene <code className="rounded bg-slate-100 px-1 text-xs">-- database: id</code> se detecta automáticamente.</p>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={uploadForm.target_database}
-                          onChange={(e) => setUploadForm((prev) => ({ ...prev, target_database: e.target.value }))}
-                          className={modalInputClass}
-                        >
-                          <option value="">— Sin base específica (usa la principal) —</option>
-                          {availableDatabases.length === 0
-                            ? <option disabled value="">Sin bases externas conectadas en este momento</option>
-                            : availableDatabases.map((db) => (
-                                <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
-                              ))
-                          }
-                        </select>
-                        {uploadForm.target_database && (
-                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">✓ detectada</span>
-                        )}
-                      </div>
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">
+                        Base de datos destino <span className="text-red-500">*</span>
+                      </p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
+                      <select
+                        value={uploadForm.target_database}
+                        onChange={(e) => setUploadForm((prev) => ({ ...prev, target_database: e.target.value }))}
+                        className={`${modalInputClass} ${uploadAttempted && !uploadForm.target_database ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+                        required
+                      >
+                        <option value="">— Selecciona una base de datos —</option>
+                        {availableDatabases.map((db) => (
+                          <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
+                        ))}
+                      </select>
+                      {uploadAttempted && !uploadForm.target_database && (
+                        <p className="text-xs text-red-500 font-medium">Selecciona la base de datos donde se ejecutará el SQL.</p>
+                      )}
                     </div>
                     <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD — puedes incluir SQL con {{parametros}} para que el usuario los complete" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
@@ -1039,36 +1037,34 @@ function AdminPage() {
                 {editError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{editError}</div>}
                 <div className={modalTopSectionClass}>
                   <input type="text" value={editForm.titulo} onChange={(e) => setEditForm((prev) => ({ ...prev, titulo: e.target.value }))} placeholder="Título" className={modalInputClass} required />
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div>
-                        <input type="text" value={editForm.categoria} onChange={(e) => setEditForm((prev) => ({ ...prev, categoria: e.target.value }))} placeholder="Categoría" list="edit-category-options" className={modalInputClass} required />
-                        <datalist id="edit-category-options">
-                          {categoryOptions.map((category) => (
-                            <option key={category} value={category} />
-                          ))}
-                        </datalist>
-                      </div>
-                      <div>
-                        <input type="text" value={editForm.subcategoria} onChange={(e) => setEditForm((prev) => ({ ...prev, subcategoria: e.target.value }))} placeholder="Subcategoría" className={modalInputClass} />
-                      </div>
+                    <div>
+                      <input type="text" value={editForm.categoria} onChange={(e) => setEditForm((prev) => ({ ...prev, categoria: e.target.value }))} placeholder="Categoría" list="edit-category-options" className={modalInputClass} required />
+                      <datalist id="edit-category-options">
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category} />
+                        ))}
+                      </datalist>
                     </div>
                     {/* Base de datos destino */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Base de datos destino</p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa.</p>
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">
+                        Base de datos destino <span className="text-red-500">*</span>
+                      </p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
                       <select
                         value={editForm.target_database}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, target_database: e.target.value }))}
-                        className={modalInputClass}
+                        className={`${modalInputClass} ${editAttempted && !editForm.target_database ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+                        required
                       >
-                        <option value="">— Sin base específica (usa la principal) —</option>
-                        {availableDatabases.length === 0
-                          ? <option disabled value="">Sin bases externas conectadas en este momento</option>
-                          : availableDatabases.map((db) => (
-                              <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
-                            ))
-                        }
+                        <option value="">— Selecciona una base de datos —</option>
+                        {availableDatabases.map((db) => (
+                          <option key={db.id} value={db.id}>{db.label} ({db.type} · {db.id})</option>
+                        ))}
                       </select>
+                      {editAttempted && !editForm.target_database && (
+                        <p className="text-xs text-red-500 font-medium">Selecciona la base de datos donde se ejecutará el SQL.</p>
+                      )}
                     </div>
                     <textarea value={editForm.contenido_md} onChange={(e) => setEditForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">

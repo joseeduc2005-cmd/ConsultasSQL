@@ -107,6 +107,24 @@ export function getScriptExecutionFields(article: { script_json?: KnowledgeArtic
     ? scriptObject.parametros_requeridos.map((item) => String(item || '').trim()).filter(Boolean) : [];
   const autoDetected = extractVariables(parsed).map((item) => String(item || '').trim()).filter((item) => Boolean(item) && !item.includes('.'));
   const merged = Array.from(new Set([...required, ...autoDetected]));
+
+  if (merged.length === 0) {
+    // Fallback: detect $N positional placeholders in the SQL.
+    // The frontend uses param_N as the field name so the backend can reconstruct the array.
+    const sql = String(scriptObject.sql || '');
+    const positionalNums = Array.from(new Set(
+      Array.from(sql.matchAll(/\$(\d+)/g)).map((m) => parseInt(m[1], 10))
+    )).sort((a, b) => a - b);
+    if (positionalNums.length > 0) {
+      return positionalNums.map((n) => ({
+        name: `param_${n}`,
+        label: `Parámetro ${n}`,
+        type: 'text' as ExecutionField['type'],
+        required: true,
+      }));
+    }
+  }
+
   return merged.map((name) => ({ name, label: formatScriptFieldLabel(name), type: inferScriptFieldType(name), required: false }));
 }
 

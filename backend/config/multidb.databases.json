@@ -16,6 +16,21 @@
       }
     },
     {
+      "id": "mysql_test",
+      "label": "MySQL 8 - Pruebas",
+      "type": "mysql",
+      "primary": false,
+      "host": "mysql-test",
+      "port": 3306,
+      "database": "testdb",
+      "user": "testuser",
+      "password": "testpass123",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      }
+    },
+    {
       "id": "oracle",
       "label": "Oracle XE 21c",
       "type": "oracle",
@@ -31,9 +46,9 @@
     },
     {
       "id": "oracle_test",
-      "label": "Oracle XE Docker",
+      "label": "Oracle XE Docker (sin servicio local)",
       "type": "oracle",
-      "enabled": true,
+      "enabled": false,
       "host": "oracle-test",
       "port": 1521,
       "database": "XEPDB1",

@@ -734,6 +734,15 @@ export class MultiDbRegistry {
       let connectionResult = null;
       try {
         connectionResult = await connectDatabase(db);
+
+        // Si la conexión fue reutilizada de una probe anterior, el schema en caché
+        // puede tener 0 tablas porque fue tomado antes de que el init SQL terminara.
+        // Forzar reconexión limpia para garantizar schema fresco.
+        if (connectionResult.reused) {
+          await closeConnection(connectionResult.dbId).catch(() => {});
+          connectionResult = await connectDatabase(db);
+        }
+
         console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] conexión OK, obteniendo schema...`);
         const schema = await getSchema(connectionResult.dbId);
         const updated = this.normalizeDatabase({ ...db, schema });

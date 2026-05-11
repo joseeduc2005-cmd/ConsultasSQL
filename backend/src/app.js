@@ -53,6 +53,8 @@ import { createAdminRouter, createDbSchemaRouter } from './routes/adminRoute.js'
 import { createActionsRouter } from './routes/actionsRoute.js';
 import { createSqlRouter } from './routes/sqlRoute.js';
 import { createDistributedRouter } from './routes/distributedRoute.js';
+import logger from './infrastructure/logger/logger.js';
+import { correlationIdMiddleware } from './middleware/correlationId.js';
 
 dotenv.config();
 
@@ -138,7 +140,7 @@ https.request = function guardedHttpsRequest(options, callback) {
   return originalHttpsRequest(options, callback);
 };
 
-console.log('✓ Politica local-only activa: solo localhost permitido para HTTP/HTTPS saliente');
+logger.info('Politica local-only activa: solo localhost permitido para HTTP/HTTPS saliente');
 
 function getConfiguredDatabaseUrl() {
   try {
@@ -198,7 +200,7 @@ const LEARNED_SEMANTIC_CACHE = {
     suggestionTerms: [],
   },
 };
-console.log('✓ Herramientas de Schema dinámico inicializadas');
+logger.info('Herramientas de Schema dinámico inicializadas');
 
 async function ensureMultiDbReady(options = {}) {
   const force = Boolean(options?.force);
@@ -206,7 +208,7 @@ async function ensureMultiDbReady(options = {}) {
 
   if (!force && multiDbRegistry.getDatabases().length > 0) {
     const configured = multiDbRegistry.getDatabases().map((database) => `${database.id}(${database.type})`);
-    console.log(`✓ MultiDB configurado (${reason}): ${configured.length} base(s) -> ${configured.join(', ')}`);
+    logger.debug('MultiDB ya configurado', { reason, count: configured.length, databases: configured.join(', ') });
     return {
       bootstrapped: false,
       reason: 'already-ready',
@@ -227,11 +229,11 @@ async function ensureMultiDbReady(options = {}) {
   })
     .then((result) => {
       MULTI_DB_BOOTSTRAP_STATE.lastRunAt = Date.now();
-      console.log(`✓ MultiDB ready (${reason})`);
+      logger.info('MultiDB bootstrap OK', { reason, registeredDatabases: result?.registeredDatabases });
       return result;
     })
     .catch((error) => {
-      console.error(`✗ MultiDB bootstrap failed (${reason}):`, error?.message || error);
+      logger.error('MultiDB bootstrap FAIL', { reason, error: error?.message || String(error) });
       throw error;
     })
     .finally(() => {
@@ -251,48 +253,45 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
 
   console.log(`🔌 MultiDB probe (${reason}): verificando ${configured.length} base(s)...`);
 
-  const summary = [];
+  // Ejecutar todas las pruebas de conectividad en paralelo (antes era secuencial)
+  const summary = await Promise.all(
+    configured.map(async (database) => {
+      const id = String(database?.id || 'unknown').trim() || 'unknown';
+      const type = String(database?.type || 'unknown').trim() || 'unknown';
 
-  for (const database of configured) {
-    const id = String(database?.id || 'unknown').trim() || 'unknown';
-    const type = String(database?.type || 'unknown').trim() || 'unknown';
-    const label = `[DB:${id}|${type}]`;
-
-    if (database?.enabled === false) {
-      console.log(`${label} ⏭ SKIP (disabled)`);
-      summary.push({ id, type, status: 'skipped-disabled' });
-      continue;
-    }
-
-    const missing = ['host', 'port', 'database', 'user', 'password']
-      .filter((key) => database?.[key] === undefined || database?.[key] === null || String(database?.[key]).trim() === '');
-
-    if (missing.length > 0) {
-      console.warn(`${label} ⏭ SKIP (faltan campos: ${missing.join(', ')})`);
-      summary.push({ id, type, status: 'skipped-missing-fields', missing });
-      continue;
-    }
-
-    try {
-      const result = await probeUniversalConnection(database);
-      console.log(`${label} ✅ OK (${database.host}:${database.port}/${database.database})`);
-      multiDbRegistry.setConnectionStatus(id, 'ok');
-      summary.push({ id, type, status: 'ok' });
-
-      if (result?.dbId && !result?.reused) {
-        await closeUniversalConnection(result.dbId).catch(() => {});
+      if (database?.enabled === false) {
+        logger.debug('DB probe: SKIP (disabled)', { dbId: id, type, reason });
+        return { id, type, status: 'skipped-disabled' };
       }
-    } catch (error) {
-      console.error(`${label} ❌ FAIL:`, error?.message || error);
-      multiDbRegistry.setConnectionStatus(id, 'fail');
-      summary.push({ id, type, status: 'fail', error: String(error?.message || error) });
-    }
-  }
+
+      const missing = ['host', 'port', 'database', 'user', 'password']
+        .filter((key) => database?.[key] === undefined || database?.[key] === null || String(database?.[key]).trim() === '');
+
+      if (missing.length > 0) {
+        logger.warn('DB probe: SKIP (faltan campos)', { dbId: id, type, reason, missing });
+        return { id, type, status: 'skipped-missing-fields', missing };
+      }
+
+      try {
+        const result = await probeUniversalConnection(database);
+        logger.info('DB probe: OK', { dbId: id, type, reason, host: database.host, port: database.port, db: database.database });
+        multiDbRegistry.setConnectionStatus(id, 'ok');
+        if (result?.dbId && !result?.reused) {
+          await closeUniversalConnection(result.dbId).catch(() => {});
+        }
+        return { id, type, status: 'ok' };
+      } catch (error) {
+        logger.error('DB probe: FAIL', { dbId: id, type, reason, error: error?.message || String(error) });
+        multiDbRegistry.setConnectionStatus(id, 'fail');
+        return { id, type, status: 'fail', error: String(error?.message || error) };
+      }
+    }),
+  );
 
   const okCount = summary.filter((item) => item.status === 'ok').length;
   const failCount = summary.filter((item) => item.status === 'fail').length;
   const skippedCount = summary.length - okCount - failCount;
-  console.log(`🔌 MultiDB probe (${reason}) resumen: OK=${okCount}, FAIL=${failCount}, SKIP=${skippedCount}`);
+  logger.info('DB probe resumen', { reason, ok: okCount, fail: failCount, skip: skippedCount });
 
   return summary;
 }
@@ -338,14 +337,18 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
   schemaCache.invalidate();
   bumpQueryCacheDataVersion();
 
+  const reloadStart = Date.now();
   try {
     await testDatabaseConnection();
-    await ensureKnowledgeBaseSchema();
-    await ensureCommentsSchema();
-    await ensureBusinessLogsSchema();
-    await ensureQueryHistorySchema();
-    await ensureErrorLogsSchema();
-    await ensureSemanticLearningSchema();
+    // Correr todos los ensures de DDL en paralelo (son independientes)
+    await Promise.all([
+      ensureKnowledgeBaseSchema(),
+      ensureCommentsSchema(),
+      ensureBusinessLogsSchema(),
+      ensureQueryHistorySchema(),
+      ensureErrorLogsSchema(),
+      ensureSemanticLearningSchema(),
+    ]);
     await refreshSemanticLearningCache(true);
     await queryBuilder.getFullSchema();
     await ensureMultiDbReady({ force: true, reason: `reload:${reason}` });
@@ -353,10 +356,10 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
     // Re-discover schemas for any empty-schema DBs after reload
     await multiDbRegistry.introspectEmptySchemas().then((results) => {
       for (const r of results) {
-        if (r.status === 'ok') console.log(`[DB:${r.id}] 🗂 Schema recargado: ${r.tableCount} tabla(s)`);
+        if (r.status === 'ok') logger.info('Schema recargado', { dbId: r.id, tableCount: r.tableCount });
       }
     }).catch(() => {});
-    console.log(`✓ Conexión activa recargada (${reason})`);
+    logger.info('Conexión activa recargada', { reason, ms: Date.now() - reloadStart });
     if (previousPool && previousPool !== nextPool) {
       await previousPool.end().catch(() => {});
     }
@@ -371,7 +374,7 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
     if (nextPool && typeof nextPool.end === 'function') {
       await nextPool.end().catch(() => {});
     }
-    console.error(`✗ No se pudo recargar la conexión activa (${reason}):`, error?.message || error);
+    logger.error('No se pudo recargar la conexión activa', { reason, error: error?.message || String(error) });
     throw error;
   }
 }
@@ -385,10 +388,10 @@ async function testDatabaseConnection() {
   try {
     const result = await pool.query('SELECT NOW()');
     await schemaDetector.refreshConnectionFingerprint();
-    console.log('✓ Conexión a PostgreSQL exitosa:', result.rows[0]);
+    logger.info('Conexión a PostgreSQL exitosa', { now: result.rows[0]?.now });
     return true;
   } catch (err) {
-    console.error('✗ Error conectando a PostgreSQL:', err.message || err);
+    logger.error('Error conectando a PostgreSQL', { error: err.message || String(err) });
     return false;
   }
 }
@@ -5274,7 +5277,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role', 'x-request-id'],
+  exposedHeaders: ['X-Request-Id'],
 }));
 app.use(helmet({
   contentSecurityPolicy: {
@@ -5293,6 +5297,8 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true }));
+// Asigna X-Request-Id a cada request y crea req.logger con contexto
+app.use(correlationIdMiddleware);
 app.use('/api', apiLimiter);
 app.use(createResponseSecurityMiddleware({
   sensitiveFields: ['password', 'users_password', 'token', 'secret'],
@@ -5462,6 +5468,7 @@ const { router: distributedRouter } = createDistributedRouter({
   multiDbRegistry, multiDatabaseEngine, ensureMultiDbReady,
   resolveErrorAnalysisResponse, pool, buildProductionSqlResponse,
   resultExplainer, logQueryHistory,
+  getUserFromRequest, getRoleFromRequest,
 });
 app.use('/api/distributed', distributedRouter); // GET /api/distributed/databases
 app.use('/api/query', distributedRouter);        // POST /api/query/distributed
@@ -5474,7 +5481,10 @@ app.use('/api/execute', createExecuteRouter({
   executeArticleById, enforceStrictProductionSqlPayload,
   getUserFromRequest, getRoleFromRequest, logQueryHistory, bumpQueryCacheDataVersion,
 }));
-app.use('/api/repair', createRepairRouter({ executeArticleById, enforceStrictProductionSqlPayload }));
+app.use('/api/repair', createRepairRouter({
+  executeArticleById, enforceStrictProductionSqlPayload,
+  getUserFromRequest, getRoleFromRequest, logQueryHistory, bumpQueryCacheDataVersion,
+}));
 app.use('/api/sql', createSqlRouter({
   getUserFromRequest, getRoleFromRequest, hasRequiredRole, ensureDynamicSchemaReady,
   resolveErrorAnalysisResponse, shouldForceProceduralMode, isComplexSqlScript,

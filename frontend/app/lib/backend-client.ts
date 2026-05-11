@@ -3,14 +3,23 @@
  * All calls to the backend stay server-side — never exposed to the browser.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 
 export const B = process.env.BACKEND_URL || 'http://localhost:3002';
 
-/** Auth headers to forward from the incoming request */
+/**
+ * Headers de autenticación + correlación que se reenvían al backend.
+ * Si el cliente ya trajo un X-Request-Id lo propagamos;
+ * si no, generamos uno nuevo para que frontend y backend compartan el mismo ID en logs.
+ */
 export function fwd(req: NextRequest) {
+  const requestId = req.headers.get('x-request-id') || randomUUID();
   return {
     Authorization: req.headers.get('Authorization') || '',
     'x-user-role': req.headers.get('x-user-role') || '',
+    'x-request-id': requestId,
+    // Reenviar cookie de sesión si la hay (para autenticación por cookie)
+    ...(req.headers.get('cookie') ? { cookie: req.headers.get('cookie')! } : {}),
   };
 }
 
@@ -36,6 +45,12 @@ export async function proxyRaw(res: Response) {
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Propagar el X-Request-Id de vuelta al browser para correlación
+      ...(res.headers.get('x-request-id')
+        ? { 'X-Request-Id': res.headers.get('x-request-id')! }
+        : {}),
+    },
   });
 }

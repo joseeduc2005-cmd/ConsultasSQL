@@ -1,5 +1,6 @@
 // ─── Execute routes: /api/execute/*, /api/repair ─────────────────────────────
 import { Router } from 'express';
+import logger from '../infrastructure/logger/logger.js';
 
 /**
  * @param {{
@@ -29,6 +30,8 @@ export function createExecuteRouter({
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    const reqLog = req.logger || logger;
+
     const emit = (message, type = 'progress') => {
       const eventName = type === 'error' ? 'execution-error' : type;
       res.write(`event: ${eventName}\ndata: ${JSON.stringify({ message })}\n\n`);
@@ -49,6 +52,8 @@ export function createExecuteRouter({
         return done(false, 'ID inválido', null);
       }
 
+      reqLog.info('SSE execute start', { articleId });
+
       let rawParams = {};
       if (req.query.params) {
         try {
@@ -66,26 +71,38 @@ export function createExecuteRouter({
         databaseHint: requestedDatabaseHint,
       });
 
-      const enrichedResult = {
-        ...result,
-        executionMs: result?.executionMs ?? (Date.now() - startedAt),
-      };
+      const ms = Date.now() - startedAt;
+      const enrichedResult = { ...result, executionMs: result?.executionMs ?? ms };
+
+      reqLog.info('SSE execute done', {
+        articleId,
+        success: Boolean(result.success),
+        ms,
+        rowCount: result?.rowCount,
+        databaseId: requestedDatabaseId || 'auto',
+      });
+
       return done(Boolean(result.success), result.message || 'Sin mensaje', enrichedResult);
     } catch (error) {
-      console.error('[EXECUTE] ❌ Error:', error);
+      reqLog.error('SSE execute error', {
+        articleId: req.params?.articleId,
+        error: error?.message || String(error),
+        stack: error?.stack,
+      });
       try {
         emit('❌ Error interno del servidor', 'error');
         done(false, 'Error interno', null);
       } catch {
-        // Response may already be closed
+        // La respuesta SSE ya fue cerrada — ignorar
       }
     }
   });
 
   // POST /api/execute — JSON endpoint
   router.post('/', async (req, res) => {
+    const reqLog = req.logger || logger;
+    const startedAt = Date.now();
     try {
-      const startedAt = Date.now();
       const { articleId, formData } = req.body || {};
 
       if (!articleId || articleId === 'undefined' || articleId === 'null') {
@@ -95,15 +112,21 @@ export function createExecuteRouter({
       const rawParams = formData && typeof formData === 'object' ? formData : {};
       const requestedDatabaseId = String(req.body?.databaseId || '').trim();
       const requestedDatabaseHint = String(req.body?.databaseHint || '').trim();
+      const username = getUserFromRequest(req)?.username || 'anonymous';
+      const role = getRoleFromRequest(req, getUserFromRequest(req));
+
+      reqLog.info('execute POST start', { articleId, databaseId: requestedDatabaseId || 'auto', username });
+
       const result = await executeArticleById(String(articleId), rawParams, () => {}, {
         databaseId: requestedDatabaseId,
         databaseHint: requestedDatabaseHint,
       });
 
       if (!result.success) {
-        await logQueryHistory({
-          username: getUserFromRequest(req)?.username || 'anonymous',
-          role: getRoleFromRequest(req, getUserFromRequest(req)),
+        // Audit log de error — fire-and-forget (no bloquea la respuesta)
+        logQueryHistory({
+          username,
+          role,
           queryText: `execute article ${articleId}`,
           generatedSql: String(result?.executedQuery || 'workflow execution'),
           queryParams: result?.queryParams,
@@ -112,15 +135,18 @@ export function createExecuteRouter({
           rowCount: 0,
           wasCached: false,
           status: 'error',
-        });
+        }).catch((e) => logger.warn('logQueryHistory error (execute error)', { error: e?.message }));
+
+        reqLog.warn('execute POST: article failed', { articleId, message: result.message, ms: Date.now() - startedAt });
         return res.status(400).json({ success: false, message: result.message });
       }
 
       bumpQueryCacheDataVersion();
 
-      await logQueryHistory({
-        username: getUserFromRequest(req)?.username || 'anonymous',
-        role: getRoleFromRequest(req, getUserFromRequest(req)),
+      // Audit log de éxito — fire-and-forget (un fallo en logging NO aborta la respuesta 200)
+      logQueryHistory({
+        username,
+        role,
         queryText: `execute article ${articleId}`,
         generatedSql: String(result?.executedQuery || 'workflow execution'),
         queryParams: result?.queryParams,
@@ -129,7 +155,9 @@ export function createExecuteRouter({
         rowCount: Number(result?.rowCount || 0),
         wasCached: false,
         status: 'ok',
-      });
+      }).catch((e) => logger.warn('logQueryHistory error (execute ok)', { error: e?.message }));
+
+      reqLog.info('execute POST: OK', { articleId, ms: Date.now() - startedAt, rowCount: result?.rowCount });
 
       const sanitized = enforceStrictProductionSqlPayload(result || {});
       return res.status(200).json({
@@ -138,7 +166,11 @@ export function createExecuteRouter({
         result: sanitized,
       });
     } catch (error) {
-      console.error('[EXECUTE] ❌ Error POST /api/execute:', error);
+      (req.logger || logger).error('execute POST: error interno', {
+        error: error?.message || String(error),
+        stack: error?.stack,
+        ms: Date.now() - startedAt,
+      });
       return res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Error interno',
@@ -152,12 +184,28 @@ export function createExecuteRouter({
 // ─── Repair route: /api/repair ────────────────────────────────────────────────
 
 /**
- * @param {{ executeArticleById: Function, enforceStrictProductionSqlPayload: Function }} deps
+ * @param {{
+ *   executeArticleById: Function,
+ *   enforceStrictProductionSqlPayload: Function,
+ *   getUserFromRequest: Function,
+ *   getRoleFromRequest: Function,
+ *   logQueryHistory: Function,
+ *   bumpQueryCacheDataVersion: Function,
+ * }} deps
  */
-export function createRepairRouter({ executeArticleById, enforceStrictProductionSqlPayload }) {
+export function createRepairRouter({
+  executeArticleById,
+  enforceStrictProductionSqlPayload,
+  getUserFromRequest,
+  getRoleFromRequest,
+  logQueryHistory,
+  bumpQueryCacheDataVersion,
+}) {
   const router = Router();
 
   router.post('/', async (req, res) => {
+    const reqLog = req.logger || logger;
+    const startedAt = Date.now();
     try {
       const { articleId, formData } = req.body || {};
 
@@ -168,14 +216,42 @@ export function createRepairRouter({ executeArticleById, enforceStrictProduction
       const rawParams = formData && typeof formData === 'object' ? formData : {};
       const requestedDatabaseId = String(req.body?.databaseId || '').trim();
       const requestedDatabaseHint = String(req.body?.databaseHint || '').trim();
+      const username = getUserFromRequest(req)?.username || 'anonymous';
+      const role = getRoleFromRequest(req, getUserFromRequest(req));
+
+      reqLog.info('repair POST start', { articleId, databaseId: requestedDatabaseId || 'auto', username });
+
       const result = await executeArticleById(String(articleId), rawParams, () => {}, {
         databaseId: requestedDatabaseId,
         databaseHint: requestedDatabaseHint,
       });
 
       if (!result.success) {
+        reqLog.warn('repair POST: article failed', { articleId, message: result.message, ms: Date.now() - startedAt });
         return res.status(400).json({ success: false, message: result.message });
       }
+
+      // Audit log de repair — fire-and-forget (igual que execute)
+      if (typeof logQueryHistory === 'function') {
+        logQueryHistory({
+          username,
+          role,
+          queryText: `repair article ${articleId}`,
+          generatedSql: String(result?.executedQuery || 'repair execution'),
+          queryParams: result?.queryParams,
+          placeholderOrder: result?.placeholderOrder,
+          executionMs: Date.now() - startedAt,
+          rowCount: Number(result?.rowCount || 0),
+          wasCached: false,
+          status: 'ok',
+        }).catch((e) => logger.warn('logQueryHistory error (repair ok)', { error: e?.message }));
+      }
+
+      if (typeof bumpQueryCacheDataVersion === 'function') {
+        bumpQueryCacheDataVersion();
+      }
+
+      reqLog.info('repair POST: OK', { articleId, ms: Date.now() - startedAt, rowCount: result?.rowCount });
 
       const sanitized = enforceStrictProductionSqlPayload(result || {});
       return res.status(200).json({
@@ -184,7 +260,11 @@ export function createRepairRouter({ executeArticleById, enforceStrictProduction
         result: sanitized,
       });
     } catch (error) {
-      console.error('[REPAIR] ❌ Error POST /api/repair:', error);
+      (req.logger || logger).error('repair POST: error interno', {
+        error: error?.message || String(error),
+        stack: error?.stack,
+        ms: Date.now() - startedAt,
+      });
       return res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Error interno',

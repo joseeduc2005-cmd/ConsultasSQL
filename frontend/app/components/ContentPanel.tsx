@@ -65,8 +65,25 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
   const [execView, setExecView] = useState<'script' | 'execute'>('script');
   const latestVisibleError = [...progressSteps].reverse().find((step) => step.type === 'error' && !isTechnicalProgressMessage(step.message));
   const executionTarget = inferArticleExecutionTarget(selectedArticle);
+  // Ref para cerrar el EventSource si el componente se desmonta mid-stream
+  const esRef = useRef<EventSource | null>(null);
+
+  // Cerrar EventSource activo si el componente se desmonta o cambia de artículo
+  useEffect(() => {
+    return () => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
+    // Cancelar stream en curso al cambiar de artículo
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
     setDynamicInputs({});
     setProgressSteps([]);
     setExecDone(false);
@@ -127,11 +144,24 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
     console.info('[ContentPanel][execute] dispatch', { articleId: selectedArticle?.id, databaseId: executionTarget.databaseId || '', sql: sqlPreview.slice(0, 500), url });
 
     const es = new EventSource(url);
+    esRef.current = es;
     let closed = false;
 
+    const closeStream = () => {
+      if (!closed) {
+        closed = true;
+        es.close();
+        esRef.current = null;
+      }
+    };
+
     es.addEventListener('progress', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      setProgressSteps((prev) => [...prev, { message: data.message, type: 'progress' }]);
+      try {
+        const data = JSON.parse(e.data);
+        setProgressSteps((prev) => [...prev, { message: data.message, type: 'progress' }]);
+      } catch {
+        // Ignorar eventos malformados
+      }
     });
 
     es.addEventListener('execution-error', (e: MessageEvent) => {
@@ -144,24 +174,31 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
     });
 
     es.addEventListener('done', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      closed = true;
-      setExecuting(false);
-      setExecDone(true);
-      setExecSuccess(data.success);
-      setExecutionResult(data.result || null);
-      es.close();
+      // CRÍTICO: sin try/catch aquí → JSON.parse puede lanzar y dejar executing=true para siempre
+      try {
+        const data = JSON.parse(e.data);
+        setExecuting(false);
+        setExecDone(true);
+        setExecSuccess(data.success);
+        setExecutionResult(data.result || null);
+      } catch {
+        setExecuting(false);
+        setExecDone(true);
+        setExecSuccess(false);
+        setProgressSteps((prev) => [...prev, { message: '⚠️ Respuesta del servidor malformada', type: 'error' }]);
+      } finally {
+        closeStream();
+      }
     });
 
     es.onerror = () => {
       if (closed) return;
-      closed = true;
       setExecuting(false);
       setExecDone(true);
       setExecSuccess(false);
       setExecutionResult(null);
       setProgressSteps((prev) => [...prev, { message: '❌ Error de conexión con el servidor', type: 'error' }]);
-      es.close();
+      closeStream();
     };
   };
 

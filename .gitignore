@@ -68,6 +68,8 @@ backend/.env.docker
 
 # Docker runtime artifacts
 docker-compose.override.yml
+*.tar.gz
+*.tar
 
 # Claude Code — herramienta de desarrollo, no relevante para el repo
 .claude/

@@ -6,11 +6,16 @@ const PG_SYSTEM_SCHEMAS = `(
 
 export const POSTGRES_SCHEMA_QUERIES = {
   tables: `
-    SELECT table_schema, table_name
+    SELECT table_schema, table_name, table_type
     FROM information_schema.tables
     WHERE table_schema NOT IN ${PG_SYSTEM_SCHEMAS}
       AND table_schema NOT LIKE 'pg_%'
-      AND table_type = 'BASE TABLE'
+      AND table_type IN ('BASE TABLE', 'VIEW')
+    UNION ALL
+    SELECT schemaname AS table_schema, matviewname AS table_name, 'MATERIALIZED VIEW' AS table_type
+    FROM pg_matviews
+    WHERE schemaname NOT IN ${PG_SYSTEM_SCHEMAS}
+      AND schemaname NOT LIKE 'pg_%'
     ORDER BY table_schema, table_name
   `,
   columns: `
@@ -56,10 +61,10 @@ export const POSTGRES_SCHEMA_QUERIES = {
 
 export const MYSQL_SCHEMA_QUERIES = {
   tables: `
-    SELECT table_name
+    SELECT table_name, table_type
     FROM information_schema.tables
     WHERE table_schema = ?
-      AND table_type = 'BASE TABLE'
+      AND table_type IN ('BASE TABLE', 'VIEW')
     ORDER BY table_name
   `,
   columns: `
@@ -109,8 +114,12 @@ const ORACLE_SYSTEM_OWNERS = `(
 
 export const ORACLE_SCHEMA_QUERIES = {
   tables: `
-    SELECT owner, table_name
+    SELECT owner, table_name, 'TABLE' AS object_type
     FROM all_tables
+    WHERE owner NOT IN ${ORACLE_SYSTEM_OWNERS}
+    UNION ALL
+    SELECT owner, view_name AS table_name, 'VIEW' AS object_type
+    FROM all_views
     WHERE owner NOT IN ${ORACLE_SYSTEM_OWNERS}
     ORDER BY owner, table_name
   `,

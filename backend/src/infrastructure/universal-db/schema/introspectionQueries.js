@@ -93,17 +93,31 @@ export const MYSQL_SCHEMA_QUERIES = {
   `,
 };
 
+// Todos los owners de sistema estándar de Oracle (11g, 12c, 19c, 21c)
+// Excluirlos evita que la introspección traiga miles de tablas internas de Oracle
+const ORACLE_SYSTEM_OWNERS = `(
+  'SYS','SYSTEM','XDB','MDSYS','CTXSYS','ORDSYS','ORDDATA','ORDPLUGINS',
+  'OLAPSYS','WMSYS','EXFSYS','DMSYS','OUTLN','DBSNMP','APPQOSSYS',
+  'OJVMSYS','LBACSYS','OWBSYS','OWBSYS_AUDIT','APEX_030200','APEX_040000',
+  'APEX_040200','APEX_050000','APEX_180200','APEX_190200','APEX_200200',
+  'APEX_210200','FLOWS_FILES','ANONYMOUS','DIP','ORACLE_OCM','SPATIAL_CSW_ADMIN_USR',
+  'SPATIAL_WFS_ADMIN_USR','MDDATA','AUDSYS','DVF','DVSYS','GGSYS',
+  'GSMADMIN_INTERNAL','GSMCATUSER','GSMROOTUSER','GSMUSER','SYSBACKUP',
+  'SYSDG','SYSKM','SYSRAC','REMOTE_SCHEDULER_AGENT','PDBADMIN',
+  'ORDS_METADATA','ORDS_PUBLIC_USER','C##ORDS_METADATA','C##ORDS_PUBLIC_USER'
+)`;
+
 export const ORACLE_SCHEMA_QUERIES = {
   tables: `
     SELECT owner, table_name
     FROM all_tables
-    WHERE owner NOT IN ('SYS', 'SYSTEM', 'XDB', 'MDSYS', 'CTXSYS')
+    WHERE owner NOT IN ${ORACLE_SYSTEM_OWNERS}
     ORDER BY owner, table_name
   `,
   columns: `
     SELECT owner, table_name, column_name, data_type, nullable, data_default
     FROM all_tab_columns
-    WHERE owner NOT IN ('SYS', 'SYSTEM', 'XDB', 'MDSYS', 'CTXSYS')
+    WHERE owner NOT IN ${ORACLE_SYSTEM_OWNERS}
     ORDER BY owner, table_name, column_id
   `,
   primaryKeys: `
@@ -113,7 +127,7 @@ export const ORACLE_SCHEMA_QUERIES = {
       ON ac.owner = acc.owner
       AND ac.constraint_name = acc.constraint_name
     WHERE ac.constraint_type = 'P'
-      AND acc.owner NOT IN ('SYS', 'SYSTEM', 'XDB', 'MDSYS', 'CTXSYS')
+      AND acc.owner NOT IN ${ORACLE_SYSTEM_OWNERS}
     ORDER BY acc.owner, acc.table_name, acc.position
   `,
   foreignKeys: `
@@ -136,7 +150,7 @@ export const ORACLE_SCHEMA_QUERIES = {
       AND c_pk.constraint_name = b.constraint_name
       AND a.position = b.position
     WHERE c.constraint_type = 'R'
-      AND a.owner NOT IN ('SYS', 'SYSTEM', 'XDB', 'MDSYS', 'CTXSYS')
+      AND a.owner NOT IN ${ORACLE_SYSTEM_OWNERS}
     ORDER BY a.owner, a.table_name, a.position
   `,
 };

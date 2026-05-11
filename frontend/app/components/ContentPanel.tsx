@@ -608,11 +608,15 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
         )}
 
         {/* Footer */}
-        {selectedArticle.creado_en && (
-          <div className="mt-6 text-xs text-[color:var(--ink-700)] text-center">
-            Última actualización: {new Date(selectedArticle.creado_en).toLocaleDateString('es-ES')}
-          </div>
-        )}
+        {selectedArticle.creado_en && (() => {
+          const d = new Date(selectedArticle.creado_en);
+          const label = isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-ES');
+          return label ? (
+            <div className="mt-6 text-xs text-[color:var(--ink-700)] text-center">
+              Última actualización: {label}
+            </div>
+          ) : null;
+        })()}
       </div>
     </div>
   );

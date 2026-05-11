@@ -1160,13 +1160,32 @@ function resolveArticleExecutionDatabaseId(article = {}, structuredScript = null
     return explicitDatabaseId;
   }
 
-  // Syntax-based detection on the SQL (most reliable)
+  // Syntax-based detection on the SQL
   const sqlText = String(structuredScript?.sql || '').trim();
   if (sqlText) {
+    // 1. Directiva explícita: -- database: boton
     const directive = extractDatabaseDirective(sqlText);
     if (directive) return directive;
+
+    // 2. Schema-based: detecta "bpc_ordenes.tabla" y busca qué BD tiene ese schema
+    //    Tiene prioridad sobre el tipo de motor para no confundir bpc_base con pg_main
+    const schemaMatches = (sqlText.match(/\b([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)/gi) || [])
+      .map((m) => m.split('.')[0].toLowerCase());
+    if (schemaMatches.length > 0) {
+      const schemaSet = new Set(schemaMatches);
+      for (const db of multiDbRegistry.getDatabases()) {
+        if (db.primary === true || db.enabled === false) continue;
+        const dbSchemas = new Set((db.schema?.tables || []).map((t) => String(t?.schema || 'public').toLowerCase()));
+        if ([...schemaSet].some((s) => dbSchemas.has(s))) {
+          console.log(`[resolveArticleExecutionDatabaseId] schema match "${[...schemaSet].join(',')}" → ${db.id}`);
+          return db.id;
+        }
+      }
+    }
+
+    // 3. Tipo de motor (Oracle/MySQL/MSSQL son únicos — pero evitar asignar postgres a pg_main)
     const engine = detectSqlSyntaxEngine(sqlText);
-    if (engine) {
+    if (engine && engine !== 'postgres') {
       const db = multiDbRegistry.findDatabaseByType(engine);
       if (db?.id) return db.id;
     }

@@ -184,32 +184,42 @@ export class MultiDbRegistry {
   readConfigFromEnv() {
     const resolvedPath = this.resolveConfigFilePath();
 
+    console.log(`[MultiDbRegistry] readConfig → buscando config en: ${resolvedPath || '(no path)'}`);
+
     if (resolvedPath) {
-      try {
-        if (fs.existsSync(resolvedPath)) {
+      const exists = fs.existsSync(resolvedPath);
+      console.log(`[MultiDbRegistry] readConfig → archivo ${exists ? '✔ encontrado' : '✘ NO existe'}: ${resolvedPath}`);
+      if (exists) {
+        try {
           const fileContents = fs.readFileSync(resolvedPath, 'utf8').trim();
+          console.log(`[MultiDbRegistry] readConfig → archivo leído (${fileContents.length} bytes)`);
           if (fileContents) {
             const parsedFile = JSON.parse(fileContents);
             if (parsedFile && typeof parsedFile === 'object') {
+              const total = (parsedFile?.databases || []).length;
+              const enabled = (parsedFile?.databases || []).filter((d) => d.enabled !== false).length;
+              console.log(`[MultiDbRegistry] readConfig → JSON válido: ${total} bases totales, ${enabled} habilitadas`);
               return parsedFile;
             }
           }
+        } catch (error) {
+          console.error('[MultiDbRegistry] readConfig → ✘ Config file inválido:', error?.message || error);
         }
-      } catch (error) {
-        console.error('[MULTI_DB] Config file inválido:', error?.message || error);
       }
     }
 
     const raw = String(process.env.MULTI_DB_CONFIG || process.env.DATABASES_CONFIG || '').trim();
     if (!raw) {
+      console.warn('[MultiDbRegistry] readConfig → ⚠ No se encontró archivo ni variable de entorno. Usando config vacía.');
       return { databases: [] };
     }
 
+    console.log('[MultiDbRegistry] readConfig → leyendo desde variable de entorno MULTI_DB_CONFIG');
     try {
       const parsed = JSON.parse(raw);
       return parsed && typeof parsed === 'object' ? parsed : { databases: [] };
     } catch (error) {
-      console.error('[MULTI_DB] Config JSON inválido:', error?.message || error);
+      console.error('[MultiDbRegistry] readConfig → ✘ Config JSON inválido:', error?.message || error);
       return { databases: [] };
     }
   }
@@ -219,12 +229,23 @@ export class MultiDbRegistry {
     this.clients.clear();
     this.runtimeLearning.clear();
 
-    for (const entry of config?.databases || []) {
+    const entries = config?.databases || [];
+    console.log(`[MultiDbRegistry] loadConfig → procesando ${entries.length} entradas`);
+
+    for (const entry of entries) {
       const normalized = this.normalizeDatabase(entry);
-      if (!normalized) continue;
+      if (!normalized) {
+        console.warn(`[MultiDbRegistry] loadConfig → ✘ entrada inválida (sin id/type):`, JSON.stringify(entry).slice(0, 80));
+        continue;
+      }
+      const status = normalized.enabled === false ? 'DISABLED' : 'ENABLED';
+      console.log(`[MultiDbRegistry] loadConfig → [${status}] id="${normalized.id}" type=${normalized.type} host=${normalized.host}:${normalized.port}/${normalized.database}`);
       this.databases.set(normalized.id, normalized);
       this.runtimeLearning.set(normalized.id, normalizeLearning(normalized.semanticLearning));
     }
+
+    const enabledCount = [...this.databases.values()].filter((d) => d.enabled !== false).length;
+    console.log(`[MultiDbRegistry] loadConfig → ✔ ${this.databases.size} registradas, ${enabledCount} habilitadas`);
   }
 
   normalizeDatabase(entry = {}) {

@@ -2,26 +2,24 @@
 #  PRACTICASPREPROFESIONALES — Motor SQL Multi-DB con IA
 #
 #  Servicios:
-#    postgres   → PostgreSQL 16  (base primaria del sistema)
-#    mysql-test → MySQL 8        (pruebas multi-base: SELECT/INSERT/UPDATE/DELETE/CALL)
-#    ollama     → IA local deepseek-coder
-#    backend    → API Express Node.js 20
-#    frontend   → Next.js 15
+#    postgres  → PostgreSQL 16  (base primaria del sistema: knowledge_base)
+#    ollama    → IA local deepseek-coder
+#    backend   → API Express Node.js 20
+#    frontend  → Next.js 15
 #
-#  Uso (desarrollo local):
-#    docker compose up --build
+#  Uso:
+#    docker compose up -d
 #
 #  Puertos expuestos:
 #    3000  → Frontend
 #    3002  → Backend API
 #    5432  → PostgreSQL
-#    3306  → MySQL (pruebas)
 #   11434  → Ollama
 # ═══════════════════════════════════════════════════════════════════
 
 services:
 
-  # ── PostgreSQL 15 ─────────────────────────────────────────────────
+  # ── PostgreSQL 16 (knowledge_base — base interna del sistema) ─────
   postgres:
     image: postgres:16-alpine
     container_name: practicas-postgres
@@ -34,8 +32,6 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./knowledge_base.backup:/backup/knowledge_base.backup:ro
-      - ./restore.sh:/docker-entrypoint-initdb.d/01-restore.sh:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -43,30 +39,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  
-
-  # ── MySQL 8 (pruebas multi-base) ─────────────────────────────────
-  mysql-test:
-    image: mysql:8.0
-    container_name: practicas-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: mysql_root_123
-      MYSQL_DATABASE: testdb
-      MYSQL_USER: testuser
-      MYSQL_PASSWORD: testpass123
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./backend/db-init/mysql-test-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    ports:
-      - "3307:3306"
-    healthcheck:
-      test: ["CMD-SHELL", "mysql -uroot -pmysql_root_123 testdb -e 'SELECT COUNT(*) FROM empleados' 2>/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 45s
 
   # ── Ollama (IA local) ─────────────────────────────────────────────
   ollama:
@@ -88,23 +60,20 @@ services:
       dockerfile: Dockerfile
     container_name: practicas-backend
     restart: unless-stopped
+    network_mode: host        # usa red del host → accede a IPs externas y VPN
     env_file:
       - ${BACKEND_ENV_PATH:-./backend/.env}
     environment:
-      - OLLAMA_URL=http://ollama:11434/api/generate
+      - OLLAMA_URL=http://localhost:11434/api/generate
       - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002,http://172.20.91.3:3000,http://172.20.91.3:3002
-      - DATABASE_URL=postgres://postgres:admin123@postgres:5432/knowledge_base
+      - DATABASE_URL=postgres://postgres:admin123@localhost:5432/knowledge_base
     volumes:
       - ./backend/config/multidb.databases.json:/app/config/multidb.databases.json:ro
     depends_on:
       postgres:
         condition: service_healthy
-      mysql-test:
-        condition: service_healthy
       ollama:
         condition: service_started
-    ports:
-      - "3002:3002"
 
   # ── Frontend (Next.js) ────────────────────────────────────────────
   frontend:
@@ -114,9 +83,11 @@ services:
       dockerfile: Dockerfile
     container_name: practicas-frontend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # permite llegar al backend en host network
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:3002
-      - BACKEND_URL=http://backend:3002
+      - NEXT_PUBLIC_BACKEND_URL=http://172.20.91.3:3002
+      - BACKEND_URL=http://host.docker.internal:3002
     depends_on:
       - backend
     ports:
@@ -125,8 +96,6 @@ services:
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
   postgres_data:
-    driver: local
-  mysql_data:
     driver: local
   ollama_data:
     driver: local

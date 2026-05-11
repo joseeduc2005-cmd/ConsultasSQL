@@ -274,14 +274,14 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
 
       try {
         const result = await probeUniversalConnection(database);
-        logger.info('DB probe: OK', { dbId: id, type, reason, host: database.host, port: database.port, db: database.database });
+        console.log(`[DB:${id}|${type}] ✅ OK (${database.host}:${database.port}/${database.database})`);
         multiDbRegistry.setConnectionStatus(id, 'ok');
         if (result?.dbId && !result?.reused) {
           await closeUniversalConnection(result.dbId).catch(() => {});
         }
         return { id, type, status: 'ok' };
       } catch (error) {
-        logger.error('DB probe: FAIL', { dbId: id, type, reason, error: error?.message || String(error) });
+        console.error(`[DB:${id}|${type}] ❌ FAIL: ${error?.message || error}`);
         multiDbRegistry.setConnectionStatus(id, 'fail');
         return { id, type, status: 'fail', error: String(error?.message || error) };
       }
@@ -291,7 +291,7 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
   const okCount = summary.filter((item) => item.status === 'ok').length;
   const failCount = summary.filter((item) => item.status === 'fail').length;
   const skippedCount = summary.length - okCount - failCount;
-  logger.info('DB probe resumen', { reason, ok: okCount, fail: failCount, skip: skippedCount });
+  console.log(`🔌 MultiDB probe (${reason}) resumen: OK=${okCount}, FAIL=${failCount}, SKIP=${skippedCount}`);
 
   return summary;
 }

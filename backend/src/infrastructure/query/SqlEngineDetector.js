@@ -92,7 +92,8 @@ const POSTGRES_SYNTAX_RE = new RegExp(
     '\\bstring_agg\\b',
     '\\bjsonb?\\b',
     '\\bhstore\\b',
-    '\\$\\d+\\b',              // positional parameter $1, $2
+    // NOTE: $N positional params intentionally removed — they appear in queries
+    // targeting any DB and caused false PostgreSQL routing. Use explicit markers instead.
     '\\bSERIAL\\b',
     '\\bBIGSERIAL\\b',
     '\\bSMALLSERIAL\\b',
@@ -124,6 +125,20 @@ const MYSQL_SYNTAX_RE = new RegExp(
     '\\bINSERT_ID\\s*\\(',
     '`[a-zA-Z_\\u0080-\\uFFFF]',  // backtick identifiers
     '\\bUSE\\s+\\w+\\s*;',
+    // MySQL-specific date/time functions
+    '\\bDATE_SUB\\s*\\(',
+    '\\bDATE_ADD\\s*\\(',
+    '\\bDATE_FORMAT\\s*\\(',
+    '\\bSTR_TO_DATE\\s*\\(',
+    '\\bDAYOFWEEK\\s*\\(',
+    '\\bDAYOFMONTH\\s*\\(',
+    '\\bDAYOFYEAR\\s*\\(',
+    '\\bWEEKDAY\\s*\\(',
+    '\\bYEARWEEK\\s*\\(',
+    '\\bFROM_UNIXTIME\\s*\\(',
+    '\\bUNIX_TIMESTAMP\\s*\\(',
+    // MySQL INTERVAL keyword without PostgreSQL-style casting
+    'INTERVAL\\s+\\d+\\s+(?:DAY|HOUR|MINUTE|SECOND|MONTH|YEAR|WEEK)\\b(?!\\s*::)',
   ].join('|'),
   'i',
 );

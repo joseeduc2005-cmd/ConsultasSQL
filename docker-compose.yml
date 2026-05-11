@@ -60,13 +60,13 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/db-init/mysql-test-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "testuser", "-ptestpass123"]
+      test: ["CMD-SHELL", "mysql -uroot -pmysql_root_123 testdb -e 'SELECT COUNT(*) FROM empleados' 2>/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 45s
 
   # ── Ollama (IA local) ─────────────────────────────────────────────
   ollama:

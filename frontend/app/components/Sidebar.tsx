@@ -190,23 +190,44 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                         return !looksLikeDuplicateLabel(subgroup.subcategoria, article.titulo || '');
                       });
 
+                      // When subcategory has exactly 1 article: show the article button directly
+                      // (same look as every other article). No separate heading needed.
+                      const singleArticle = !hideSubcategoryHeading && subgroup.articles.length === 1
+                        ? subgroup.articles[0]
+                        : null;
+
+                      if (singleArticle) {
+                        return (
+                          <button
+                            key={`${singleArticle.id}`}
+                            onClick={() => {
+                              onSelectArticle?.(singleArticle);
+                              setLocalActiveCategory(category.categoria);
+                              setLocalActiveSubcategory(subgroup.subcategoria);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                              selectedArticle?.id === singleArticle.id
+                                ? (isLightTheme
+                                  ? 'bg-gradient-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
+                                  : 'bg-gradient-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
+                                : (isLightTheme
+                                  ? 'text-[color:var(--ink-700)] hover:bg-white/75 hover:text-[color:var(--ink-900)]'
+                                  : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100')
+                            }`}
+                          >
+                            {singleArticle.titulo}
+                          </button>
+                        );
+                      }
+
                       return (
                         <div key={subgroup.subcategoria}>
-                          {!hideSubcategoryHeading && (
-                            <button
-                              onClick={() => handleSubcategoryClick(category.categoria, subgroup.subcategoria)}
-                              className={`w-full text-left py-1 px-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-all duration-150 ${
-                                localActiveCategory === category.categoria && localActiveSubcategory === subgroup.subcategoria
-                                  ? (isLightTheme
-                                    ? 'bg-white text-[color:var(--ink-900)] ring-1 ring-[color:var(--line)]'
-                                    : 'bg-[rgba(6,182,212,0.13)] text-cyan-100 ring-1 ring-[rgba(6,182,212,0.30)]')
-                                  : (isLightTheme
-                                    ? 'text-[color:var(--ink-700)] hover:bg-white/70'
-                                    : 'text-slate-400 hover:bg-[rgba(56,189,248,0.07)] hover:text-slate-200')
-                              }`}
-                            >
+                          {!hideSubcategoryHeading && visibleArticles.length > 0 && (
+                            <p className={`px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-widest select-none ${
+                              isLightTheme ? 'text-[color:var(--ink-500)]' : 'text-slate-500'
+                            }`}>
                               {subgroup.subcategoria}
-                            </button>
+                            </p>
                           )}
                           {visibleArticles.map((article) => (
                             <button

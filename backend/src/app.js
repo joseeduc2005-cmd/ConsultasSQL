@@ -2792,6 +2792,22 @@ function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {}, opti
       };
     }
 
+    // Support param_N convention: when the frontend detects $N placeholders, it sends
+    // fields named param_1, param_2, ... — convert them to a positional array.
+    if (normalizedParams && typeof normalizedParams === 'object') {
+      const paramNKeys = Object.keys(normalizedParams)
+        .filter((k) => /^param_\d+$/.test(k))
+        .sort((a, b) => parseInt(a.slice(6), 10) - parseInt(b.slice(6), 10));
+      if (paramNKeys.length === positionalCount) {
+        return {
+          text: cleaned,
+          values: paramNKeys.map((k) => normalizedParams[k]),
+          placeholderOrder: [],
+          placeholderOccurrences: [],
+        };
+      }
+    }
+
     throw new Error(`La consulta usa placeholders posicionales ($1..$N). Envía ${positionalCount} parámetros en arreglo.`);
   }
 
@@ -3401,19 +3417,17 @@ function buildComplexWorkflowExplanation(steps, executions, finalResult) {
 async function executeManualSqlScript(script, rawParams, emit) {
   const sqlText = String(script?.sql || '').trim();
 
-  // ── Resolve target database from SQL syntax markers ───────────────────────
-  const directiveId = extractDatabaseDirective(sqlText);
-  const detectedEngine = directiveId ? null : detectSqlSyntaxEngine(sqlText);
-  const engineDb = detectedEngine ? multiDbRegistry.findDatabaseByType(detectedEngine) : null;
-  const resolvedDatabaseId = directiveId
-    || engineDb?.id
-    || String(script?.databaseId || '').trim();
+  // ── Resolve target database ───────────────────────────────────────────────
+  // La única fuente de verdad es lo que el admin configuró en "Base de datos destino".
+  // No se usa auto-detección por sintaxis — evita que DATE_TRUNC/NOW() u otros
+  // marcadores anulen la selección explícita del administrador.
+  const resolvedDatabaseId = String(script?.databaseId || '').trim() || null;
 
   console.log(buildEngineLog({
-    engine: detectedEngine,
+    engine: null,
     queryType: detectQueryType(sqlText),
     databaseId: resolvedDatabaseId || 'primary (fallback)',
-    reason: directiveId ? '-- database: directive' : (detectedEngine ? 'syntax markers detected' : 'script.databaseId or primary fallback'),
+    reason: resolvedDatabaseId ? 'script.databaseId (Base de datos destino)' : 'primary (fallback)',
     sql: sqlText,
   }));
 

@@ -193,7 +193,14 @@ export function computeScriptForMode(form: BuilderFormState) {
   }
 
   if (mode === 'codigo_manual' && !parsed.parsed.workflow && !parsed.parsed.tipo && !parsed.parsed.accion) {
-    return { valid: false, error: 'Código Manual requiere workflow, tipo o accion', scriptJson: null };
+    // Also accept manual-sql format: { modo: 'script', origen: 'manual-sql', sql: '...' }
+    const isManualSqlFormat =
+      String(parsed.parsed.modo || '').toLowerCase() === 'script' &&
+      String(parsed.parsed.origen || '').toLowerCase() === 'manual-sql' &&
+      String(parsed.parsed.sql || '').trim().length > 0;
+    if (!isManualSqlFormat) {
+      return { valid: false, error: 'Código Manual requiere workflow, tipo, accion — o formato manual-sql (modo+origen+sql).', scriptJson: null };
+    }
   }
 
   return { valid: true, error: '', scriptJson: parsed.parsed };

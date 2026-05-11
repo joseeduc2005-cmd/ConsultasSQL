@@ -55,10 +55,22 @@ export default class MySqlAdapter extends BaseAdapter {
     });
   }
 
+  /**
+   * mysql2 devuelve las columnas de information_schema en MAYÚSCULAS (TABLE_NAME, COLUMN_NAME, etc.)
+   * independientemente del alias en el SELECT. Normalizamos las keys a minúsculas para
+   * que el resto del código funcione igual sin importar la versión de MySQL o el driver.
+   */
+  _lowerKeys(row) {
+    return Object.fromEntries(
+      Object.entries(row || {}).map(([k, v]) => [k.toLowerCase(), v])
+    );
+  }
+
   normalizeSchema(raw = {}) {
     const tables = {};
 
-    for (const row of raw.tablesRows || []) {
+    for (const rawRow of raw.tablesRows || []) {
+      const row = this._lowerKeys(rawRow);
       const tableName = String(row.table_name || '').toLowerCase();
       if (!tableName) continue;
 
@@ -70,7 +82,8 @@ export default class MySqlAdapter extends BaseAdapter {
       };
     }
 
-    for (const row of raw.columnsRows || []) {
+    for (const rawRow of raw.columnsRows || []) {
+      const row = this._lowerKeys(rawRow);
       const tableName = String(row.table_name || '').toLowerCase();
       if (!tables[tableName]) continue;
 
@@ -82,7 +95,8 @@ export default class MySqlAdapter extends BaseAdapter {
       });
     }
 
-    for (const row of raw.primaryKeyRows || []) {
+    for (const rawRow of raw.primaryKeyRows || []) {
+      const row = this._lowerKeys(rawRow);
       const tableName = String(row.table_name || '').toLowerCase();
       if (!tables[tableName]) continue;
 
@@ -95,7 +109,8 @@ export default class MySqlAdapter extends BaseAdapter {
       }
     }
 
-    for (const row of raw.foreignKeyRows || []) {
+    for (const rawRow of raw.foreignKeyRows || []) {
+      const row = this._lowerKeys(rawRow);
       const tableName = String(row.table_name || '').toLowerCase();
       if (!tables[tableName]) continue;
 

@@ -1154,9 +1154,15 @@ function buildCrossDbSelectOptions(options = {}) {
 }
 
 function resolveArticleExecutionDatabaseId(article = {}, structuredScript = null, options = {}) {
+  // Lee el target_database de TODAS las fuentes posibles: URL param, script_json (cualquier variante de nombre)
   const explicitDatabaseId = String(options?.databaseId || '').trim()
-    || String(structuredScript?.databaseId || '').trim();
+    || String(structuredScript?.databaseId || '').trim()
+    || String(structuredScript?.target_database || '').trim()
+    || String(structuredScript?.database_id || '').trim()
+    || String(structuredScript?.target_database_id || '').trim();
+
   if (explicitDatabaseId) {
+    console.log(`[resolveArticleExecutionDatabaseId] target explícito: "${explicitDatabaseId}" (artículo ${article?.id || 'unknown'})`);
     return explicitDatabaseId;
   }
 

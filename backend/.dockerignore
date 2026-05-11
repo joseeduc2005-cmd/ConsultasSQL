@@ -9,3 +9,7 @@ build
 .git
 .gitignore
 *.md
+# La config de bases de datos NO va quemada en la imagen.
+# Se inyecta en tiempo de ejecución via volume mount en docker-compose:
+#   ./backend/config/multidb.databases.json:/app/config/multidb.databases.json:ro
+config/multidb.databases.json

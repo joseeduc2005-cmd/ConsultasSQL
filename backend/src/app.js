@@ -1094,14 +1094,36 @@ async function executeSafeSelectQuery(queryText, queryParams = [], timeoutMs = 5
   }
 
   if (targetDatabase && targetDatabase.type !== 'postgres') {
-    if (Array.isArray(queryParams) && queryParams.length > 0) {
-      throw new Error(`La base ${targetDatabase.id} (${targetDatabase.type}) no soporta placeholders posicionales en SQL manual. Usa SQL literal o selecciona la base principal.`);
+    // Adaptar placeholders $N al formato nativo del motor destino
+    // MySQL usa ? posicional, Oracle usa :N posicional, MSSQL usa parámetros nominales
+    let sqlForTarget = queryText;
+    let paramsForTarget = Array.isArray(queryParams) && queryParams.length > 0 ? queryParams : [];
+
+    if (paramsForTarget.length > 0) {
+      if (targetDatabase.type === 'mysql') {
+        // PostgreSQL $1,$2,... → MySQL ?,?,... (mismo orden)
+        sqlForTarget = queryText.replace(/\$\d+/g, '?');
+      } else if (targetDatabase.type === 'oracle') {
+        // PostgreSQL $1,$2,... → Oracle :1,:2,... (positional binding)
+        sqlForTarget = queryText.replace(/\$(\d+)/g, ':$1');
+      } else if (targetDatabase.type === 'mssql') {
+        // SQL Server no soporta params posicionales por esta vía; sustituir como literales seguros
+        // (solo strings y números — oracledb/mssql tienen sus propios bindings)
+        let idx = 0;
+        sqlForTarget = queryText.replace(/\$\d+/g, () => {
+          const val = paramsForTarget[idx++];
+          if (val === null || val === undefined) return 'NULL';
+          if (typeof val === 'number' && Number.isFinite(val)) return String(val);
+          return `'${String(val).replace(/'/g, "''")}'`;
+        });
+        paramsForTarget = [];
+      }
     }
 
     const rows = await multiDbRegistry.executeCompiledQuery({
       databaseId: targetDatabase.id,
-      sql: queryText,
-      params: [],
+      sql: sqlForTarget,
+      params: paramsForTarget,
     });
 
     return {
@@ -2867,12 +2889,12 @@ async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowCont
     }
   }
 
-  console.info('[SQL_MANUAL][AUDIT]', {
+  logger.info('SQL manual ejecutado', {
     operation,
-    query: text,
+    query: text.slice(0, 300),
     placeholderOrder,
-    placeholderOccurrences,
-    values,
+    paramCount: values.length,
+    databaseId: options?.databaseId || 'primary',
   });
 
   const targetDatabaseId = String(options?.databaseId || '').trim();
@@ -4975,7 +4997,7 @@ async function executeStructuredScript(script, rawParams, emit) {
     return { success: false, message: 'script_json inválido' };
   }
 
-  console.log('[SCRIPT RECIBIDO]: script estructurado validado');
+  logger.debug('Script estructurado validado', { modo: script.modo, origen: script.origen, databaseId: script.databaseId });
 
   let validatedRuntimeParams = {};
   try {
@@ -5003,7 +5025,7 @@ async function executeStructuredScript(script, rawParams, emit) {
   }
 
   if (Array.isArray(script.workflow)) {
-    console.log('[WORKFLOW ACTIVADO]');
+    logger.debug('Motor: workflow visual');
     try {
       return await executeWorkflowScript(script, validatedRuntimeParams, emit);
     } catch (error) {
@@ -5014,7 +5036,7 @@ async function executeStructuredScript(script, rawParams, emit) {
   }
 
   if (Array.isArray(script.join)) {
-    console.log('[MOTOR RELACIONAL ACTIVADO]');
+    logger.debug('Motor: relacional (JOIN)');
     try {
       return await executeRelationalScript(script, validatedRuntimeParams, emit);
     } catch (error) {
@@ -5028,7 +5050,7 @@ async function executeStructuredScript(script, rawParams, emit) {
     String(script.modo || '').trim().toLowerCase() === 'script'
     && String(script.origen || '').trim().toLowerCase() === 'manual-sql'
   ) {
-    console.log('[MOTOR SQL MANUAL ACTIVADO]');
+    logger.debug('Motor: SQL manual', { databaseId: script.databaseId || 'auto' });
     try {
       return await executeManualSqlScript(script, validatedRuntimeParams, emit);
     } catch (error) {
@@ -5039,7 +5061,7 @@ async function executeStructuredScript(script, rawParams, emit) {
   }
 
   if (String(script.modo || '').trim().toLowerCase() === 'script') {
-    console.log('[MODO EMPRESARIAL ACTIVADO]');
+    logger.debug('Motor: modo empresarial');
     try {
       return await executeBusinessWorkflow(script, validatedRuntimeParams, emit);
     } catch (error) {
@@ -5051,7 +5073,7 @@ async function executeStructuredScript(script, rawParams, emit) {
 
   const dynamicType = normalizeDynamicScriptType(script.tipo);
   if (dynamicType) {
-    console.log('[MOTOR DINÁMICO ACTIVADO]');
+    logger.debug('Motor: dinámico', { tipo: script.tipo });
     try {
       return await executeDynamicTypedScript(script, validatedRuntimeParams, emit);
     } catch (error) {
@@ -5063,7 +5085,7 @@ async function executeStructuredScript(script, rawParams, emit) {
 
   const actionName = typeof script.accion === 'string' ? script.accion.trim() : '';
   if (actionName) {
-    console.log('[MODO ANTIGUO]');
+    logger.debug('Motor: modo antiguo (accion)');
     if (!STRUCTURED_ACTIONS[actionName]) {
       emit('❌ La acción indicada en script_json no está permitida', 'error');
       return { success: false, message: 'Acción de script_json no permitida' };
@@ -5249,10 +5271,10 @@ async function executeArticleById(articleId, rawParams, emit, options = {}) {
   }
 
   if (typeof emit === 'function') emit(`🔍 Iniciando: ${article.titulo}`);
-  console.log(`[EXECUTE] 🚀 Ejecutando acción "${actionKey}" en artículo ${articleId}`);
+  logger.info('Ejecutando acción', { actionKey, articleId });
 
   const result = await action.execute(safeParams, pool, emit || (() => {}));
-  console.log(`[EXECUTE] ✅ Acción completada: ${result.message}`);
+  logger.info('Acción completada', { actionKey, articleId, success: result.success, message: result.message });
   return result;
 }
 

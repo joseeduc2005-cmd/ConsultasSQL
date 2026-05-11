@@ -97,7 +97,8 @@ export function buildWorkflowScriptJson(rows: WorkflowRow[], solutionType: Solut
 
 // ── SQL / JSON parsing helpers ────────────────────────────────────────────────
 const SQL_FORBIDDEN_KEYWORDS = /\b(drop|alter|truncate|grant|revoke|create\s+role|create\s+user|drop\s+database|drop\s+schema)\b/i;
-const SQL_ALLOWED_STATEMENT_START = /^(select|with|insert|update|delete|do|begin|declare)\b/i;
+// Incluye: SQL estándar + MySQL CALL, SQL Server EXEC/EXECUTE, MERGE (upsert), SET (variables MySQL/Oracle)
+const SQL_ALLOWED_STATEMENT_START = /^(select|with|insert|update|delete|do|begin|declare|call|exec|execute|merge|set)\b/i;
 const PLSQL_MARKER_RE = /\b(DECLARE|EXCEPTION|ELSIF)\b|\bIF\b[\s\S]{0,600}\bTHEN\b|\bFOR\b\s+\w+\s+IN\b|\bBEGIN\b[\s\S]{5,}\bEND\b/i;
 
 export function isComplexSqlScript(sql: string) { return PLSQL_MARKER_RE.test(String(sql || '')); }

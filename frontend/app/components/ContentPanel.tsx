@@ -566,29 +566,99 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                 );
               }
 
+              // ── Sumar columnas numéricas ──────────────────────────────
+              const numericCols = cols.filter((col) =>
+                rows.every((r) => {
+                  const v = r[col];
+                  return v === null || v === undefined || v === '' || !isNaN(Number(v));
+                }) && rows.some((r) => r[col] !== null && r[col] !== undefined && r[col] !== '' && !isNaN(Number(r[col])))
+              );
+              const totals: Record<string, number> = {};
+              numericCols.forEach((col) => {
+                totals[col] = rows.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
+              });
+              const hasTotals = numericCols.length > 0;
+
+              // ── Descargar CSV ─────────────────────────────────────────
+              const downloadCsv = () => {
+                const escape = (v: unknown) => {
+                  const s = String(v ?? '');
+                  return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+                };
+                const header = cols.map(escape).join(',');
+                const body = rows.map((r) => cols.map((c) => escape(r[c])).join(',')).join('\n');
+                const totalsRow = hasTotals ? cols.map((c) => numericCols.includes(c) ? escape(totals[c].toFixed(2)) : '').join(',') : '';
+                const csv = [header, body, ...(hasTotals ? [`TOTAL,${totalsRow.split(',').slice(1).join(',')}`] : [])].join('\n');
+                const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `resultado_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              };
+
               return (
                 <div className="mb-4 rounded-lg border border-slate-200 bg-white overflow-hidden dark:bg-slate-900/80 dark:border-slate-700">
-                  <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 text-xs font-bold uppercase tracking-wide text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
-                    Resultado final
+                  {/* Header con conteo y botón descargar */}
+                  <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 dark:bg-slate-800 dark:border-slate-700 flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">
+                      Resultado final
+                      <span className="ml-2 font-normal text-slate-500 dark:text-slate-400 normal-case tracking-normal">
+                        ({rows.length} {rows.length === 1 ? 'fila' : 'filas'}{rows.length > 50 ? ', mostrando 50' : ''})
+                      </span>
+                    </span>
+                    <button
+                      onClick={downloadCsv}
+                      title="Descargar CSV"
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Descargar CSV
+                    </button>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
+
+                  {/* Tabla responsive con scroll horizontal Y vertical */}
+                  <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead className="sticky top-0 z-10">
                         <tr className="bg-slate-50 dark:bg-slate-800">
                           {cols.map((col) => (
-                            <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">{col}</th>
+                            <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap border-b border-slate-200 dark:border-slate-700">
+                              {col}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {rows.slice(0, 50).map((row, i) => (
-                          <tr key={i} className="border-t border-slate-100 dark:border-slate-700">
+                          <tr key={i} className={`border-t border-slate-100 dark:border-slate-700 ${i % 2 === 0 ? 'bg-white dark:bg-slate-900/60' : 'bg-slate-50/60 dark:bg-slate-800/40'}`}>
                             {cols.map((col) => (
-                              <td key={col} className="px-3 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{String(row[col] ?? '')}</td>
+                              <td key={col} className="px-3 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap max-w-[240px] truncate" title={String(row[col] ?? '')}>
+                                {String(row[col] ?? '')}
+                              </td>
                             ))}
                           </tr>
                         ))}
                       </tbody>
+                      {/* Fila de totales */}
+                      {hasTotals && (
+                        <tfoot className="sticky bottom-0">
+                          <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-600">
+                            {cols.map((col, idx) => (
+                              <td key={col} className="px-3 py-2 text-xs font-bold whitespace-nowrap text-slate-800 dark:text-slate-100">
+                                {idx === 0 && !numericCols.includes(col)
+                                  ? <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">TOTAL</span>
+                                  : numericCols.includes(col)
+                                    ? new Intl.NumberFormat('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals[col])
+                                    : ''}
+                              </td>
+                            ))}
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 </div>

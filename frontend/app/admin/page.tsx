@@ -1012,14 +1012,14 @@ function AdminPage() {
 
                     {uploadForm.script_creation_mode === 'codigo_manual' && (
                       <div className="space-y-2">
-                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <div className={`rounded-lg border px-3 py-2 text-xs ${isLightTheme ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-amber-700 bg-amber-950/60 text-amber-300'}`}>
                           Modo avanzado. Puedes escribir JSON de workflow, SQL SELECT multi-paso, o scripts PL/SQL procedurales (DECLARE / BEGIN…END, FOR LOOP, IF/THEN).
                         </div>
                         <textarea
                           value={uploadForm.manual_json_text}
                           onChange={(e) => setUploadForm((prev) => ({ ...prev, manual_json_text: e.target.value }))}
                           placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['cargo'] }], where: { 'users.username': '{{usuario}}' }, guardar_en: 'user_data' }] }, null, 2)}
-                          className="min-h-[260px] w-full rounded-lg border border-[color:var(--line)] bg-[#fff9f0] p-3 font-mono text-sm text-[color:var(--ink-900)]"
+                          className={`min-h-[260px] w-full rounded-lg border border-[color:var(--line)] p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-[color:var(--ink-900)]' : 'bg-slate-900 text-slate-100'}`}
                         />
                       </div>
                     )}
@@ -1196,14 +1196,14 @@ function AdminPage() {
 
                     {editForm.script_creation_mode === 'codigo_manual' && (
                       <div className="space-y-2">
-                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <div className={`rounded-lg border px-3 py-2 text-xs ${isLightTheme ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-amber-700 bg-amber-950/60 text-amber-300'}`}>
                           Modo avanzado. Puedes escribir JSON de workflow, SQL SELECT multi-paso, o scripts PL/SQL procedurales (DECLARE / BEGIN…END, FOR LOOP, IF/THEN).
                         </div>
                         <textarea
                           value={editForm.manual_json_text}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, manual_json_text: e.target.value }))}
                           placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['cargo'] }], where: { 'users.username': '{{usuario}}' }, guardar_en: 'user_data' }] }, null, 2)}
-                          className="min-h-[260px] w-full rounded-lg border border-[color:var(--line)] bg-[#fff9f0] p-3 font-mono text-sm text-[color:var(--ink-900)]"
+                          className={`min-h-[260px] w-full rounded-lg border border-[color:var(--line)] p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-[color:var(--ink-900)]' : 'bg-slate-900 text-slate-100'}`}
                         />
                       </div>
                     )}

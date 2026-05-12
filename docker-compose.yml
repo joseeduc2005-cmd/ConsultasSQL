@@ -85,9 +85,11 @@ services:
       dockerfile: Dockerfile
     container_name: practicas-frontend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # resuelve al gateway del bridge → backend en host network
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://172.20.91.3:3002
-      - BACKEND_URL=http://172.20.91.3:3002
+      - BACKEND_URL=http://host.docker.internal:3002
     depends_on:
       - backend
     ports:

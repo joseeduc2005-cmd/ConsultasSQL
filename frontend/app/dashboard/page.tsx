@@ -506,7 +506,7 @@ function DashboardPage() {
         </div>
       )}
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6">
         <header className={panelHeaderClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

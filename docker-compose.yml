@@ -71,6 +71,12 @@ services:
       - SKIP_DB_INIT=true
     volumes:
       - ./backend/config/multidb.databases.json:/app/config/multidb.databases.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3002/health || exit 1"]
+      interval: 8s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,7 +97,8 @@ services:
       - NEXT_PUBLIC_BACKEND_URL=http://172.20.91.3:3002
       - BACKEND_URL=http://host.docker.internal:3002
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:3000"
 

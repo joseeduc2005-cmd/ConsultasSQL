@@ -314,16 +314,16 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
             {/* Tab toggle: Script / Ejecución */}
             {scriptPreviewText && !execDone && (
-              <div className="flex gap-1 mb-5 glass-pill rounded-lg p-1 w-fit">
+              <div className="flex gap-2 mb-5 glass-pill rounded-xl p-1.5 w-fit">
                 <button
                   onClick={() => setExecView('script')}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${execView === 'script' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'script' ? 'bg-[color:var(--accent)] text-white shadow-sm' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
                 >
                   📋 Ver Script
                 </button>
                 <button
                   onClick={() => setExecView('execute')}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${execView === 'execute' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'execute' ? 'bg-[color:var(--accent)] text-white shadow-sm' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
                 >
                   ▶ Ejecutar
                 </button>
@@ -335,8 +335,8 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               <div className="mb-5 rounded-lg border border-slate-700 bg-[#1e1e2e] overflow-hidden">
                 <div className="px-3 py-2 bg-[#2a2a3d] border-b border-slate-700 text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center justify-between">
                   <span>📋 Script configurado</span>
-                  <button onClick={() => setExecView('execute')} className="text-[10px] text-blue-400 hover:text-blue-200 font-medium transition-colors">
-                    ▶ Ir a ejecutar →
+                  <button onClick={() => setExecView('execute')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-sm">
+                    ▶ Ir a ejecutar
                   </button>
                 </div>
                 <pre className="p-4 text-xs leading-relaxed font-mono text-[#cdd6f4] overflow-x-auto whitespace-pre">
@@ -679,8 +679,8 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
             {/* Execute button */}
             {!execDone && (
-              <button onClick={handleExecute} disabled={executing} className="btn-accent w-full disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2">
-                {executing ? (<><span className="animate-spin">⏳</span>Ejecutando...</>) : (<><span>🔧</span>Ejecutar Solución</>)}
+              <button onClick={handleExecute} disabled={executing} className="btn-accent w-full disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-4 rounded-xl text-base transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg">
+                {executing ? (<><span className="animate-spin text-lg">⏳</span>Ejecutando...</>) : (<><span className="text-lg">🔧</span>Ejecutar Solución</>)}
               </button>
             )}
 

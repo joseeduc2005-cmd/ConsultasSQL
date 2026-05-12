@@ -85,12 +85,13 @@ services:
       dockerfile: Dockerfile
     container_name: practicas-frontend
     restart: unless-stopped
-    network_mode: host        # mismo host que backend → localhost:3002 funciona directo
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://172.20.91.3:3002
-      - BACKEND_URL=http://localhost:3002
+      - BACKEND_URL=http://172.20.91.3:3002
     depends_on:
       - backend
+    ports:
+      - "3000:3000"
 
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:

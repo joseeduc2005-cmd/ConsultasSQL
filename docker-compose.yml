@@ -72,7 +72,7 @@ services:
     volumes:
       - ./backend/config/multidb.databases.json:/app/config/multidb.databases.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3002/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3002/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
       interval: 8s
       timeout: 5s
       retries: 15

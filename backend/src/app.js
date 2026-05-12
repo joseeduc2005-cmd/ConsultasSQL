@@ -2868,7 +2868,11 @@ function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {}, opti
     }
 
     const sqlPlaceholder = registerPlaceholder(variableName);
-    const castType = inferManualPlaceholderCast(String(source || ''), variableName, Number(offset || 0), match);
+    // ::cast syntax is PostgreSQL-only — skip for MySQL, Oracle, etc.
+    const isPostgresDialect = !options?.dbType || String(options.dbType).toLowerCase() === 'postgres';
+    const castType = isPostgresDialect
+      ? inferManualPlaceholderCast(String(source || ''), variableName, Number(offset || 0), match)
+      : null;
     return applyCastToSqlPlaceholder(sqlPlaceholder, castType);
   });
 
@@ -2885,11 +2889,16 @@ function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {}, opti
 
 async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowContext = {}, silent = false, options = {}) {
   const startedAt = Date.now();
+  // Resolve target DB type so buildManualSqlQuery can skip PostgreSQL-specific
+  // ::cast syntax when the destination is MySQL, Oracle, or another dialect.
+  const _stepDatabaseId = String(options?.databaseId || '').trim();
+  const _stepTargetDb = _stepDatabaseId ? multiDbRegistry.getDatabaseById(_stepDatabaseId) : null;
+  const _stepDbType = String(_stepTargetDb?.type || 'postgres').toLowerCase();
   const { text, values, placeholderOrder, placeholderOccurrences } = buildManualSqlQuery(
     sqlText,
     rawParams,
     workflowContext,
-    options,
+    { ...options, dbType: _stepDbType },
   );
   const operation = detectSqlOperation(sqlText);
 

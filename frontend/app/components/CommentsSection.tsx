@@ -21,11 +21,16 @@ interface Props {
 }
 
 function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'hace un momento';
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 5)    return 'ahora mismo';
+  if (diff < 60)   return `hace ${diff} seg`;
   if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-  return `hace ${Math.floor(diff / 86400)} días`;
+  const days = Math.floor(diff / 86400);
+  return days === 1 ? 'hace 1 día' : `hace ${days} días`;
 }
 
 function Avatar({ name, role }: { name: string; role: string }) {

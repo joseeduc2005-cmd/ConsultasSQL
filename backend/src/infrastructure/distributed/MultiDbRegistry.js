@@ -399,6 +399,12 @@ export class MultiDbRegistry {
       return `oracle://${auth}@${host}:${port}/${databaseName}`;
     }
 
+    if (type === 'mongodb') {
+      const port = Number(database?.port) || 27017;
+      const dbPart = databaseName ? `/${databaseName}` : '';
+      return `mongodb://${auth}@${host}:${port}${dbPart}`;
+    }
+
     return '';
   }
 
@@ -584,10 +590,34 @@ export class MultiDbRegistry {
         driver: mssql,
         pool: await mssql.connect(config),
       };
+    } else if (database.type === 'mongodb') {
+      let mongodb;
+      try {
+        mongodb = await import('mongodb');
+      } catch {
+        throw new Error(
+          `Driver MongoDB no instalado. Ejecuta: npm install mongodb  y reinicia el servidor.`,
+        );
+      }
+      const MongoClient = mongodb.MongoClient ?? mongodb.default?.MongoClient;
+      const uri = database.connectionString || (() => {
+        const user = database.user ? encodeURIComponent(database.user) : '';
+        const pass = database.password ? encodeURIComponent(database.password) : '';
+        const auth = user ? (pass ? `${user}:${pass}@` : `${user}@`) : '';
+        return `mongodb://${auth}${database.host || 'localhost'}:${database.port || 27017}`;
+      })();
+      const mongoClient = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+      await mongoClient.connect();
+      client = {
+        type: 'mongodb',
+        driver: mongodb,
+        client: mongoClient,
+        dbName: database.database || 'test',
+      };
     } else {
       throw new Error(
         `Motor '${database.type}' no soportado. ` +
-        `Motores válidos: postgres, oracle, mysql, mssql.`,
+        `Motores válidos: postgres, oracle, mysql, mssql, mongodb.`,
       );
     }
 
@@ -643,9 +673,97 @@ export class MultiDbRegistry {
       return result.recordset || [];
     }
 
+    if (client.type === 'mongodb') {
+      // sql is a JSON string (or object) describing the MongoDB operation
+      let mongoOp;
+      try {
+        mongoOp = typeof compiledQuery.sql === 'string' ? JSON.parse(compiledQuery.sql) : compiledQuery.sql;
+      } catch {
+        throw new Error(
+          'MongoDB: el campo SQL debe ser un JSON válido.\n' +
+          'Ejemplos:\n' +
+          '  {"collection":"orders","find":{"status":"active"},"limit":100}\n' +
+          '  {"collection":"orders","aggregate":[{"$group":{"_id":"$status","total":{"$sum":1}}}]}\n' +
+          '  {"collection":"orders","updateMany":{"filter":{"status":"old"},"update":{"$set":{"status":"archived"}}}}'
+        );
+      }
+
+      const { collection: colName, ...ops } = mongoOp || {};
+      if (!colName) throw new Error('MongoDB: debe especificar el campo "collection" en el JSON.');
+
+      const db = client.client.db(client.dbName);
+      const col = db.collection(colName);
+
+      // ── READ ──────────────────────────────────────────────────────────────
+      if (ops.find !== undefined) {
+        const cursor = col.find(ops.find || {}, { projection: ops.projection || {} });
+        if (ops.sort) cursor.sort(ops.sort);
+        if (ops.skip) cursor.skip(Number(ops.skip));
+        const limit = Number(ops.limit || 1000);
+        cursor.limit(limit);
+        return await cursor.toArray();
+      }
+      if (ops.findOne !== undefined) {
+        const doc = await col.findOne(ops.findOne || {}, { projection: ops.projection || {} });
+        return doc ? [doc] : [];
+      }
+      if (ops.aggregate) {
+        return await col.aggregate(ops.aggregate).toArray();
+      }
+      if (ops.countDocuments !== undefined) {
+        const count = await col.countDocuments(ops.countDocuments || {});
+        return [{ count }];
+      }
+      if (ops.distinct !== undefined) {
+        const values = await col.distinct(ops.distinct, ops.filter || {});
+        return values.map((v) => ({ value: v }));
+      }
+
+      // ── WRITE ─────────────────────────────────────────────────────────────
+      if (ops.insertOne !== undefined) {
+        const r = await col.insertOne(ops.insertOne);
+        return [{ insertedId: String(r.insertedId), acknowledged: r.acknowledged }];
+      }
+      if (ops.insertMany !== undefined) {
+        const r = await col.insertMany(ops.insertMany);
+        return [{ insertedCount: r.insertedCount, acknowledged: r.acknowledged }];
+      }
+      if (ops.updateOne !== undefined) {
+        const { filter, update, upsert } = ops.updateOne;
+        const r = await col.updateOne(filter || {}, update, { upsert: Boolean(upsert) });
+        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }];
+      }
+      if (ops.updateMany !== undefined) {
+        const { filter, update, upsert } = ops.updateMany;
+        const r = await col.updateMany(filter || {}, update, { upsert: Boolean(upsert) });
+        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }];
+      }
+      if (ops.replaceOne !== undefined) {
+        const { filter, replacement, upsert } = ops.replaceOne;
+        const r = await col.replaceOne(filter || {}, replacement, { upsert: Boolean(upsert) });
+        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount }];
+      }
+      if (ops.deleteOne !== undefined) {
+        const filter = ops.deleteOne.filter ?? ops.deleteOne;
+        const r = await col.deleteOne(filter);
+        return [{ deletedCount: r.deletedCount }];
+      }
+      if (ops.deleteMany !== undefined) {
+        const filter = ops.deleteMany.filter ?? ops.deleteMany;
+        const r = await col.deleteMany(filter);
+        return [{ deletedCount: r.deletedCount }];
+      }
+
+      throw new Error(
+        `MongoDB: operación no reconocida. Operaciones soportadas: ` +
+        `find, findOne, aggregate, countDocuments, distinct, ` +
+        `insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne, deleteMany.`
+      );
+    }
+
     throw new Error(
       `Motor '${client.type}' no tiene implementación de executeCompiledQuery. ` +
-      `Motores válidos: postgres, oracle, mysql, mssql.`,
+      `Motores válidos: postgres, oracle, mysql, mssql, mongodb.`,
     );
   }
 

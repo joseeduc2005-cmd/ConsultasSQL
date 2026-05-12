@@ -9,6 +9,7 @@ import logger from '../infrastructure/logger/logger.js';
  *   getUserFromRequest: Function,
  *   getRoleFromRequest: Function,
  *   logQueryHistory: Function,
+ *   logArticleExecution: Function,
  *   bumpQueryCacheDataVersion: Function,
  * }} deps
  */
@@ -18,6 +19,7 @@ export function createExecuteRouter({
   getUserFromRequest,
   getRoleFromRequest,
   logQueryHistory,
+  logArticleExecution,
   bumpQueryCacheDataVersion,
 }) {
   const router = Router();
@@ -122,42 +124,52 @@ export function createExecuteRouter({
         databaseHint: requestedDatabaseHint,
       });
 
+      const execMs = Date.now() - startedAt;
+
       if (!result.success) {
         // Audit log de error — fire-and-forget (no bloquea la respuesta)
         logQueryHistory({
-          username,
-          role,
+          username, role,
           queryText: `execute article ${articleId}`,
           generatedSql: String(result?.executedQuery || 'workflow execution'),
-          queryParams: result?.queryParams,
-          placeholderOrder: result?.placeholderOrder,
-          executionMs: Date.now() - startedAt,
-          rowCount: 0,
-          wasCached: false,
-          status: 'error',
+          queryParams: result?.queryParams, placeholderOrder: result?.placeholderOrder,
+          executionMs: execMs, rowCount: 0, wasCached: false, status: 'error',
         }).catch((e) => logger.warn('logQueryHistory error (execute error)', { error: e?.message }));
 
-        reqLog.warn('execute POST: article failed', { articleId, message: result.message, ms: Date.now() - startedAt });
+        if (typeof logArticleExecution === 'function') {
+          logArticleExecution({
+            articleId, articleTitulo: result?.articleTitulo || '',
+            ejecutadoPor: username, ejecutadoRol: role,
+            parametrosUsados: rawParams, filasResultado: 0,
+            duracionMs: execMs, estado: 'error', mensajeError: result.message,
+          }).catch(() => {});
+        }
+
+        reqLog.warn('execute POST: article failed', { articleId, message: result.message, ms: execMs });
         return res.status(400).json({ success: false, message: result.message });
       }
 
       bumpQueryCacheDataVersion();
 
-      // Audit log de éxito — fire-and-forget (un fallo en logging NO aborta la respuesta 200)
+      // Audit log de éxito — fire-and-forget
       logQueryHistory({
-        username,
-        role,
+        username, role,
         queryText: `execute article ${articleId}`,
         generatedSql: String(result?.executedQuery || 'workflow execution'),
-        queryParams: result?.queryParams,
-        placeholderOrder: result?.placeholderOrder,
-        executionMs: Date.now() - startedAt,
-        rowCount: Number(result?.rowCount || 0),
-        wasCached: false,
-        status: 'ok',
+        queryParams: result?.queryParams, placeholderOrder: result?.placeholderOrder,
+        executionMs: execMs, rowCount: Number(result?.rowCount || 0), wasCached: false, status: 'ok',
       }).catch((e) => logger.warn('logQueryHistory error (execute ok)', { error: e?.message }));
 
-      reqLog.info('execute POST: OK', { articleId, ms: Date.now() - startedAt, rowCount: result?.rowCount });
+      if (typeof logArticleExecution === 'function') {
+        logArticleExecution({
+          articleId, articleTitulo: result?.articleTitulo || '',
+          ejecutadoPor: username, ejecutadoRol: role,
+          parametrosUsados: rawParams, filasResultado: Number(result?.rowCount || 0),
+          duracionMs: execMs, estado: 'ok', mensajeError: null,
+        }).catch(() => {});
+      }
+
+      reqLog.info('execute POST: OK', { articleId, ms: execMs, rowCount: result?.rowCount });
 
       const sanitized = enforceStrictProductionSqlPayload(result || {});
       return res.status(200).json({

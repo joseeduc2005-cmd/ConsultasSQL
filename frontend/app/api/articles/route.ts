@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { B, fwdJson, err500, proxyJson } from '@/app/lib/backend-client';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const res = await fetch(`${B}/api/articles`);
+    const role = request.headers.get('x-user-role') || '';
+    const auth = request.headers.get('authorization') || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (role) headers['x-user-role'] = role;
+    if (auth) headers['Authorization'] = auth;
+    const res = await fetch(`${B}/api/articles`, { headers });
     if (!res.ok) return NextResponse.json({ error: 'Error backend al obtener artículos' }, { status: res.status });
     return proxyJson(res);
   } catch (e) { return err500('articles/GET', e); }

@@ -240,7 +240,7 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-6 max-w-4xl">
+      <div className="p-4 w-full">
         {/* Article header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-[color:var(--ink-900)] mb-2">{selectedArticle.titulo}</h1>
@@ -537,7 +537,12 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               const resumen = String(res?.resumenHumano || '').trim();
               const isNoticeOutput = !hasRows && resumen.includes('\n');
               if (isNoticeOutput) return null;
-              if (!hasRows) return null;
+              if (!hasRows) return (
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/80 dark:bg-slate-900/50 dark:border-slate-700 px-4 py-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span>ℹ️</span>
+                  <span>Esta operación no devolvió filas tabulares. La descarga CSV y los totales aparecen cuando el resultado es un <span className="font-semibold">SELECT con filas</span>.</span>
+                </div>
+              );
 
               const cols = Object.keys(rows[0] || {});
               const isDbmsOutput = cols.length === 1 && cols[0] === 'output';
@@ -579,23 +584,30 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
               });
               const hasTotals = numericCols.length > 0;
 
-              // ── Descargar CSV ─────────────────────────────────────────
-              const downloadCsv = () => {
-                const escape = (v: unknown) => {
-                  const s = String(v ?? '');
-                  return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
-                };
-                const header = cols.map(escape).join(',');
-                const body = rows.map((r) => cols.map((c) => escape(r[c])).join(',')).join('\n');
-                const totalsRow = hasTotals ? cols.map((c) => numericCols.includes(c) ? escape(totals[c].toFixed(2)) : '').join(',') : '';
-                const csv = [header, body, ...(hasTotals ? [`TOTAL,${totalsRow.split(',').slice(1).join(',')}`] : [])].join('\n');
-                const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `resultado_${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
+              // ── Descargar Excel ───────────────────────────────────────
+              const downloadExcel = async () => {
+                const XLSX = await import('xlsx');
+                const dataRows: Record<string, string | number>[] = rows.map((r) =>
+                  Object.fromEntries(cols.map((c) => [c, r[c] ?? ''])) as Record<string, string | number>
+                );
+                if (hasTotals) {
+                  const totalsRow: Record<string, string | number> = {};
+                  cols.forEach((c, idx) => {
+                    if (idx === 0 && !numericCols.includes(c)) totalsRow[c] = 'TOTAL';
+                    else if (numericCols.includes(c)) totalsRow[c] = totals[c];
+                    else totalsRow[c] = '';
+                  });
+                  dataRows.push(totalsRow);
+                }
+                const ws = XLSX.utils.json_to_sheet(dataRows, { header: cols });
+                // Ancho automático de columnas
+                const colWidths = cols.map((c) => ({
+                  wch: Math.max(c.length, ...rows.slice(0, 50).map((r) => String(r[c] ?? '').length), 10),
+                }));
+                ws['!cols'] = colWidths;
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Resultado');
+                XLSX.writeFile(wb, `resultado_${new Date().toISOString().slice(0, 10)}.xlsx`);
               };
 
               return (
@@ -609,14 +621,14 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
                       </span>
                     </span>
                     <button
-                      onClick={downloadCsv}
-                      title="Descargar CSV"
+                      onClick={downloadExcel}
+                      title="Descargar Excel"
                       className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
-                      Descargar CSV
+                      Descargar Excel
                     </button>
                   </div>
 

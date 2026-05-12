@@ -778,7 +778,7 @@ function AdminPage() {
     : 'inline-flex rounded-xl border border-slate-700 bg-slate-900/80 p-1';
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden px-3 py-3 sm:px-5 sm:py-5">
+    <div className="h-screen flex flex-col overflow-hidden px-2 py-2">
       <div className="glass-panel-strong sticky top-0 z-40 overflow-visible rounded-2xl border px-4 sm:px-6">
         <div className="w-full py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -822,8 +822,8 @@ function AdminPage() {
       </div>
 
       <div className="flex-1 min-h-0 w-full py-4">
-        <div className="flex gap-4 h-full">
-          <aside className={`glass-panel glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[68px]' : 'w-[320px]'}`}>
+        <div className="flex gap-3 h-full min-w-0">
+          <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-hidden flex-shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
             <Sidebar
               categories={categories}
               articles={visibleArticles}
@@ -838,15 +838,17 @@ function AdminPage() {
           </aside>
 
           {!selectedArticle ? (
-            <section className="glass-panel-strong glass-panel-hover flex-1 rounded-2xl p-4 h-full min-h-0 flex items-center justify-center">
-              <p className="text-lg text-[color:var(--ink-700)]">Selecciona un articulo del menu</p>
+            <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 flex flex-col items-center justify-center gap-3">
+              <div className="text-4xl opacity-30">📄</div>
+              <p className="text-base font-medium text-[color:var(--ink-700)]">Selecciona un artículo del menú</p>
+              <p className="text-xs text-[color:var(--ink-500)]">Haz clic en una categoría o usa el buscador</p>
             </section>
           ) : (
             <>
-              <section className="glass-panel-strong glass-panel-hover flex-1 rounded-2xl p-4 h-full min-h-0 overflow-auto">
+              <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 overflow-auto">
                 <ContentPanel selectedArticle={selectedArticle} loading={loading} error="" onExecuteSolution={async () => 'OK'} />
               </section>
-              <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-4 h-full min-h-0 overflow-auto flex flex-col transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[68px]' : 'w-[360px]'}`}>
+              <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-auto flex flex-col flex-shrink-0 transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[48px]' : 'w-[260px] xl:w-[300px]'}`}>
                 <CommentsSection articleId={selectedArticle.id} currentUser={currentUser} collapsed={commentsCollapsed} onToggleCollapse={() => setCommentsCollapsed((prev) => !prev)} />
               </section>
             </>

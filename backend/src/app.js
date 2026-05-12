@@ -429,7 +429,28 @@ async function ensureKnowledgeBaseSchema() {
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS campos_formulario JSONB`);
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS script TEXT`);
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS script_json JSONB`);
-    console.log('✓ Esquema de knowledge_base asegurado: columnas descripcion, contenido_md, tipo_solucion, pasos, campos_formulario, script y script_json presentes');
+    // ── Auditoría y control de visibilidad ────────────────────────────────
+    await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS visible_para VARCHAR(20) DEFAULT 'todos'`);
+    await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS creado_por_username VARCHAR(100)`);
+    await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado_por VARCHAR(100)`);
+    await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado TIMESTAMP`);
+    // Tabla de auditoría de ejecuciones
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS article_executions (
+        id SERIAL PRIMARY KEY,
+        article_id INTEGER NOT NULL,
+        article_titulo TEXT,
+        ejecutado_por VARCHAR(100) NOT NULL,
+        ejecutado_rol VARCHAR(20),
+        parametros_usados JSONB,
+        filas_resultado INTEGER DEFAULT 0,
+        duracion_ms INTEGER DEFAULT 0,
+        estado VARCHAR(10) DEFAULT 'ok',
+        mensaje_error TEXT,
+        ejecutado_en TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✓ Esquema de knowledge_base asegurado: columnas de auditoría y tabla article_executions presentes');
   } catch (err) {
     console.error('✗ Error asegurando esquema knowledge_base:', err.message || err);
   }
@@ -1276,6 +1297,32 @@ async function logQueryHistory({
     );
   } catch (error) {
     console.error('[QUERY_HISTORY] ❌ Error registrando historial:', error.message || error);
+  }
+}
+
+/**
+ * Registra una ejecución de artículo en la tabla article_executions (auditoría completa).
+ */
+async function logArticleExecution({ articleId, articleTitulo, ejecutadoPor, ejecutadoRol, parametrosUsados, filasResultado, duracionMs, estado, mensajeError }) {
+  try {
+    await pool.query(
+      `INSERT INTO article_executions
+        (article_id, article_titulo, ejecutado_por, ejecutado_rol, parametros_usados, filas_resultado, duracion_ms, estado, mensaje_error, ejecutado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+      [
+        Number(articleId) || null,
+        String(articleTitulo || ''),
+        String(ejecutadoPor || 'anonymous'),
+        String(ejecutadoRol || 'user'),
+        parametrosUsados ? JSON.stringify(parametrosUsados) : null,
+        Math.max(0, Number(filasResultado) || 0),
+        Math.max(0, Number(duracionMs) || 0),
+        String(estado || 'ok'),
+        mensajeError ? String(mensajeError) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[ARTICLE_EXEC_AUDIT] ❌ Error registrando ejecución:', err.message || err);
   }
 }
 
@@ -2887,64 +2934,153 @@ function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {}, opti
   return { text, values, placeholderOrder, placeholderOccurrences };
 }
 
+/**
+ * Detects the operation type of a MongoDB JSON query.
+ * Returns 'select' for read operations and 'write' for DML.
+ */
+function detectMongoOperation(jsonText = '') {
+  try {
+    const op = JSON.parse(String(jsonText || '').trim());
+    if (op?.find !== undefined || op?.findOne !== undefined || op?.aggregate || op?.countDocuments !== undefined || op?.distinct !== undefined) return 'select';
+    if (op?.insertOne || op?.insertMany || op?.updateOne || op?.updateMany || op?.replaceOne || op?.deleteOne || op?.deleteMany) return 'insert';
+  } catch {
+    // not valid JSON — treat as read
+  }
+  return 'select';
+}
+
+/**
+ * Executes a write (DML) query on the specified target database, converting
+ * placeholder syntax as needed for MySQL, Oracle, MSSQL, and MongoDB.
+ * Falls back to the primary Postgres pool when no targetDatabaseId is given.
+ */
+async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
+  const params = Array.isArray(queryParams) ? queryParams : [];
+
+  if (!targetDatabaseId) {
+    return await pool.query(sqlText, params);
+  }
+
+  const targetDb = multiDbRegistry.getDatabaseById(targetDatabaseId);
+  if (!targetDb) {
+    // DB not in registry — fall back to primary pool (postgres)
+    return await pool.query(sqlText, params);
+  }
+
+  if (targetDb.type === 'postgres') {
+    const primaryDb = multiDbRegistry.getPrimaryDatabase();
+    if (!primaryDb || targetDb.id === primaryDb.id) {
+      return await pool.query(sqlText, params);
+    }
+    const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlText, params });
+    return { rows: rows || [], rowCount: (rows || []).length };
+  }
+
+  if (targetDb.type === 'mongodb') {
+    const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlText, params: {} });
+    return { rows: rows || [], rowCount: (rows || []).length };
+  }
+
+  // MySQL / Oracle / MSSQL — convert $N placeholders to native format
+  let sqlForTarget = sqlText;
+  let paramsForTarget = [...params];
+
+  if (paramsForTarget.length > 0) {
+    if (targetDb.type === 'mysql') {
+      sqlForTarget = sqlText.replace(/\$\d+/g, '?');
+    } else if (targetDb.type === 'oracle') {
+      sqlForTarget = sqlText.replace(/\$(\d+)/g, ':$1');
+    } else if (targetDb.type === 'mssql') {
+      let idx = 0;
+      sqlForTarget = sqlText.replace(/\$\d+/g, () => {
+        const val = paramsForTarget[idx++];
+        if (val === null || val === undefined) return 'NULL';
+        if (typeof val === 'number' && Number.isFinite(val)) return String(val);
+        return `'${String(val).replace(/'/g, "''")}'`;
+      });
+      paramsForTarget = [];
+    }
+  }
+
+  const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlForTarget, params: paramsForTarget });
+  return { rows: rows || [], rowCount: (rows || []).length };
+}
+
 async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowContext = {}, silent = false, options = {}) {
   const startedAt = Date.now();
-  // Resolve target DB type so buildManualSqlQuery can skip PostgreSQL-specific
-  // ::cast syntax when the destination is MySQL, Oracle, or another dialect.
   const _stepDatabaseId = String(options?.databaseId || '').trim();
   const _stepTargetDb = _stepDatabaseId ? multiDbRegistry.getDatabaseById(_stepDatabaseId) : null;
   const _stepDbType = String(_stepTargetDb?.type || 'postgres').toLowerCase();
-  const { text, values, placeholderOrder, placeholderOccurrences } = buildManualSqlQuery(
-    sqlText,
-    rawParams,
-    workflowContext,
-    { ...options, dbType: _stepDbType },
-  );
-  const operation = detectSqlOperation(sqlText);
+  const isMongoDb = _stepDbType === 'mongodb';
+
+  let text, values, placeholderOrder, placeholderOccurrences, operation;
+
+  if (isMongoDb) {
+    // MongoDB: resolve {{variable}} placeholders via simple string substitution,
+    // then pass the resulting JSON directly to executeCompiledQuery.
+    let resolvedQuery = String(sqlText || '').trim();
+    const allContext = { ...(workflowContext || {}), ...(rawParams || {}) };
+    for (const [key, val] of Object.entries(allContext)) {
+      const safe = val === null || val === undefined ? 'null'
+        : typeof val === 'string' ? JSON.stringify(val)
+        : String(val);
+      resolvedQuery = resolvedQuery.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), safe);
+    }
+    text = resolvedQuery;
+    values = [];
+    placeholderOrder = [];
+    placeholderOccurrences = [];
+    operation = detectMongoOperation(resolvedQuery);
+  } else {
+    // Standard SQL path
+    ({ text, values, placeholderOrder, placeholderOccurrences } = buildManualSqlQuery(
+      sqlText, rawParams, workflowContext, { ...options, dbType: _stepDbType },
+    ));
+    operation = detectSqlOperation(sqlText);
+  }
 
   if (!silent && typeof emit === 'function') {
-    emit('🧠 Motor SQL manual avanzado activado');
-    emit(`[SQL OPERATION] ${operation.toUpperCase()}`);
-    emit(`[SQL] ${text}`);
-    if (placeholderOrder.length > 0) {
-      emit(`[SQL PLACEHOLDERS] ${JSON.stringify(placeholderOrder)}`);
-    }
-    if (values.length > 0) {
-      emit(`[SQL PARAMS] ${JSON.stringify(values)}`);
-    }
+    emit(isMongoDb ? '🍃 Motor MongoDB activado' : '🧠 Motor SQL manual avanzado activado');
+    emit(`[OPERATION] ${operation.toUpperCase()}`);
+    emit(`[QUERY] ${text.slice(0, 500)}`);
+    if (placeholderOrder.length > 0) emit(`[SQL PLACEHOLDERS] ${JSON.stringify(placeholderOrder)}`);
+    if (values.length > 0) emit(`[SQL PARAMS] ${JSON.stringify(values)}`);
   }
 
-  logger.info('SQL manual ejecutado', {
-    operation,
+  logger.info('Query manual ejecutada', {
+    operation, dbType: _stepDbType,
     query: text.slice(0, 300),
-    placeholderOrder,
     paramCount: values.length,
-    databaseId: options?.databaseId || 'primary',
+    databaseId: _stepDatabaseId || 'primary',
   });
 
-  const targetDatabaseId = String(options?.databaseId || '').trim();
-  if (operation !== 'select' && targetDatabaseId) {
-    const db = multiDbRegistry.getDatabaseById(targetDatabaseId);
-    if (db && db.primary !== true) {
-      throw new Error(`La base ${targetDatabaseId} es de solo consulta (primary=false). No se permiten escrituras.`);
-    }
-  }
+  const targetDatabaseId = _stepDatabaseId;
 
-  const result = operation === 'select'
-    ? await executeSafeSelectQuery(text, values, 5000, {
+  let result;
+  if (isMongoDb) {
+    // MongoDB: all operations go through executeCompiledQuery
+    const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDatabaseId, sql: text, params: {} });
+    result = { rows: rows || [], rowCount: (rows || []).length };
+  } else if (operation === 'select') {
+    result = await executeSafeSelectQuery(text, values, 5000, {
       allowCrossDatabase: true,
       databaseId: targetDatabaseId,
       allowUnknownTablesForTarget: true,
-    })
-    : await pool.query(text, values);
+    });
+  } else {
+    // DML: route to the target DB (any engine), not just primary Postgres
+    result = await executeWriteToTargetDb(text, values, targetDatabaseId);
+  }
+
   const executionMs = Date.now() - startedAt;
   const affectedRows = Number(result.rowCount || 0);
 
   if (operation !== 'select') {
-    console.info('[SQL_MANUAL][WRITE_AUDIT]', {
-      operation,
+    console.info('[WRITE_AUDIT]', {
+      operation, dbType: _stepDbType,
       affectedRows,
-      query: text,
+      databaseId: targetDatabaseId || 'primary',
+      query: text.slice(0, 200),
     });
   }
 
@@ -5524,7 +5660,7 @@ app.use('/api', createContentRouter({
 }));
 app.use('/api/execute', createExecuteRouter({
   executeArticleById, enforceStrictProductionSqlPayload,
-  getUserFromRequest, getRoleFromRequest, logQueryHistory, bumpQueryCacheDataVersion,
+  getUserFromRequest, getRoleFromRequest, logQueryHistory, logArticleExecution, bumpQueryCacheDataVersion,
 }));
 app.use('/api/repair', createRepairRouter({
   executeArticleById, enforceStrictProductionSqlPayload,

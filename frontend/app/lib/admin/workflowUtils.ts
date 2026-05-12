@@ -97,6 +97,7 @@ export function createInitialFormState(): BuilderFormState {
   return {
     titulo: '', categoria: '', subcategoria: '', tags: '',
     descripcion: '', contenido_md: '', target_database: '',
+    visible_para: 'todos',
     tipo_solucion: 'database', archivo_md: null,
     workflow_rows: [createEmptyWorkflowRow(1)],
     script_json: null, script_creation_mode: 'visual_builder',

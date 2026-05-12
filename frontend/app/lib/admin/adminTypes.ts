@@ -40,6 +40,7 @@ export type BuilderFormState = {
   contenido_md: string;
   tipo_solucion: SolutionType;
   target_database: string;
+  visible_para: 'todos' | 'admin' | 'usuario';
   archivo_md?: File | null;
   workflow_rows: WorkflowRow[];
   script_json?: unknown;

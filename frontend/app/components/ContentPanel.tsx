@@ -689,16 +689,30 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
           </div>
         )}
 
-        {/* Footer */}
-        {selectedArticle.creado_en && (() => {
-          const d = new Date(selectedArticle.creado_en);
-          const label = isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-ES');
-          return label ? (
-            <div className="mt-6 text-xs text-[color:var(--ink-700)] text-center">
-              Última actualización: {label}
-            </div>
-          ) : null;
-        })()}
+        {/* Footer — Auditoría */}
+        <div className="mt-6 pt-4 border-t border-[color:var(--line)] flex flex-wrap gap-x-6 gap-y-1 text-xs text-[color:var(--ink-600)]">
+          {selectedArticle.creado_por_username && (
+            <span>✍️ Creado por <span className="font-semibold text-[color:var(--ink-800)]">{selectedArticle.creado_por_username}</span></span>
+          )}
+          {selectedArticle.creado_en && (() => {
+            const d = new Date(selectedArticle.creado_en);
+            return isNaN(d.getTime()) ? null : (
+              <span>📅 {d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            );
+          })()}
+          {selectedArticle.actualizado_por && (
+            <span>🔄 Editado por <span className="font-semibold text-[color:var(--ink-800)]">{selectedArticle.actualizado_por}</span></span>
+          )}
+          {selectedArticle.actualizado_en && (() => {
+            const d = new Date(selectedArticle.actualizado_en as string);
+            return isNaN(d.getTime()) ? null : (
+              <span>🕐 {d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}{' '}{d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+            );
+          })()}
+          {selectedArticle.visible_para && selectedArticle.visible_para !== 'todos' && (
+            <span>{selectedArticle.visible_para === 'admin' ? '🔒 Solo admins' : '👤 Solo usuarios'}</span>
+          )}
+        </div>
       </div>
     </div>
   );

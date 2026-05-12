@@ -14,7 +14,11 @@ export interface KnowledgeArticle {
   script_json?: Record<string, unknown> | string | null;
   contenido_md?: string;
   tipo_solucion?: 'lectura' | 'ejecutable' | 'database' | 'script';
+  visible_para?: 'todos' | 'admin' | 'usuario';
+  creado_por_username?: string | null;
+  actualizado_por?: string | null;
   creado_en?: string;
+  actualizado_en?: string | null;
 }
 
 export interface User {

@@ -127,7 +127,14 @@ function AdminPage() {
     const fetchArticles = async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/articles');
+        const token = localStorage.getItem('token');
+        const userRole = currentUser?.role || JSON.parse(localStorage.getItem('user') || '{}')?.role || 'user';
+        const res = await fetch('/api/articles', {
+          headers: {
+            'x-user-role': userRole,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
         const data = await res.json();
         const fetched: KnowledgeArticle[] = data?.success && Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
         setArticles(fetched);
@@ -303,6 +310,7 @@ function AdminPage() {
       contenido_md: article.contenido_md || '',
       tipo_solucion: effectiveType,
       target_database: existingTargetDb,
+      visible_para: (article.visible_para as 'todos' | 'admin' | 'usuario') || 'todos',
       workflow_rows: adaptRowsForSolutionType(parseWorkflowRowsFromScript(article.script_json), effectiveType),
       script_json: parsedSource,
       script_creation_mode: normalizedCreationMode,
@@ -406,6 +414,7 @@ function AdminPage() {
         contenido_md: form.contenido_md,
         tipo_solucion: form.tipo_solucion,
         script_json: scriptJson,
+        visible_para: form.visible_para || 'todos',
       };
 
       const response = await fetch(isEdit ? `/api/articles/${form.id}` : '/api/articles', {
@@ -898,6 +907,20 @@ function AdminPage() {
                         <p className="text-xs text-red-500 font-medium">Selecciona la base de datos donde se ejecutará el SQL.</p>
                       )}
                     </div>
+                    {/* Visibilidad del artículo */}
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Visible para</p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Controla quién puede ver y ejecutar este artículo.</p>
+                      <select
+                        value={uploadForm.visible_para}
+                        onChange={(e) => setUploadForm((prev) => ({ ...prev, visible_para: e.target.value as 'todos' | 'admin' | 'usuario' }))}
+                        className={modalInputClass}
+                      >
+                        <option value="todos">🌐 Administradores y usuarios</option>
+                        <option value="admin">🔒 Solo administradores</option>
+                        <option value="usuario">👤 Solo usuarios</option>
+                      </select>
+                    </div>
                     <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD — puedes incluir SQL con {{parametros}} para que el usuario los complete" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
                       <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 1 · Modo de ejecución</p>
@@ -1067,6 +1090,20 @@ function AdminPage() {
                       {editAttempted && !editForm.target_database && (
                         <p className="text-xs text-red-500 font-medium">Selecciona la base de datos donde se ejecutará el SQL.</p>
                       )}
+                    </div>
+                    {/* Visibilidad del artículo */}
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Visible para</p>
+                      <p className="text-xs text-[color:var(--ink-600)]">Controla quién puede ver y ejecutar este artículo.</p>
+                      <select
+                        value={editForm.visible_para}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, visible_para: e.target.value as 'todos' | 'admin' | 'usuario' }))}
+                        className={modalInputClass}
+                      >
+                        <option value="todos">🌐 Administradores y usuarios</option>
+                        <option value="admin">🔒 Solo administradores</option>
+                        <option value="usuario">👤 Solo usuarios</option>
+                      </select>
                     </div>
                     <textarea value={editForm.contenido_md} onChange={(e) => setEditForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
@@ -1251,10 +1288,12 @@ function AdminPage() {
                     <input placeholder="Nombre visible (ej: Oracle Producción)" value={dbForm.label} onChange={e => setDbForm(p => ({...p, label: e.target.value}))} className={modalInputClass} />
                   </div>
                   <div className="grid grid-cols-3 gap-3">
-                    <select value={dbForm.type} onChange={e => setDbForm(p => ({...p, type: e.target.value, port: e.target.value === 'oracle' ? '1521' : e.target.value === 'mysql' ? '3306' : '5432'}))} className={modalInputClass}>
+                    <select value={dbForm.type} onChange={e => setDbForm(p => ({...p, type: e.target.value, port: e.target.value === 'oracle' ? '1521' : e.target.value === 'mysql' ? '3306' : e.target.value === 'mongodb' ? '27017' : e.target.value === 'mssql' ? '1433' : '5432'}))} className={modalInputClass}>
                       <option value="postgres">PostgreSQL</option>
                       <option value="oracle">Oracle</option>
                       <option value="mysql">MySQL</option>
+                      <option value="mongodb">MongoDB</option>
+                      <option value="mssql">SQL Server</option>
                     </select>
                     <input required placeholder="Host / IP" value={dbForm.host} onChange={e => setDbForm(p => ({...p, host: e.target.value}))} className={modalInputClass} />
                     <input required placeholder="Puerto" type="number" value={dbForm.port} onChange={e => setDbForm(p => ({...p, port: e.target.value}))} className={modalInputClass} />

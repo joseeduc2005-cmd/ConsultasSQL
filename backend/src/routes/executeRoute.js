@@ -7,6 +7,7 @@ import logger from '../infrastructure/logger/logger.js';
  *   executeArticleById: Function,
  *   enforceStrictProductionSqlPayload: Function,
  *   getUserFromRequest: Function,
+ *   getUserFromRequestAsync: Function,
  *   getRoleFromRequest: Function,
  *   logQueryHistory: Function,
  *   logArticleExecution: Function,
@@ -17,6 +18,7 @@ export function createExecuteRouter({
   executeArticleById,
   enforceStrictProductionSqlPayload,
   getUserFromRequest,
+  getUserFromRequestAsync,
   getRoleFromRequest,
   logQueryHistory,
   logArticleExecution,
@@ -54,12 +56,14 @@ export function createExecuteRouter({
         return done(false, 'ID inválido', null);
       }
 
-      // Identidad del usuario: viene como query param porque EventSource no envía headers
+      // Identidad del usuario: query param primero (EventSource no envía headers),
+      // luego sesión restaurada desde BD (funciona tras reinicios del backend).
+      const sessionUser = await (getUserFromRequestAsync || getUserFromRequest)(req);
       const username = String(
-        req.query?.username || getUserFromRequest(req)?.username || 'anonymous'
+        req.query?.username || sessionUser?.username || 'anonymous'
       ).trim();
       const userRole = String(
-        req.query?.userRole || req.headers['x-user-role'] || getRoleFromRequest(req, getUserFromRequest(req)) || 'user'
+        req.query?.userRole || req.headers['x-user-role'] || getRoleFromRequest(req, sessionUser) || 'user'
       ).trim();
 
       reqLog.info('SSE execute start', { articleId, username, userRole });

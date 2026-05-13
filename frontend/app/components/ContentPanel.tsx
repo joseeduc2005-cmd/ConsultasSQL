@@ -40,18 +40,18 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
   const { theme } = useTheme();
   const isLightTheme = theme === 'light';
   const [dynamicInputs, setDynamicInputs] = useState<{ [key: string]: string }>({});
-  const [localUser, setLocalUser] = useState<{ username: string; role: string } | null>(null);
-
-  // Leer usuario del localStorage como fallback cuando no viene como prop
-  useEffect(() => {
+  // Leer localStorage sincrónicamente en el estado inicial para evitar race conditions
+  const [localUser] = useState<{ username: string; role: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const raw = localStorage.getItem('user');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.username) setLocalUser({ username: parsed.username, role: parsed.role || 'user' });
+        if (parsed?.username) return { username: parsed.username, role: parsed.role || 'user' };
       }
     } catch { /* ignorar */ }
-  }, []);
+    return null;
+  });
 
   // Usar prop si viene (más confiable), si no usar localStorage
   const currentUser = currentUserProp ?? localUser;

@@ -15,17 +15,30 @@ export async function GET(
   // Propagar o generar correlation ID para poder correlacionar logs SSE con el backend
   const requestId = request.headers.get('x-request-id') || randomUUID();
 
+  // EventSource no puede enviar headers personalizados desde el browser.
+  // Extraemos el token de la cookie para pasarlo como Authorization al backend.
+  const cookieHeader = request.headers.get('cookie') || '';
+  const tokenFromCookie = cookieHeader
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('token='))
+    ?.split('=')
+    .slice(1)
+    .join('=');
+  const decodedToken = tokenFromCookie ? decodeURIComponent(tokenFromCookie) : '';
+  const authHeader = request.headers.get('Authorization') || (decodedToken ? `Bearer ${decodedToken}` : '');
+
   try {
     const upstream = await fetch(
       `${backendUrl}/api/execute/stream/${id}${suffix}`,
       {
         headers: {
           Accept: 'text/event-stream',
-          // Reenviar autenticación — sin esto, el backend recibe requests sin sesión
-          Authorization: request.headers.get('Authorization') || '',
+          // Reenviar autenticación — Authorization se reconstruye desde la cookie si EventSource no pudo enviarlo
+          Authorization: authHeader,
           'x-user-role': request.headers.get('x-user-role') || '',
           'x-request-id': requestId,
-          ...(request.headers.get('cookie') ? { cookie: request.headers.get('cookie')! } : {}),
+          ...(cookieHeader ? { cookie: cookieHeader } : {}),
         },
         // @ts-ignore — Node.js fetch supports duplex for streaming
         duplex: 'half',

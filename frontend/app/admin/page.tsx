@@ -855,7 +855,7 @@ function AdminPage() {
           ) : (
             <>
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 overflow-auto">
-                <ContentPanel selectedArticle={selectedArticle} loading={loading} error="" onExecuteSolution={async () => 'OK'} />
+                <ContentPanel selectedArticle={selectedArticle} loading={loading} error="" onExecuteSolution={async () => 'OK'} currentUser={currentUser} />
               </section>
               <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-auto flex flex-col flex-shrink-0 transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[48px]' : 'w-[260px] xl:w-[300px]'}`}>
                 <CommentsSection articleId={selectedArticle.id} currentUser={currentUser} collapsed={commentsCollapsed} onToggleCollapse={() => setCommentsCollapsed((prev) => !prev)} />

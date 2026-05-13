@@ -30,26 +30,31 @@ interface ContentPanelProps {
   loading: boolean;
   error: string;
   onExecuteSolution: (articleId: number | string, formData: Record<string, any>) => Promise<string>;
+  /** Usuario autenticado — si no se pasa, se lee de localStorage */
+  currentUser?: { username: string; role: string } | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ContentPanel({ selectedArticle, loading }: ContentPanelProps) {
+export default function ContentPanel({ selectedArticle, loading, currentUser: currentUserProp }: ContentPanelProps) {
   const { theme } = useTheme();
   const isLightTheme = theme === 'light';
   const [dynamicInputs, setDynamicInputs] = useState<{ [key: string]: string }>({});
-  const [currentUser, setCurrentUser] = useState<{ username: string; role: string } | null>(null);
+  const [localUser, setLocalUser] = useState<{ username: string; role: string } | null>(null);
 
-  // Leer usuario del localStorage para identificar quién ejecuta
+  // Leer usuario del localStorage como fallback cuando no viene como prop
   useEffect(() => {
     try {
       const raw = localStorage.getItem('user');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.username) setCurrentUser({ username: parsed.username, role: parsed.role || 'user' });
+        if (parsed?.username) setLocalUser({ username: parsed.username, role: parsed.role || 'user' });
       }
     } catch { /* ignorar */ }
   }, []);
+
+  // Usar prop si viene (más confiable), si no usar localStorage
+  const currentUser = currentUserProp ?? localUser;
   const [executing, setExecuting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [execDone, setExecDone] = useState(false);

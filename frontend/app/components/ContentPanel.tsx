@@ -612,6 +612,24 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                 const dataRows: Record<string, string | number>[] = rows.map((r) =>
                   Object.fromEntries(cols.map((c) => [c, r[c] ?? ''])) as Record<string, string | number>
                 );
+                // Auditoría de descarga Excel — fire-and-forget
+                const auditUser = resolveCurrentUser();
+                fetch('/api/audit/event', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    evento: 'excel_descarga',
+                    username: auditUser?.username || 'anonymous',
+                    rol: auditUser?.role || 'user',
+                    detalle: {
+                      articulo_id: selectedArticle?.id,
+                      articulo_titulo: selectedArticle?.titulo,
+                      filas: rows.length,
+                      columnas: cols.length,
+                      archivo: `resultado_${new Date().toISOString().slice(0, 10)}.xlsx`,
+                    },
+                  }),
+                }).catch(() => {});
                 if (hasTotals) {
                   const totalsRow: Record<string, string | number> = {};
                   cols.forEach((c, idx) => {

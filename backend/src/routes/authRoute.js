@@ -4,10 +4,15 @@ import bcrypt from 'bcryptjs';
 import { sessions } from '../lib/session.js';
 
 /**
- * @param {{ pool: import('pg').Pool }} deps
+ * @param {{ pool: import('pg').Pool, logLoginEvent: Function }} deps
  */
-export function createAuthRouter({ pool }) {
+export function createAuthRouter({ pool, logLoginEvent }) {
   const router = Router();
+
+  const getIp = (req) =>
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+  const getUA = (req) =>
+    req.headers['user-agent'] ? String(req.headers['user-agent']).substring(0, 300) : null;
 
   // POST /api/auth/login
   router.post('/login', async (req, res) => {
@@ -24,6 +29,10 @@ export function createAuthRouter({ pool }) {
       );
 
       if (result.rowCount === 0) {
+        // Auditoría: login fallido — usuario no existe
+        if (typeof logLoginEvent === 'function') {
+          logLoginEvent({ username, rol: null, ip: getIp(req), userAgent: getUA(req), estado: 'fail', detalle: 'Usuario no encontrado' }).catch(() => {});
+        }
         return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrecta' });
       }
 
@@ -31,6 +40,10 @@ export function createAuthRouter({ pool }) {
       const passwordValid = await bcrypt.compare(password, user.password);
 
       if (!passwordValid) {
+        // Auditoría: login fallido — contraseña incorrecta
+        if (typeof logLoginEvent === 'function') {
+          logLoginEvent({ username, rol: user.role, ip: getIp(req), userAgent: getUA(req), estado: 'fail', detalle: 'Contraseña incorrecta' }).catch(() => {});
+        }
         return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrecta' });
       }
 
@@ -53,6 +66,11 @@ export function createAuthRouter({ pool }) {
         );
       } catch (dbErr) {
         console.warn('[AUTH] ⚠️ No se pudo guardar sesión en BD:', dbErr?.message);
+      }
+
+      // Auditoría: login exitoso
+      if (typeof logLoginEvent === 'function') {
+        logLoginEvent({ username: user.username, rol: user.role, ip: getIp(req), userAgent: getUA(req), estado: 'ok', detalle: null }).catch(() => {});
       }
 
       return res.status(200).json({ success: true, token, user: sessionUser });

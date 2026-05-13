@@ -450,7 +450,20 @@ async function ensureKnowledgeBaseSchema() {
         ejecutado_en TIMESTAMP DEFAULT NOW()
       )
     `);
-    console.log('✓ Esquema de knowledge_base asegurado: columnas de auditoría y tabla article_executions presentes');
+    // Tabla de auditoría de cambios a artículos (crear/editar/eliminar)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS article_changes (
+        id SERIAL PRIMARY KEY,
+        article_id INTEGER,
+        article_titulo TEXT,
+        accion VARCHAR(10) NOT NULL,
+        realizado_por VARCHAR(100) NOT NULL,
+        realizado_rol VARCHAR(20),
+        detalle JSONB,
+        realizado_en TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✓ Esquema de knowledge_base asegurado: tablas article_executions y article_changes presentes');
   } catch (err) {
     console.error('✗ Error asegurando esquema knowledge_base:', err.message || err);
   }
@@ -1297,6 +1310,31 @@ async function logQueryHistory({
     );
   } catch (error) {
     console.error('[QUERY_HISTORY] ❌ Error registrando historial:', error.message || error);
+  }
+}
+
+/**
+ * Registra un cambio (crear/editar/eliminar) de artículo en article_changes.
+ * accion: 'crear' | 'editar' | 'eliminar'
+ * detalle: objeto con los datos relevantes del cambio
+ */
+async function logArticleChange({ articleId, articleTitulo, accion, realizadoPor, realizadoRol, detalle }) {
+  try {
+    await pool.query(
+      `INSERT INTO article_changes
+        (article_id, article_titulo, accion, realizado_por, realizado_rol, detalle, realizado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [
+        Number(articleId) || null,
+        String(articleTitulo || ''),
+        String(accion || 'editar'),
+        String(realizadoPor || 'anonymous'),
+        String(realizadoRol || 'admin'),
+        detalle ? JSON.stringify(detalle) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[ARTICLE_CHANGE_AUDIT] ❌ Error registrando cambio:', err.message || err);
   }
 }
 
@@ -5656,7 +5694,7 @@ app.use('/api/query', distributedRouter);        // POST /api/query/distributed
 app.use('/api/auth', createAuthRouter({ pool }));
 app.use('/api', createContentRouter({
   pool, getUserFromRequest, ensureDynamicSchemaReady,
-  parseStructuredScript, validateBusinessScriptDefinition,
+  parseStructuredScript, validateBusinessScriptDefinition, logArticleChange,
 }));
 app.use('/api/execute', createExecuteRouter({
   executeArticleById, enforceStrictProductionSqlPayload,

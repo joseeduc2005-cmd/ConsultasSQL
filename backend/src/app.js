@@ -501,7 +501,32 @@ async function ensureKnowledgeBaseSchema() {
         END IF;
       END$$
     `);
-    console.log('✓ Esquema de knowledge_base asegurado: tablas article_executions y article_changes presentes');
+    // ── Auditoría de logins ───────────────────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_audit (
+        id        SERIAL PRIMARY KEY,
+        username  VARCHAR(100) NOT NULL,
+        rol       VARCHAR(20),
+        ip        VARCHAR(60),
+        user_agent TEXT,
+        estado    VARCHAR(10) DEFAULT 'ok',
+        detalle   TEXT,
+        fecha     TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    // ── Auditoría de eventos del sistema (descargas, exportaciones, etc.) ─────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS system_events (
+        id       SERIAL PRIMARY KEY,
+        evento   VARCHAR(60) NOT NULL,
+        usuario  VARCHAR(100),
+        rol      VARCHAR(20),
+        detalle  JSONB,
+        ip       VARCHAR(60),
+        fecha    TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✓ Esquema knowledge_base: article_executions, article_changes, login_audit, system_events presentes');
   } catch (err) {
     console.error('✗ Error asegurando esquema knowledge_base:', err.message || err);
   }
@@ -1356,6 +1381,49 @@ async function logQueryHistory({
  * accion: 'crear' | 'editar' | 'eliminar'
  * detalle: objeto con los datos relevantes del cambio
  */
+/**
+ * Registra un intento de login (exitoso o fallido) en login_audit.
+ */
+async function logLoginEvent({ username, rol, ip, userAgent, estado, detalle }) {
+  try {
+    await pool.query(
+      `INSERT INTO login_audit (username, rol, ip, user_agent, estado, detalle, fecha)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [
+        String(username || 'unknown'),
+        rol ? String(rol) : null,
+        ip ? String(ip).substring(0, 60) : null,
+        userAgent ? String(userAgent).substring(0, 300) : null,
+        String(estado || 'ok'),
+        detalle ? String(detalle) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[LOGIN_AUDIT] ❌ Error registrando login:', err.message || err);
+  }
+}
+
+/**
+ * Registra un evento del sistema (descarga Excel, exportación, etc.) en system_events.
+ */
+async function logSystemEvent({ evento, usuario, rol, detalle, ip }) {
+  try {
+    await pool.query(
+      `INSERT INTO system_events (evento, usuario, rol, detalle, ip, fecha)
+       VALUES ($1,$2,$3,$4,$5,NOW())`,
+      [
+        String(evento || 'evento_desconocido'),
+        usuario ? String(usuario) : null,
+        rol ? String(rol) : null,
+        detalle ? JSON.stringify(detalle) : null,
+        ip ? String(ip).substring(0, 60) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[SYSTEM_EVENT_AUDIT] ❌ Error registrando evento:', err.message || err);
+  }
+}
+
 async function logArticleChange({ articleId, articleTitulo, accion, realizadoPor, realizadoRol, detalle }) {
   try {
     await pool.query(
@@ -5729,7 +5797,58 @@ const { router: distributedRouter } = createDistributedRouter({
 });
 app.use('/api/distributed', distributedRouter); // GET /api/distributed/databases
 app.use('/api/query', distributedRouter);        // POST /api/query/distributed
-app.use('/api/auth', createAuthRouter({ pool }));
+app.use('/api/auth', createAuthRouter({ pool, logLoginEvent }));
+
+// ── Audit endpoint: el frontend registra eventos del cliente (descargas, etc.) ──
+app.post('/api/audit/event', async (req, res) => {
+  try {
+    const { evento, detalle } = req.body || {};
+    if (!evento) return res.status(400).json({ success: false, message: 'evento requerido' });
+    const sessionUser = await getUserFromRequestAsync(req);
+    const username = sessionUser?.username || String(req.body?.username || 'anonymous');
+    const rol = sessionUser?.role || String(req.body?.rol || 'user');
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    await logSystemEvent({ evento: String(evento), usuario: username, rol, detalle: detalle || {}, ip });
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
+// ── Audit queries: admin puede consultar login_audit y system_events ──────────
+app.get('/api/audit/logins', async (req, res) => {
+  try {
+    const user = await getUserFromRequestAsync(req);
+    if (user?.role !== 'admin') return res.status(403).json({ success: false, error: 'Solo admins' });
+    const limit = Math.min(Number(req.query.limit || 200), 1000);
+    const username = req.query.username ? String(req.query.username) : null;
+    const params = username ? [username, limit] : [limit];
+    const where = username ? 'WHERE username = $1' : '';
+    const r = await pool.query(
+      `SELECT id, username, rol, ip, user_agent, estado, detalle, fecha
+       FROM login_audit ${where} ORDER BY fecha DESC LIMIT $${params.length}`, params);
+    return res.status(200).json({ success: true, data: r.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+app.get('/api/audit/events', async (req, res) => {
+  try {
+    const user = await getUserFromRequestAsync(req);
+    if (user?.role !== 'admin') return res.status(403).json({ success: false, error: 'Solo admins' });
+    const limit = Math.min(Number(req.query.limit || 200), 1000);
+    const evento = req.query.evento ? String(req.query.evento) : null;
+    const params = evento ? [evento, limit] : [limit];
+    const where = evento ? 'WHERE evento = $1' : '';
+    const r = await pool.query(
+      `SELECT id, evento, usuario, rol, detalle, ip, fecha
+       FROM system_events ${where} ORDER BY fecha DESC LIMIT $${params.length}`, params);
+    return res.status(200).json({ success: true, data: r.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err?.message });
+  }
+});
 app.use('/api', createContentRouter({
   pool, getUserFromRequest, ensureDynamicSchemaReady,
   parseStructuredScript, validateBusinessScriptDefinition, logArticleChange,

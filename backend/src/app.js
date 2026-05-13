@@ -43,7 +43,7 @@ import { connectDatabase as probeUniversalConnection, closeConnection as closeUn
 import { createQueryRouter } from './routes/QueryRoute.js';
 import { initDynamicRoutes } from './routes/DynamicRoutes.js';
 import { createResponseSecurityMiddleware } from './infrastructure/security/responseSecurity.js';
-import { sessions, getUserFromRequest } from './lib/session.js';
+import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore } from './lib/session.js';
 import { createAuthRouter } from './routes/authRoute.js';
 import { createContentRouter } from './routes/contentRoute.js';
 import { createExecuteRouter, createRepairRouter } from './routes/executeRoute.js';
@@ -174,6 +174,7 @@ function createPgPool() {
 }
 
 let pool = createPgPool();
+initSessionStore(pool); // Permitir restaurar sesiones desde la BD tras reinicios
 
 let BUSINESS_ACTIONS_REGISTRY = createBusinessActionsRegistry(pool);
 
@@ -5735,7 +5736,8 @@ app.use('/api', createContentRouter({
 }));
 app.use('/api/execute', createExecuteRouter({
   executeArticleById, enforceStrictProductionSqlPayload,
-  getUserFromRequest, getRoleFromRequest, logQueryHistory, logArticleExecution, bumpQueryCacheDataVersion,
+  getUserFromRequest, getUserFromRequestAsync, getRoleFromRequest,
+  logQueryHistory, logArticleExecution, bumpQueryCacheDataVersion,
 }));
 app.use('/api/repair', createRepairRouter({
   executeArticleById, enforceStrictProductionSqlPayload,

@@ -669,6 +669,10 @@ export class MultiDbRegistry {
 
     if (client.type === 'mssql') {
       const request = client.pool.request();
+      // Bind named parameters @p1, @p2... — evita SQL injection por concatenación
+      (compiledQuery.params || []).forEach((val, i) => {
+        request.input(`p${i + 1}`, val ?? null);
+      });
       const result = await request.query(sql);
       return result.recordset || [];
     }

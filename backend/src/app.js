@@ -2274,18 +2274,36 @@ function isWriteConfirmed(rawParams = {}) {
 
 function hasUnsafeMutationWithoutWhere(sqlText = '') {
   const cleaned = String(sqlText || '').trim().replace(/;\s*$/, '').trim();
-  if (/^(update|delete)\b/i.test(cleaned) && !/\bwhere\b/i.test(cleaned)) {
-    return true;
-  }
+  if (!/^(update|delete)\b/i.test(cleaned)) return false;
+  // Sin ningún WHERE → inseguro
+  if (!/\bwhere\b/i.test(cleaned)) return true;
+  // WHERE trivialmente verdadero: 1=1, 1 = 1, true, 'a'='a', etc.
+  const whereIdx = cleaned.toLowerCase().lastIndexOf('where');
+  const afterWhere = cleaned.slice(whereIdx + 5).trim().replace(/;\s*$/, '').trim().toLowerCase();
+  const trivial = [
+    /^1\s*=\s*1$/,
+    /^'[^']*'\s*=\s*'[^']*'$/,    // 'a'='a'
+    /^true$/,
+    /^1\s*=\s*1\s*(and\s+.*)?$/,  // WHERE 1=1 AND ...
+  ];
+  if (trivial.some((re) => re.test(afterWhere))) return true;
   return false;
 }
 
 function detectSqlOperation(sqlText = '') {
   const cleaned = stripLeadingSqlComments(String(sqlText || '').trim().replace(/;\s*$/, '').trim()).toLowerCase();
   if (cleaned.startsWith('select')) return 'select';
+  // WITH ... AS (...) SELECT → CTE, es un select
+  if (/^with\s/.test(cleaned)) return 'select';
   if (cleaned.startsWith('update')) return 'update';
   if (cleaned.startsWith('delete')) return 'delete';
   if (cleaned.startsWith('insert')) return 'insert';
+  // MERGE INTO — soportado en Oracle, MSSQL, PostgreSQL 15+
+  if (cleaned.startsWith('merge')) return 'merge';
+  // Stored procedures: CALL proc() | EXEC proc | EXECUTE proc
+  if (/^(call|exec(ute)?)\s/.test(cleaned)) return 'call';
+  // TRUNCATE — operación DDL permitida explícitamente
+  if (cleaned.startsWith('truncate')) return 'truncate';
   return 'unknown';
 }
 
@@ -2841,28 +2859,33 @@ function assertManualSqlAllowed(sqlText, options = {}) {
   const cleaned = stripLeadingSqlComments(raw.replace(/;\s*$/, '').trim());
 
   const operation = detectSqlOperation(cleaned);
-  if (!['select', 'update', 'delete', 'insert'].includes(operation)) {
-    throw new Error('Operación SQL no permitida. Usa SELECT/UPDATE/DELETE/INSERT');
+  const READ_OPS = new Set(['select']);
+  const WRITE_OPS = new Set(['update', 'delete', 'insert', 'merge', 'truncate']);
+  const PROC_OPS = new Set(['call']); // CALL/EXEC/EXECUTE
+
+  if (!READ_OPS.has(operation) && !WRITE_OPS.has(operation) && !PROC_OPS.has(operation)) {
+    throw new Error('Operación SQL no permitida. Soportado: SELECT, INSERT, UPDATE, DELETE, MERGE, CALL/EXEC, TRUNCATE');
   }
 
-  if (operation !== 'select' && !allowMutations) {
+  if ((WRITE_OPS.has(operation) || PROC_OPS.has(operation)) && !allowMutations) {
     throw new Error('Solo se permite SQL SELECT en este contexto');
   }
 
-  if (operation !== 'select' && !(writeConfirmed || assumeWriteConfirmed)) {
+  if ((WRITE_OPS.has(operation) || PROC_OPS.has(operation)) && !(writeConfirmed || assumeWriteConfirmed)) {
     throw new Error('Esta acción modificará datos. Confirma la ejecución para continuar.');
   }
 
-  if (operation === 'select' && MANUAL_SQL_BLOCKED_KEYWORDS.test(cleaned)) {
+  if (READ_OPS.has(operation) && MANUAL_SQL_BLOCKED_KEYWORDS.test(cleaned)) {
     throw new Error('SQL contiene palabras bloqueadas (solo SELECT permitido)');
   }
 
-  if (cleaned.includes(';')) {
+  // MERGE y CALL pueden contener ; internamente (Oracle PL/SQL), no bloquear
+  if (!PROC_OPS.has(operation) && operation !== 'merge' && cleaned.includes(';')) {
     throw new Error('Solo se permite una consulta SQL por ejecución');
   }
 
   if (hasUnsafeMutationWithoutWhere(cleaned)) {
-    throw new Error('UPDATE/DELETE requiere cláusula WHERE para seguridad');
+    throw new Error('UPDATE/DELETE requiere cláusula WHERE para seguridad (no se acepta WHERE 1=1)');
   }
 }
 
@@ -3135,14 +3158,9 @@ async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
     } else if (targetDb.type === 'oracle') {
       sqlForTarget = sqlText.replace(/\$(\d+)/g, ':$1');
     } else if (targetDb.type === 'mssql') {
-      let idx = 0;
-      sqlForTarget = sqlText.replace(/\$\d+/g, () => {
-        const val = paramsForTarget[idx++];
-        if (val === null || val === undefined) return 'NULL';
-        if (typeof val === 'number' && Number.isFinite(val)) return String(val);
-        return `'${String(val).replace(/'/g, "''")}'`;
-      });
-      paramsForTarget = [];
+      // Convertir $N → @pN; los valores se pasan como parámetros vinculados (no concatenación)
+      sqlForTarget = sqlText.replace(/\$(\d+)/g, '@p$1');
+      // paramsForTarget se mantiene; MultiDbRegistry usará request.input('p1', val)
     }
   }
 

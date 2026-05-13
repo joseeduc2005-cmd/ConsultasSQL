@@ -40,21 +40,22 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
   const { theme } = useTheme();
   const isLightTheme = theme === 'light';
   const [dynamicInputs, setDynamicInputs] = useState<{ [key: string]: string }>({});
-  // Leer localStorage sincrónicamente en el estado inicial para evitar race conditions
-  const [localUser] = useState<{ username: string; role: string } | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = localStorage.getItem('user');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.username) return { username: parsed.username, role: parsed.role || 'user' };
-      }
-    } catch { /* ignorar */ }
+  /** Lee el usuario actual en el momento de llamar — siempre fresco desde localStorage */
+  const resolveCurrentUser = (): { username: string; role: string } | null => {
+    // 1. Prop (pasada desde admin/page.tsx, la más confiable)
+    if (currentUserProp?.username) return currentUserProp;
+    // 2. localStorage (siempre re-leído para capturar cambios de cuenta)
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.username) return { username: parsed.username, role: parsed.role || 'user' };
+        }
+      } catch { /* ignorar */ }
+    }
     return null;
-  });
-
-  // Usar prop si viene (más confiable), si no usar localStorage
-  const currentUser = currentUserProp ?? localUser;
+  };
   const [executing, setExecuting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [execDone, setExecDone] = useState(false);
@@ -153,9 +154,10 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
     const paramsStr = encodeURIComponent(JSON.stringify(paramsPayload));
     const extraQuery = new URLSearchParams();
     if (executionTarget.databaseId) extraQuery.set('databaseId', executionTarget.databaseId);
-    // Pasar identidad del usuario para auditoría — SSE no soporta custom headers
-    if (currentUser?.username) extraQuery.set('username', currentUser.username);
-    if (currentUser?.role) extraQuery.set('userRole', currentUser.role);
+    // Leer usuario en el momento de ejecutar (no en mount) para capturar cambios de cuenta
+    const execUser = resolveCurrentUser();
+    if (execUser?.username) extraQuery.set('username', execUser.username);
+    if (execUser?.role) extraQuery.set('userRole', execUser.role);
 
     const url = `/api/execute/stream/${selectedArticle!.id}?params=${paramsStr}${extraQuery.toString() ? `&${extraQuery.toString()}` : ''}`;
 

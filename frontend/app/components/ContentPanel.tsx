@@ -38,6 +38,18 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
   const { theme } = useTheme();
   const isLightTheme = theme === 'light';
   const [dynamicInputs, setDynamicInputs] = useState<{ [key: string]: string }>({});
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: string } | null>(null);
+
+  // Leer usuario del localStorage para identificar quién ejecuta
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.username) setCurrentUser({ username: parsed.username, role: parsed.role || 'user' });
+      }
+    } catch { /* ignorar */ }
+  }, []);
   const [executing, setExecuting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [execDone, setExecDone] = useState(false);
@@ -136,6 +148,9 @@ export default function ContentPanel({ selectedArticle, loading }: ContentPanelP
     const paramsStr = encodeURIComponent(JSON.stringify(paramsPayload));
     const extraQuery = new URLSearchParams();
     if (executionTarget.databaseId) extraQuery.set('databaseId', executionTarget.databaseId);
+    // Pasar identidad del usuario para auditoría — SSE no soporta custom headers
+    if (currentUser?.username) extraQuery.set('username', currentUser.username);
+    if (currentUser?.role) extraQuery.set('userRole', currentUser.role);
 
     const url = `/api/execute/stream/${selectedArticle!.id}?params=${paramsStr}${extraQuery.toString() ? `&${extraQuery.toString()}` : ''}`;
 

@@ -16,6 +16,7 @@ export function createContentRouter({
   ensureDynamicSchemaReady,
   parseStructuredScript,
   validateBusinessScriptDefinition,
+  logArticleChange,
 }) {
   const router = Router();
 
@@ -182,6 +183,19 @@ export function createContentRouter({
       };
 
       console.log(`[ARTICLES] ✅ Nuevo artículo creado: ${newArticle.titulo} (ID: ${newArticle.id}) por ${creadorUsername}`);
+
+      // Auditoría de creación — fire-and-forget
+      if (typeof logArticleChange === 'function') {
+        logArticleChange({
+          articleId: newArticle.id,
+          articleTitulo: newArticle.titulo,
+          accion: 'crear',
+          realizadoPor: creadorUsername,
+          realizadoRol: role,
+          detalle: { titulo: newArticle.titulo, categoria: categoria || '', tipo_solucion, visible_para: resolvedVisibility },
+        }).catch(() => {});
+      }
+
       return res.status(201).json({ success: true, data: newArticle, message: 'Artículo creado exitosamente' });
     } catch (error) {
       console.error('[ARTICLES] ❌ Error creando artículo:', error);
@@ -207,7 +221,21 @@ export function createContentRouter({
         return res.status(404).json({ success: false, error: 'Artículo no encontrado' });
       }
 
-      console.log(`[ARTICLES] ✅ Artículo eliminado: ${result.rows[0].titulo} (ID: ${result.rows[0].id})`);
+      const deletedTitulo = result.rows[0].titulo;
+      console.log(`[ARTICLES] ✅ Artículo eliminado: ${deletedTitulo} (ID: ${result.rows[0].id})`);
+
+      // Auditoría de eliminación — fire-and-forget
+      if (typeof logArticleChange === 'function') {
+        logArticleChange({
+          articleId: id,
+          articleTitulo: deletedTitulo,
+          accion: 'eliminar',
+          realizadoPor: user?.username || role || 'admin',
+          realizadoRol: role,
+          detalle: { titulo: deletedTitulo, article_id: id },
+        }).catch(() => {});
+      }
+
       return res.status(200).json({ success: true, message: 'Artículo eliminado exitosamente' });
     } catch (error) {
       console.error('[ARTICLES] ❌ Error eliminando artículo:', error);
@@ -286,6 +314,10 @@ export function createContentRouter({
         id,
       ];
 
+      // Leer título anterior para el registro de auditoría
+      const prevRow = await pool.query('SELECT titulo, tipo_solucion, visible_para, categoria FROM knowledge_base WHERE id=$1', [id]);
+      const prevTitulo = prevRow.rows[0]?.titulo || '';
+
       const result = await pool.query(updateQuery, values);
 
       if (result.rows.length === 0) {
@@ -293,6 +325,25 @@ export function createContentRouter({
       }
 
       const updatedRow = result.rows[0];
+
+      // Auditoría de edición — fire-and-forget
+      if (typeof logArticleChange === 'function') {
+        logArticleChange({
+          articleId: id,
+          articleTitulo: updatedRow.titulo,
+          accion: 'editar',
+          realizadoPor: editorUsername,
+          realizadoRol: role,
+          detalle: {
+            titulo_anterior: prevTitulo,
+            titulo_nuevo: updatedRow.titulo,
+            tipo_solucion,
+            visible_para: resolvedVisibility,
+            categoria: categoria || '',
+          },
+        }).catch(() => {});
+      }
+
       return res.status(200).json({
         success: true,
         data: {
@@ -310,6 +361,41 @@ export function createContentRouter({
     } catch (error) {
       console.error('[ARTICLES] ❌ Error editando artículo:', error);
       return res.status(500).json({ success: false, error: 'Error interno del servidor', details: error.message });
+    }
+  });
+
+  // GET /api/article-changes — Auditoría de cambios a artículos (solo admin)
+  router.get('/article-changes', async (req, res) => {
+    try {
+      const user = getUserFromRequest(req);
+      const role = req.headers['x-user-role'] || user?.role;
+      if (role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Acceso denegado: solo admins' });
+      }
+
+      const articleId = req.query.article_id ? Number(req.query.article_id) : null;
+      const limit = Math.min(Number(req.query.limit || 100), 500);
+      const accion = req.query.accion ? String(req.query.accion) : null;
+
+      const conditions = [];
+      const params = [];
+      if (articleId) { conditions.push(`article_id = $${params.length + 1}`); params.push(articleId); }
+      if (accion) { conditions.push(`accion = $${params.length + 1}`); params.push(accion); }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      params.push(limit);
+
+      const result = await pool.query(
+        `SELECT id, article_id, article_titulo, accion, realizado_por, realizado_rol, detalle, realizado_en
+         FROM article_changes ${where}
+         ORDER BY realizado_en DESC
+         LIMIT $${params.length}`,
+        params
+      );
+
+      return res.status(200).json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error('[AUDIT CHANGES] ❌ Error:', error);
+      return res.status(500).json({ success: false, error: 'Error interno', details: error.message });
     }
   });
 

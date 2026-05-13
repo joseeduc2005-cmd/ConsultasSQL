@@ -54,7 +54,15 @@ export function createExecuteRouter({
         return done(false, 'ID inválido', null);
       }
 
-      reqLog.info('SSE execute start', { articleId });
+      // Identidad del usuario: viene como query param porque EventSource no envía headers
+      const username = String(
+        req.query?.username || getUserFromRequest(req)?.username || 'anonymous'
+      ).trim();
+      const userRole = String(
+        req.query?.userRole || req.headers['x-user-role'] || getRoleFromRequest(req, getUserFromRequest(req)) || 'user'
+      ).trim();
+
+      reqLog.info('SSE execute start', { articleId, username, userRole });
 
       let rawParams = {};
       if (req.query.params) {
@@ -77,20 +85,48 @@ export function createExecuteRouter({
       const enrichedResult = { ...result, executionMs: result?.executionMs ?? ms };
 
       reqLog.info('SSE execute done', {
-        articleId,
+        articleId, username, userRole,
         success: Boolean(result.success),
-        ms,
-        rowCount: result?.rowCount,
+        ms, rowCount: result?.rowCount,
         databaseId: requestedDatabaseId || 'auto',
       });
 
+      // ── Auditoría completa de la ejecución ───────────────────────────────
+      if (typeof logArticleExecution === 'function') {
+        logArticleExecution({
+          articleId,
+          articleTitulo: result?.articleTitulo || '',
+          ejecutadoPor: username,
+          ejecutadoRol: userRole,
+          parametrosUsados: rawParams,
+          filasResultado: Number(result?.rowCount || 0),
+          duracionMs: ms,
+          estado: result?.success ? 'ok' : 'error',
+          mensajeError: result?.success ? null : (result?.message || null),
+        }).catch(() => {});
+      }
+
       return done(Boolean(result.success), result.message || 'Sin mensaje', enrichedResult);
     } catch (error) {
+      const ms = Date.now ? 0 : 0;
       reqLog.error('SSE execute error', {
         articleId: req.params?.articleId,
         error: error?.message || String(error),
         stack: error?.stack,
       });
+      if (typeof logArticleExecution === 'function') {
+        logArticleExecution({
+          articleId: req.params?.articleId,
+          articleTitulo: '',
+          ejecutadoPor: String(req.query?.username || 'anonymous'),
+          ejecutadoRol: String(req.query?.userRole || 'user'),
+          parametrosUsados: null,
+          filasResultado: 0,
+          duracionMs: 0,
+          estado: 'error',
+          mensajeError: error?.message || 'Error interno',
+        }).catch(() => {});
+      }
       try {
         emit('❌ Error interno del servidor', 'error');
         done(false, 'Error interno', null);

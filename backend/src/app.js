@@ -434,13 +434,13 @@ async function ensureKnowledgeBaseSchema() {
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS creado_por_username VARCHAR(100)`);
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado_por VARCHAR(100)`);
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado TIMESTAMP`);
-    // Tabla de auditoría de ejecuciones
+    // Tabla de auditoría de ejecuciones (article_id = TEXT para soportar UUIDs)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS article_executions (
         id SERIAL PRIMARY KEY,
-        article_id INTEGER NOT NULL,
+        article_id TEXT,
         article_titulo TEXT,
-        ejecutado_por VARCHAR(100) NOT NULL,
+        ejecutado_por VARCHAR(100),
         ejecutado_rol VARCHAR(20),
         parametros_usados JSONB,
         filas_resultado INTEGER DEFAULT 0,
@@ -450,18 +450,55 @@ async function ensureKnowledgeBaseSchema() {
         ejecutado_en TIMESTAMP DEFAULT NOW()
       )
     `);
-    // Tabla de auditoría de cambios a artículos (crear/editar/eliminar)
+    // Migración: si la columna article_id ya existe como INTEGER, convertirla a TEXT
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='article_executions' AND column_name='article_id' AND data_type='integer'
+        ) THEN
+          ALTER TABLE article_executions ALTER COLUMN article_id TYPE TEXT USING article_id::TEXT;
+          ALTER TABLE article_executions ALTER COLUMN article_id DROP NOT NULL;
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='article_executions' AND column_name='ejecutado_por' AND is_nullable='NO'
+        ) THEN
+          ALTER TABLE article_executions ALTER COLUMN ejecutado_por DROP NOT NULL;
+        END IF;
+      END$$
+    `);
+    // Tabla de auditoría de cambios a artículos (article_id = TEXT para soportar UUIDs)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS article_changes (
         id SERIAL PRIMARY KEY,
-        article_id INTEGER,
+        article_id TEXT,
         article_titulo TEXT,
         accion VARCHAR(10) NOT NULL,
-        realizado_por VARCHAR(100) NOT NULL,
+        realizado_por VARCHAR(100),
         realizado_rol VARCHAR(20),
         detalle JSONB,
         realizado_en TIMESTAMP DEFAULT NOW()
       )
+    `);
+    // Migración: si article_id en article_changes es INTEGER, convertir a TEXT
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='article_changes' AND column_name='article_id' AND data_type='integer'
+        ) THEN
+          ALTER TABLE article_changes ALTER COLUMN article_id TYPE TEXT USING article_id::TEXT;
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='article_changes' AND column_name='realizado_por' AND is_nullable='NO'
+        ) THEN
+          ALTER TABLE article_changes ALTER COLUMN realizado_por DROP NOT NULL;
+        END IF;
+      END$$
     `);
     console.log('✓ Esquema de knowledge_base asegurado: tablas article_executions y article_changes presentes');
   } catch (err) {
@@ -1325,7 +1362,7 @@ async function logArticleChange({ articleId, articleTitulo, accion, realizadoPor
         (article_id, article_titulo, accion, realizado_por, realizado_rol, detalle, realizado_en)
        VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
       [
-        Number(articleId) || null,
+        articleId ? String(articleId) : null,
         String(articleTitulo || ''),
         String(accion || 'editar'),
         String(realizadoPor || 'anonymous'),
@@ -1348,7 +1385,7 @@ async function logArticleExecution({ articleId, articleTitulo, ejecutadoPor, eje
         (article_id, article_titulo, ejecutado_por, ejecutado_rol, parametros_usados, filas_resultado, duracion_ms, estado, mensaje_error, ejecutado_en)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
       [
-        Number(articleId) || null,
+        articleId ? String(articleId) : null,
         String(articleTitulo || ''),
         String(ejecutadoPor || 'anonymous'),
         String(ejecutadoRol || 'user'),

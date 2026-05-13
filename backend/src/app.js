@@ -2091,8 +2091,9 @@ function validateBusinessScriptDefinition(script) {
     // Standard multi-step SQL
     const sqlSteps = splitManualSqlSteps(sqlText);
     if (sqlSteps.length === 0) throw new Error('SQL manual vacío');
+    // trusted=true: artículos admin → cualquier SQL válido (DROP, ALTER, MERGE, etc.)
     sqlSteps.forEach((stepSql) => {
-      assertManualSqlAllowed(stepSql, { allowMutations: true, writeConfirmed: true });
+      assertManualSqlAllowed(stepSql, { allowMutations: true, writeConfirmed: true, trusted: true });
     });
     return;
   }
@@ -2293,17 +2294,18 @@ function hasUnsafeMutationWithoutWhere(sqlText = '') {
 function detectSqlOperation(sqlText = '') {
   const cleaned = stripLeadingSqlComments(String(sqlText || '').trim().replace(/;\s*$/, '').trim()).toLowerCase();
   if (cleaned.startsWith('select')) return 'select';
-  // WITH ... AS (...) SELECT → CTE, es un select
+  // WITH ... AS (...) SELECT → CTE → select
   if (/^with\s/.test(cleaned)) return 'select';
   if (cleaned.startsWith('update')) return 'update';
   if (cleaned.startsWith('delete')) return 'delete';
   if (cleaned.startsWith('insert')) return 'insert';
-  // MERGE INTO — soportado en Oracle, MSSQL, PostgreSQL 15+
+  // MERGE INTO — Oracle, MSSQL, PostgreSQL 15+
   if (cleaned.startsWith('merge')) return 'merge';
-  // Stored procedures: CALL proc() | EXEC proc | EXECUTE proc
+  // Stored procedures
   if (/^(call|exec(ute)?)\s/.test(cleaned)) return 'call';
-  // TRUNCATE — operación DDL permitida explícitamente
-  if (cleaned.startsWith('truncate')) return 'truncate';
+  // DDL — DROP, CREATE, ALTER, GRANT, REVOKE, TRUNCATE, COMMENT, RENAME...
+  // En artículos de admin: completamente válidos. En consola: bloqueados.
+  if (/^(truncate|drop|create|alter|grant|revoke|comment|rename)\s/.test(cleaned)) return 'ddl';
   return 'unknown';
 }
 
@@ -2849,22 +2851,36 @@ function countPositionalSqlPlaceholders(sqlText = '') {
   return indexes.length > 0 ? Math.max(...indexes) : 0;
 }
 
+/**
+ * Valida que un SQL sea ejecutable en el contexto dado.
+ *
+ * trusted=true  → artículos escritos por admins: NO se bloquea ningún SQL.
+ *                 El control de acceso es la visibilidad del artículo (visible_para).
+ * trusted=false → consola SQL directa: se aplican restricciones de seguridad.
+ */
 function assertManualSqlAllowed(sqlText, options = {}) {
-  const { allowMutations = false, writeConfirmed = false, assumeWriteConfirmed = false } = options;
+  const {
+    allowMutations = false,
+    writeConfirmed = false,
+    assumeWriteConfirmed = false,
+    trusted = false,       // true = artículo de admin, sin restricciones de sintaxis
+  } = options;
+
   const raw = String(sqlText || '').trim();
-  if (!raw) {
-    throw new Error('SQL manual vacío');
-  }
+  if (!raw) throw new Error('SQL manual vacío');
 
+  // ── Modo confiable (artículos de admin): solo verificamos que no esté vacío ──
+  if (trusted) return;
+
+  // ── Modo consola directa: aplicar restricciones ───────────────────────────
   const cleaned = stripLeadingSqlComments(raw.replace(/;\s*$/, '').trim());
-
   const operation = detectSqlOperation(cleaned);
-  const READ_OPS = new Set(['select']);
-  const WRITE_OPS = new Set(['update', 'delete', 'insert', 'merge', 'truncate']);
-  const PROC_OPS = new Set(['call']); // CALL/EXEC/EXECUTE
 
-  if (!READ_OPS.has(operation) && !WRITE_OPS.has(operation) && !PROC_OPS.has(operation)) {
-    throw new Error('Operación SQL no permitida. Soportado: SELECT, INSERT, UPDATE, DELETE, MERGE, CALL/EXEC, TRUNCATE');
+  const WRITE_OPS = new Set(['update', 'delete', 'insert', 'merge', 'truncate']);
+  const PROC_OPS  = new Set(['call']);
+
+  if (!['select', ...WRITE_OPS, ...PROC_OPS].includes(operation)) {
+    throw new Error('Operación no permitida en la consola. Usa SELECT, INSERT, UPDATE, DELETE, MERGE, CALL.');
   }
 
   if ((WRITE_OPS.has(operation) || PROC_OPS.has(operation)) && !allowMutations) {
@@ -2875,17 +2891,12 @@ function assertManualSqlAllowed(sqlText, options = {}) {
     throw new Error('Esta acción modificará datos. Confirma la ejecución para continuar.');
   }
 
-  if (READ_OPS.has(operation) && MANUAL_SQL_BLOCKED_KEYWORDS.test(cleaned)) {
-    throw new Error('SQL contiene palabras bloqueadas (solo SELECT permitido)');
+  if (operation === 'select' && MANUAL_SQL_BLOCKED_KEYWORDS.test(cleaned)) {
+    throw new Error('SQL contiene palabras bloqueadas');
   }
 
-  // MERGE y CALL pueden contener ; internamente (Oracle PL/SQL), no bloquear
   if (!PROC_OPS.has(operation) && operation !== 'merge' && cleaned.includes(';')) {
-    throw new Error('Solo se permite una consulta SQL por ejecución');
-  }
-
-  if (hasUnsafeMutationWithoutWhere(cleaned)) {
-    throw new Error('UPDATE/DELETE requiere cláusula WHERE para seguridad (no se acepta WHERE 1=1)');
+    throw new Error('Solo se permite una consulta por ejecución en la consola');
   }
 }
 
@@ -2967,10 +2978,13 @@ function applyOptionalSqlFilterTransform(sqlText = '') {
 
 function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {}, options = {}) {
   const writeConfirmed = isWriteConfirmed(rawParams);
+  // trusted=true → artículo escrito por admin → sin restricciones de sintaxis
+  // trusted=false (default) → consola directa → aplica restricciones
   assertManualSqlAllowed(sqlText, {
     allowMutations: true,
     writeConfirmed,
     assumeWriteConfirmed: Boolean(options?.assumeWriteConfirmed),
+    trusted: Boolean(options?.trusted ?? true),  // artículos son trusted por defecto
   });
 
   const cleaned = applyOptionalSqlFilterTransform(String(sqlText || '').trim().replace(/;\s*$/, '').trim());
@@ -3230,7 +3244,8 @@ async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowCont
       allowUnknownTablesForTarget: true,
     });
   } else {
-    // DML: route to the target DB (any engine), not just primary Postgres
+    // DML, DDL, MERGE, CALL, EXEC, TRUNCATE, DROP, CREATE, ALTER...
+    // Todo pasa al motor del target — la seguridad es la visibilidad del artículo
     result = await executeWriteToTargetDb(text, values, targetDatabaseId);
   }
 

@@ -1,37 +1,49 @@
 # ─── Stage 1: dependencies ───────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+
+# pnpm via corepack (project migrated from npm → pnpm)
+RUN corepack enable
+
+# --ignore-scripts: sharp and @next/swc ship prebuilt musl binaries as separate
+# packages (no build script needed) — verified present after install. Avoids
+# pnpm 11's ERR_PNPM_IGNORED_BUILDS gate.
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ─── Stage 2: builder ────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
+
+RUN corepack enable
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Remove local .env so only Dockerfile ENV values are used at build time
+# Remove local env files so only Dockerfile ENV values are used
 RUN rm -f .env .env.local .env.production .env.production.local
 
 ENV BACKEND_URL=http://backend:3002
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+RUN pnpm build
 
 # ─── Stage 3: runner ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV BACKEND_URL=http://backend:3002
 
+RUN corepack enable
+
 # Copy everything needed to run `next start`
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/public ./public
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["pnpm", "start"]

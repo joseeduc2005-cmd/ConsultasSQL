@@ -150,8 +150,42 @@ export class MultiDbRegistry {
     this.clients = new Map();
     this.runtimeLearning = new Map();
     this.connectionStatus = new Map(); // id → 'ok' | 'fail' | 'unknown'
-    this.queryTimeoutMs = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 8000);
+    // Generous default (2 min) so long / complex SQL on external DBs is never
+    // cut short — matches DBeaver-style behavior. Override with SQL_QUERY_TIMEOUT_MS.
+    this.queryTimeoutMs = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000);
     this.loadConfig(config || this.readConfigFromEnv());
+    this._watchConfigFile(); // hot-reload when multidb.databases.json changes
+  }
+
+  /** Watch the config file and auto-reload + introspect new DBs when it changes */
+  _watchConfigFile() {
+    const filePath = this.resolveConfigFilePath();
+    if (!filePath || !fs.existsSync(filePath)) return;
+
+    let debounceTimer = null;
+    fs.watch(filePath, { persistent: false }, (eventType) => {
+      if (eventType !== 'change') return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        console.log('[MultiDbRegistry] 🔄 multidb.databases.json cambió — recargando configuración...');
+        try {
+          const newConfig = this.readConfigFromEnv();
+          const existingIds = new Set(this.databases.keys());
+          this.loadConfig(newConfig);
+
+          // Introspect only newly-added databases
+          const newIds = [...this.databases.keys()].filter((id) => !existingIds.has(id));
+          if (newIds.length > 0) {
+            console.log(`[MultiDbRegistry] 🆕 Nuevas bases detectadas: ${newIds.join(', ')} — iniciando introspección...`);
+            await this.introspectEmptySchemas();
+          }
+          console.log('[MultiDbRegistry] ✔ Recarga completada.');
+        } catch (err) {
+          console.error('[MultiDbRegistry] ✘ Error en hot-reload:', err?.message || err);
+        }
+      }, 800); // debounce 800ms
+    });
+    console.log(`[MultiDbRegistry] 👁 Watching config: ${filePath}`);
   }
 
   /** Marca el resultado del último probe de conectividad para una BD */
@@ -636,22 +670,36 @@ export class MultiDbRegistry {
 
     const client = await this.ensureClient(database);
 
+    // Returns the row array. For write operations (UPDATE/DELETE/INSERT) the
+    // driver's affected-row count is attached as a non-enumerable `.rowCount`
+    // on the array so callers can report it (SELECTs leave it as rows.length).
+    const withRowCount = (rows, count) => {
+      const arr = Array.isArray(rows) ? rows : [];
+      if (typeof count === 'number' && Number.isFinite(count)) {
+        Object.defineProperty(arr, 'rowCount', { value: count, enumerable: false });
+      }
+      return arr;
+    };
+
     if (client.type === 'postgres') {
       const result = await client.pool.query({
         text: sql,
         values: compiledQuery.params || [],
         query_timeout: this.queryTimeoutMs,
       });
-      return result.rows || [];
+      // pg exposes rowCount for both reads and writes
+      return withRowCount(result.rows || [], result.rowCount);
     }
 
     if (client.type === 'mysql') {
-      const [rows] = await client.pool.execute({
+      const [rowsOrHeader] = await client.pool.execute({
         sql,
         values: compiledQuery.params || [],
         timeout: this.queryTimeoutMs,
       });
-      return Array.isArray(rows) ? rows : [];
+      // SELECT → array of rows; write → ResultSetHeader with affectedRows
+      if (Array.isArray(rowsOrHeader)) return withRowCount(rowsOrHeader, rowsOrHeader.length);
+      return withRowCount([], Number(rowsOrHeader?.affectedRows ?? 0));
     }
 
     if (client.type === 'oracle') {
@@ -660,8 +708,11 @@ export class MultiDbRegistry {
         connection.callTimeout = this.queryTimeoutMs;
         const result = await connection.execute(sql, compiledQuery.params || {}, {
           outFormat: client.driver?.OUT_FORMAT_OBJECT,
+          autoCommit: true,
         });
-        return result.rows || [];
+        // SELECT → result.rows; write → result.rowsAffected (no rows)
+        if (Array.isArray(result.rows)) return withRowCount(result.rows, result.rows.length);
+        return withRowCount([], Number(result.rowsAffected ?? 0));
       } finally {
         await connection.close();
       }
@@ -674,7 +725,13 @@ export class MultiDbRegistry {
         request.input(`p${i + 1}`, val ?? null);
       });
       const result = await request.query(sql);
-      return result.recordset || [];
+      if (Array.isArray(result.recordset) && result.recordset.length > 0) {
+        return withRowCount(result.recordset, result.recordset.length);
+      }
+      const affected = Array.isArray(result.rowsAffected)
+        ? result.rowsAffected.reduce((a, b) => a + Number(b || 0), 0)
+        : Number(result.rowsAffected || 0);
+      return withRowCount(result.recordset || [], affected);
     }
 
     if (client.type === 'mongodb') {
@@ -726,36 +783,42 @@ export class MultiDbRegistry {
       // ── WRITE ─────────────────────────────────────────────────────────────
       if (ops.insertOne !== undefined) {
         const r = await col.insertOne(ops.insertOne);
-        return [{ insertedId: String(r.insertedId), acknowledged: r.acknowledged }];
+        return withRowCount([{ insertedId: String(r.insertedId), acknowledged: r.acknowledged }], r.acknowledged ? 1 : 0);
       }
       if (ops.insertMany !== undefined) {
         const r = await col.insertMany(ops.insertMany);
-        return [{ insertedCount: r.insertedCount, acknowledged: r.acknowledged }];
+        return withRowCount([{ insertedCount: r.insertedCount, acknowledged: r.acknowledged }], Number(r.insertedCount || 0));
       }
       if (ops.updateOne !== undefined) {
         const { filter, update, upsert } = ops.updateOne;
         const r = await col.updateOne(filter || {}, update, { upsert: Boolean(upsert) });
-        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }];
+        return withRowCount(
+          [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }],
+          Number(r.modifiedCount || 0) + Number(r.upsertedCount || 0),
+        );
       }
       if (ops.updateMany !== undefined) {
         const { filter, update, upsert } = ops.updateMany;
         const r = await col.updateMany(filter || {}, update, { upsert: Boolean(upsert) });
-        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }];
+        return withRowCount(
+          [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }],
+          Number(r.modifiedCount || 0) + Number(r.upsertedCount || 0),
+        );
       }
       if (ops.replaceOne !== undefined) {
         const { filter, replacement, upsert } = ops.replaceOne;
         const r = await col.replaceOne(filter || {}, replacement, { upsert: Boolean(upsert) });
-        return [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount }];
+        return withRowCount([{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount }], Number(r.modifiedCount || 0));
       }
       if (ops.deleteOne !== undefined) {
         const filter = ops.deleteOne.filter ?? ops.deleteOne;
         const r = await col.deleteOne(filter);
-        return [{ deletedCount: r.deletedCount }];
+        return withRowCount([{ deletedCount: r.deletedCount }], Number(r.deletedCount || 0));
       }
       if (ops.deleteMany !== undefined) {
         const filter = ops.deleteMany.filter ?? ops.deleteMany;
         const r = await col.deleteMany(filter);
-        return [{ deletedCount: r.deletedCount }];
+        return withRowCount([{ deletedCount: r.deletedCount }], Number(r.deletedCount || 0));
       }
 
       throw new Error(
@@ -874,6 +937,70 @@ export class MultiDbRegistry {
         continue;
       }
       console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] iniciando introspección (${db.type} ${db.host}:${db.port}/${db.database})`);
+
+      // ── MongoDB: native collection listing (UniversalDatabaseConnector no soporta MongoDB) ──
+      if (db.type === 'mongodb') {
+        try {
+          const mongodb = await import('mongodb');
+          const MongoClient = mongodb.MongoClient ?? mongodb.default?.MongoClient;
+          const auth = db.user && db.password ? `${encodeURIComponent(db.user)}:${encodeURIComponent(db.password)}@` : '';
+          const dbPart = db.database ? `/${db.database}` : '';
+          const uri = db.connectionString || `mongodb://${auth}${db.host || 'localhost'}:${db.port || 27017}${dbPart}?authSource=${db.authSource || 'admin'}`;
+          const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+          await client.connect();
+          const mdb = client.db(db.database);
+          const collections = await mdb.listCollections().toArray();
+          await client.close();
+          const tables = collections.map((c) => ({ name: c.name, columns: [] }));
+          const schema = { tables };
+          const updated = this.normalizeDatabase({ ...db, schema });
+          this.databases.set(id, updated);
+          console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✔ MongoDB: ${tables.length} colección(es): ${tables.map((t) => t.name).join(', ')}`);
+          results.push({ id, status: 'ok', tableCount: tables.length });
+        } catch (err) {
+          const errMsg = String(err?.message || err);
+          console.error(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✘ MongoDB FAIL: ${errMsg}`);
+          results.push({ id, status: 'fail', error: errMsg });
+        }
+        continue;
+      }
+
+      // ── SQL engines supported by UniversalDatabaseConnector ─────────────────
+      const UNIVERSAL_CONNECTOR_TYPES = new Set(['postgres', 'mysql', 'oracle']);
+
+      if (!UNIVERSAL_CONNECTOR_TYPES.has(db.type)) {
+        // Unknown/future engine — try mssql native, otherwise mark as schema-unknown
+        if (db.type === 'mssql' || db.type === 'sqlserver') {
+          try {
+            const mssql = (await import('mssql')).default ?? (await import('mssql'));
+            const cfg = {
+              server: db.host, port: Number(db.port) || 1433,
+              database: db.database, user: db.user, password: db.password,
+              options: { encrypt: false, trustServerCertificate: true },
+              connectionTimeout: 5000,
+            };
+            const pool = await mssql.connect(cfg);
+            const r = await pool.request().query(
+              `SELECT TABLE_NAME as name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'`
+            );
+            await pool.close();
+            const tables = (r.recordset || []).map((row) => ({ name: row.name, columns: [] }));
+            const schema = { tables };
+            this.databases.set(id, this.normalizeDatabase({ ...db, schema }));
+            console.log(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✔ MSSQL: ${tables.length} tabla(s)`);
+            results.push({ id, status: 'ok', tableCount: tables.length });
+          } catch (err) {
+            console.error(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ✘ MSSQL FAIL: ${err?.message}`);
+            results.push({ id, status: 'fail', error: String(err?.message || err) });
+          }
+        } else {
+          // Completely unknown engine — register with empty schema, execution will be attempted at runtime
+          console.warn(`[MultiDbRegistry] introspectEmptySchemas → [${id}] ⚠ Motor "${db.type}" sin introspección implementada — registrado con schema vacío. Se intentará ejecución en runtime.`);
+          results.push({ id, status: 'skipped-unknown-engine', tableCount: 0 });
+        }
+        continue;
+      }
+
       let connectionResult = null;
       try {
         connectionResult = await connectDatabase(db);

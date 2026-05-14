@@ -6,7 +6,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const id = parseInt(rawId, 10);
   if (isNaN(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
   try {
-    const res = await fetch(`${B}/api/comments/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${B}/api/comments/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'x-username':  request.headers.get('x-username')  || '',
+        'x-user-role': request.headers.get('x-user-role') || 'user',
+      },
+    });
     return proxyJson(res);
   } catch (e) { return err500('comments/DELETE', e); }
 }

@@ -4,17 +4,14 @@
   "type": "module",
   "description": "Backend API for Botón Pago - Clean Architecture",
   "main": "src/app.js",
+  "packageManager": "pnpm@11.1.1",
   "scripts": {
     "dev": "node src/app.js",
     "build": "tsc",
     "start": "node src/app.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
   },
-  "keywords": [
-    "nodejs",
-    "express",
-    "clean-architecture"
-  ],
+  "keywords": ["nodejs", "express", "clean-architecture"],
   "author": "Team",
   "license": "MIT",
   "dependencies": {
@@ -44,5 +41,8 @@
     "jest": "^30.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["oracledb", "unrs-resolver", "esbuild", "sharp"]
   }
 }

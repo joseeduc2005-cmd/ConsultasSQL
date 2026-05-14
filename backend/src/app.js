@@ -168,13 +168,19 @@ function createPgPool() {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    statement_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 8000),
-    query_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 8000),
+    // Generous default (2 min) so long / complex admin SQL is never cut short —
+    // "if DBeaver can run it, we can too". Override with SQL_QUERY_TIMEOUT_MS.
+    statement_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000),
+    query_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000),
   });
 }
 
 let pool = createPgPool();
 initSessionStore(pool); // Permitir restaurar sesiones desde la BD tras reinicios
+
+// Timeout for admin-authored manual SQL / article execution. Generous (2 min)
+// so long, complex, multi-statement scripts run to completion like in DBeaver.
+const MANUAL_SQL_TIMEOUT_MS = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000);
 
 let BUSINESS_ACTIONS_REGISTRY = createBusinessActionsRegistry(pool);
 
@@ -274,6 +280,13 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
       }
 
       try {
+        // MongoDB y MSSQL no usan el conector universal SQL — usan ensureClient directamente
+        if (type === 'mongodb' || type === 'mssql') {
+          await multiDbRegistry.ensureClient(database);
+          console.log(`[DB:${id}|${type}] ✅ OK (${database.host}:${database.port}/${database.database})`);
+          multiDbRegistry.setConnectionStatus(id, 'ok');
+          return { id, type, status: 'ok' };
+        }
         const result = await probeUniversalConnection(database);
         console.log(`[DB:${id}|${type}] ✅ OK (${database.host}:${database.port}/${database.database})`);
         multiDbRegistry.setConnectionStatus(id, 'ok');
@@ -476,12 +489,24 @@ async function ensureKnowledgeBaseSchema() {
         id SERIAL PRIMARY KEY,
         article_id TEXT,
         article_titulo TEXT,
-        accion VARCHAR(10) NOT NULL,
+        accion VARCHAR(50) NOT NULL,
         realizado_por VARCHAR(100),
         realizado_rol VARCHAR(20),
         detalle JSONB,
         realizado_en TIMESTAMP DEFAULT NOW()
       )
+    `);
+    // Migración: ampliar accion de VARCHAR(10) a VARCHAR(50) para soportar 'eliminar_comentario' etc.
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='article_changes' AND column_name='accion'
+            AND character_maximum_length <= 10
+        ) THEN
+          ALTER TABLE article_changes ALTER COLUMN accion TYPE VARCHAR(50);
+        END IF;
+      END $$;
     `);
     // Migración: si article_id en article_changes es INTEGER, convertir a TEXT
     await pool.query(`
@@ -538,12 +563,24 @@ async function ensureCommentsSchema() {
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
         article_id VARCHAR(255) NOT NULL,
+        article_title VARCHAR(500),
         parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
         author_username VARCHAR(255) NOT NULL,
         author_role VARCHAR(50) NOT NULL DEFAULT 'user',
         content TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
+    `);
+    // Migración: añadir article_title si ya existe la tabla sin esa columna
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'comments' AND column_name = 'article_title'
+        ) THEN
+          ALTER TABLE comments ADD COLUMN article_title VARCHAR(500);
+        END IF;
+      END $$;
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_article_id ON comments(article_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id)`);
@@ -984,12 +1021,31 @@ function setQueryCacheEntry(cacheKey, value, ttlMs = QUERY_CACHE_TTL_MS) {
   });
 }
 
+/**
+ * Removes string literals, quoted identifiers and comments from SQL so that
+ * keyword/operator detection is never fooled by their textual contents
+ * (e.g. SELECT 'please update your profile' must NOT look like an UPDATE).
+ */
+function stripSqlStringsAndComments(sqlText = '') {
+  return String(sqlText || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')      // block comments
+    .replace(/--[^\n]*/g, ' ')               // line comments
+    .replace(/'(?:[^']|'')*'/g, "''")        // single-quoted strings
+    .replace(/`(?:[^`]|``)*`/g, '``')        // backtick identifiers (MySQL)
+    .replace(/"(?:[^"]|"")*"/g, '""');       // double-quoted identifiers
+}
+
 function containsBlockedSql(sqlText) {
   const stripped = String(sqlText || '').trimEnd().replace(/;\s*$/, '');
   const normalized = stripLeadingSqlComments(stripped.trim()).toLowerCase();
   if (!normalized.startsWith('select') && !normalized.startsWith('with')) return true;
-  if (normalized.includes(';')) return true;
-  return SQL_BLOCKED_KEYWORDS.some((word) => normalized.includes(`${word} `));
+  // Reject stacked statements (SQL injection) — but a ; inside a string literal
+  // or comment is NOT a separator, so use the real tokenizing splitter.
+  if (splitManualSqlSteps(stripped).length > 1) return true;
+  // Check blocked keywords against code only — string/comment contents removed
+  // so legitimate SELECTs with words like "update" in literals aren't blocked.
+  const codeOnly = stripSqlStringsAndComments(normalized);
+  return SQL_BLOCKED_KEYWORDS.some((word) => codeOnly.includes(`${word} `));
 }
 
 function extractSqlReferencedTables(sqlText) {
@@ -1198,11 +1254,25 @@ async function executeSafeSelectQuery(queryText, queryParams = [], timeoutMs = 5
 
     if (paramsForTarget.length > 0) {
       if (targetDatabase.type === 'mysql') {
-        // PostgreSQL $1,$2,... → MySQL ?,?,... (mismo orden)
-        sqlForTarget = queryText.replace(/\$\d+/g, '?');
+        // PostgreSQL $1,$2,... → MySQL ?,?,... (expandir repetidos: $4 dos veces = dos ? y dos valores)
+        const expandedMysqlParams = [];
+        sqlForTarget = queryText.replace(/\$(\d+)/g, (_, n) => {
+          const idx = parseInt(n, 10) - 1;
+          expandedMysqlParams.push(paramsForTarget[idx] ?? null);
+          return '?';
+        });
+        paramsForTarget = expandedMysqlParams;
       } else if (targetDatabase.type === 'oracle') {
-        // PostgreSQL $1,$2,... → Oracle :1,:2,... (positional binding)
-        sqlForTarget = queryText.replace(/\$(\d+)/g, ':$1');
+        // PostgreSQL $1,$2,... → Oracle NAMED binds :p1,:p2,...
+        // Los named binds pueden repetirse en el SQL (e.g. :p1 IS NULL OR col = :p1)
+        // sin necesidad de duplicar valores. oracledb acepta params como objeto {p1:val,...}.
+        const namedOracleParams = {};
+        sqlForTarget = queryText.replace(/\$(\d+)/g, (_, n) => {
+          const idx = parseInt(n, 10) - 1;
+          namedOracleParams[`p${n}`] = paramsForTarget[idx] ?? null;
+          return `:p${n}`;
+        });
+        paramsForTarget = namedOracleParams;
       } else if (targetDatabase.type === 'mssql') {
         // SQL Server no soporta params posicionales por esta vía; sustituir como literales seguros
         // (solo strings y números — oracledb/mssql tienen sus propios bindings)
@@ -1276,15 +1346,42 @@ function buildCrossDbSelectOptions(options = {}) {
 }
 
 function resolveArticleExecutionDatabaseId(article = {}, structuredScript = null, options = {}) {
-  // Lee el target_database de TODAS las fuentes posibles: URL param, script_json (cualquier variante de nombre)
-  const explicitDatabaseId = String(options?.databaseId || '').trim()
-    || String(structuredScript?.databaseId || '').trim()
-    || String(structuredScript?.target_database || '').trim()
-    || String(structuredScript?.database_id || '').trim()
-    || String(structuredScript?.target_database_id || '').trim();
+  // ── DISEÑO: el "Base de datos destino" configurado en el artículo es SIEMPRE la autoridad ──
+  //
+  // ORDEN DE PRIORIDAD:
+  //   1. target_database  — campo canónico guardado por el modal de admin (la selección explícita del admin)
+  //   2. databaseId       — alias camelCase (puede estar desactualizado si hubo save parcial)
+  //   3. database_id      — alias snake_case (seed original)
+  //   4. target_database_id — alias legacy
+  //   5. options.databaseId — override del request (solo se usa si el artículo NO tiene BD configurada,
+  //                           porque puede venir del caché del frontend con un valor desactualizado)
+  //
+  // RAZÓN: options.databaseId viene de inferArticleExecutionTarget() en el frontend, que lee el
+  // script_json LOCAL (puede estar en caché). Si target_database ya está en el artículo de la BD,
+  // ese valor SIEMPRE debe ganar sobre cualquier cosa que el frontend calcule.
 
+  const articleConfiguredDb =
+    String(structuredScript?.target_database || '').trim() ||
+    String(structuredScript?.databaseId || '').trim() ||
+    String(structuredScript?.database_id || '').trim() ||
+    String(structuredScript?.target_database_id || '').trim();
+
+  // El artículo tiene BD explícita configurada → usar siempre, ignorar el param del request
+  if (articleConfiguredDb) {
+    console.log(`[resolveArticleExecutionDatabaseId] BD del artículo: "${articleConfiguredDb}" (artículo ${article?.id || 'unknown'})`);
+    return articleConfiguredDb;
+  }
+
+  // El artículo NO tiene BD configurada → usar el override del request como fallback
+  const requestOverride = String(options?.databaseId || '').trim();
+  if (requestOverride) {
+    console.log(`[resolveArticleExecutionDatabaseId] BD del request (fallback): "${requestOverride}" (artículo ${article?.id || 'unknown'})`);
+    return requestOverride;
+  }
+
+  const explicitDatabaseId = ''; // ninguno encontrado, continuar con detección automática
   if (explicitDatabaseId) {
-    console.log(`[resolveArticleExecutionDatabaseId] target explícito: "${explicitDatabaseId}" (artículo ${article?.id || 'unknown'})`);
+    // rama never-reached — mantenida para no romper el flujo del return abajo
     return explicitDatabaseId;
   }
 
@@ -2076,6 +2173,14 @@ function validateBusinessScriptDefinition(script) {
     String(script.modo || '').trim().toLowerCase() === 'script'
     && String(script.origen || '').trim().toLowerCase() === 'manual-sql'
   ) {
+    // MongoDB format: collection + pipeline/filter (no sql field required)
+    const hasMongoPayload =
+      String(script.collection || '').trim().length > 0 &&
+      (String(script.pipeline || '').trim().length > 0 ||
+       String(script.filter   || '').trim().length > 0 ||
+       String(script.operation || '').trim().length > 0);
+    if (hasMongoPayload) return; // Valid MongoDB article — no SQL validation needed
+
     const sqlText = String(script.sql || '').trim();
     if (!sqlText) throw new Error('SQL manual vacío');
 
@@ -2431,11 +2536,108 @@ function normalizeManualSqlParamsInput(rawParams) {
   return {};
 }
 
+/**
+ * Splits a multi-statement SQL script into individual statements on `;`,
+ * while correctly ignoring semicolons that appear inside:
+ *   - single-quoted strings  '...'   ('' = escaped quote)
+ *   - double-quoted identifiers "..." ("" = escaped)
+ *   - backtick identifiers (MySQL)  `...`
+ *   - line comments  -- ...
+ *   - block comments /* ... *​/
+ *   - dollar-quoted blocks (PostgreSQL)  $$...$$  or  $tag$...$tag$
+ * This lets arbitrarily long / complex scripts (DBeaver-style) be split safely.
+ */
 function splitManualSqlSteps(sqlText = '') {
-  return String(sqlText || '')
-    .split(';')
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const text = String(sqlText || '').trim();
+  if (!text) return [];
+  // MongoDB JSON queries start with '{' — never split them, return as single step
+  if (text.startsWith('{')) return [text];
+
+  const statements = [];
+  let current = '';
+  let i = 0;
+  const n = text.length;
+
+  while (i < n) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    // ── line comment: -- ... \n ──
+    if (ch === '-' && next === '-') {
+      const eol = text.indexOf('\n', i);
+      const end = eol === -1 ? n : eol;
+      current += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    // ── block comment: /* ... */ ──
+    if (ch === '/' && next === '*') {
+      const close = text.indexOf('*/', i + 2);
+      const end = close === -1 ? n : close + 2;
+      current += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    // ── single-quoted string ──
+    if (ch === "'") {
+      let j = i + 1;
+      while (j < n) {
+        if (text[j] === "'" && text[j + 1] === "'") { j += 2; continue; }
+        if (text[j] === "'") { j += 1; break; }
+        j += 1;
+      }
+      current += text.slice(i, j);
+      i = j;
+      continue;
+    }
+    // ── double-quoted identifier ──
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < n) {
+        if (text[j] === '"' && text[j + 1] === '"') { j += 2; continue; }
+        if (text[j] === '"') { j += 1; break; }
+        j += 1;
+      }
+      current += text.slice(i, j);
+      i = j;
+      continue;
+    }
+    // ── backtick identifier (MySQL) ──
+    if (ch === '`') {
+      const close = text.indexOf('`', i + 1);
+      const end = close === -1 ? n : close + 1;
+      current += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    // ── dollar-quoted block (PostgreSQL): $$...$$ or $tag$...$tag$ ──
+    if (ch === '$') {
+      const tagMatch = text.slice(i, i + 64).match(/^\$([a-zA-Z_]\w*)?\$/);
+      if (tagMatch) {
+        const tag = tagMatch[0];
+        const close = text.indexOf(tag, i + tag.length);
+        const end = close === -1 ? n : close + tag.length;
+        current += text.slice(i, end);
+        i = end;
+        continue;
+      }
+    }
+    // ── statement terminator ──
+    if (ch === ';') {
+      const trimmed = current.trim();
+      if (trimmed) statements.push(trimmed);
+      current = '';
+      i += 1;
+      continue;
+    }
+
+    current += ch;
+    i += 1;
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+  return statements;
 }
 
 function getManualSqlStepTitle(stepSql = '', stepNumber = 1) {
@@ -2460,6 +2662,26 @@ function buildHumanSqlExplanation(rows = []) {
   }
 
   const first = rows[0] || {};
+
+  // ── MongoDB mutation responses ────────────────────────────────────────────
+  if ('insertedId' in first) {
+    const id = String(first.insertedId || '').slice(0, 24);
+    return `✅ Documento insertado correctamente. ID: ${id}`;
+  }
+  if ('insertedCount' in first) {
+    const n = Number(first.insertedCount || 0);
+    return `✅ Se insertaron ${n} documento${n !== 1 ? 's' : ''} correctamente.`;
+  }
+  if ('modifiedCount' in first || 'matchedCount' in first) {
+    const matched = Number(first.matchedCount ?? 0);
+    const modified = Number(first.modifiedCount ?? 0);
+    const upserted = Number(first.upsertedCount ?? 0);
+    return `✅ Documentos encontrados: ${matched}, modificados: ${modified}${upserted > 0 ? `, insertados (upsert): ${upserted}` : ''}.`;
+  }
+  if ('deletedCount' in first) {
+    const n = Number(first.deletedCount || 0);
+    return `✅ Se eliminaron ${n} documento${n !== 1 ? 's' : ''}.`;
+  }
 
   const normalizeLabel = (key) => String(key || '')
     .replace(/^[_\W]+|[_\W]+$/g, '')
@@ -2660,12 +2882,10 @@ function filterRelevantNotices(notices = []) {
     /^\s*\[step\s*\d+\]/i,
     /^\s*paso\s*\d+\s*:/i,
     /^\s*\[sql/i,
-    /^\s*\[sql operation\]/i,
-    /^\s*\[sql placeholders\]/i,
-    /^\s*\[sql params\]/i,
+    /^\s*\[(operation|query|sql operation|sql placeholders|sql params)\]/i,
     /^\s*(inicio|fin)\b/i,
     /^\s*(debug|traza|trace)\b/i,
-    /^\s*(motor|workflow)\b/i,
+    /^\s*(motor|workflow|script interpretado)\b/i,
   ];
 
   const unique = new Set();
@@ -2676,7 +2896,10 @@ function filterRelevantNotices(notices = []) {
     if (!msg) continue;
     msg = msg.replace(/^NOTICE:\s*/i, '').trim();
     if (!msg) continue;
-    if (blocked.some((pattern) => pattern.test(msg))) continue;
+    // Strip leading emojis / symbols so technical lines like "🧠 Motor SQL..."
+    // are still caught by the blocked patterns below.
+    const testMsg = msg.replace(/^[^\w[]+/, '').trim();
+    if (blocked.some((pattern) => pattern.test(msg) || pattern.test(testMsg))) continue;
 
     const dedupeKey = msg.toLowerCase();
     if (unique.has(dedupeKey)) continue;
@@ -2771,8 +2994,10 @@ function buildProductionSqlResponse({
     resultado,
   };
 
-  // Only fall back to generic message when no notice content was generated
-  if (data.length === 0 && resultado.length === 0 && String(message || '').trim() && cleanNotices.length === 0) {
+  // Fall back to the generic message ONLY when no better summary exists.
+  // buildProductionSummary already returns `explicacion` (e.g. the write
+  // before/after detail) as its fallback, so we must not clobber it here.
+  if (!String(payload.resumenHumano || '').trim() && String(message || '').trim()) {
     payload.resumenHumano = String(message || '').trim();
   }
 
@@ -2891,11 +3116,15 @@ function assertManualSqlAllowed(sqlText, options = {}) {
     throw new Error('Esta acción modificará datos. Confirma la ejecución para continuar.');
   }
 
-  if (operation === 'select' && MANUAL_SQL_BLOCKED_KEYWORDS.test(cleaned)) {
+  // Keyword check against code only — a "update"/"delete" word inside a string
+  // literal of a SELECT must not trip this guard.
+  if (operation === 'select' && MANUAL_SQL_BLOCKED_KEYWORDS.test(stripSqlStringsAndComments(cleaned))) {
     throw new Error('SQL contiene palabras bloqueadas');
   }
 
-  if (!PROC_OPS.has(operation) && operation !== 'merge' && cleaned.includes(';')) {
+  // Reject stacked statements — but a ; inside a string literal or comment is
+  // NOT a separator, so use the real tokenizing splitter.
+  if (!PROC_OPS.has(operation) && operation !== 'merge' && splitManualSqlSteps(cleaned).length > 1) {
     throw new Error('Solo se permite una consulta por ejecución en la consola');
   }
 }
@@ -3154,12 +3383,12 @@ async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
       return await pool.query(sqlText, params);
     }
     const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlText, params });
-    return { rows: rows || [], rowCount: (rows || []).length };
+    return { rows: rows || [], rowCount: rows?.rowCount ?? (rows || []).length };
   }
 
   if (targetDb.type === 'mongodb') {
     const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlText, params: {} });
-    return { rows: rows || [], rowCount: (rows || []).length };
+    return { rows: rows || [], rowCount: rows?.rowCount ?? (rows || []).length };
   }
 
   // MySQL / Oracle / MSSQL — convert $N placeholders to native format
@@ -3168,9 +3397,23 @@ async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
 
   if (paramsForTarget.length > 0) {
     if (targetDb.type === 'mysql') {
-      sqlForTarget = sqlText.replace(/\$\d+/g, '?');
+      // Expandir repetidos: si $4 aparece 2 veces → 2 '?' y 2 copias del valor en paramsForTarget
+      const expandedMysqlWriteParams = [];
+      sqlForTarget = sqlText.replace(/\$(\d+)/g, (_, n) => {
+        const idx = parseInt(n, 10) - 1;
+        expandedMysqlWriteParams.push(params[idx] ?? null);
+        return '?';
+      });
+      paramsForTarget = expandedMysqlWriteParams;
     } else if (targetDb.type === 'oracle') {
-      sqlForTarget = sqlText.replace(/\$(\d+)/g, ':$1');
+      // Oracle NAMED binds: :p1, :p2,... — pueden repetirse sin duplicar valores
+      const namedOracleWriteParams = {};
+      sqlForTarget = sqlText.replace(/\$(\d+)/g, (_, n) => {
+        const idx = parseInt(n, 10) - 1;
+        namedOracleWriteParams[`p${n}`] = params[idx] ?? null;
+        return `:p${n}`;
+      });
+      paramsForTarget = namedOracleWriteParams;
     } else if (targetDb.type === 'mssql') {
       // Convertir $N → @pN; los valores se pasan como parámetros vinculados (no concatenación)
       sqlForTarget = sqlText.replace(/\$(\d+)/g, '@p$1');
@@ -3179,7 +3422,169 @@ async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
   }
 
   const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDb.id, sql: sqlForTarget, params: paramsForTarget });
-  return { rows: rows || [], rowCount: (rows || []).length };
+  return { rows: rows || [], rowCount: rows?.rowCount ?? (rows || []).length };
+}
+
+// ─── Write-operation detail: parse target + before/after snapshots ───────────
+
+/**
+ * Extracts the target table + WHERE clause from a single-statement
+ * UPDATE / DELETE / INSERT so we can snapshot affected rows.
+ * Returns null when the statement can't be parsed (multi-statement, exotic SQL).
+ */
+function parseWriteTarget(sqlText = '') {
+  const sql = String(sqlText || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/;\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Bail on multi-statement scripts — the snapshot would be ambiguous.
+  if (/;\s*\S/.test(sql)) return null;
+
+  let m = sql.match(/^update\s+([a-zA-Z_][\w.$"]*)\s+set\s+[\s\S]*?(?:\s+where\s+([\s\S]+?))?(?:\s+returning\b[\s\S]*)?$/i);
+  if (m) return { operation: 'update', table: m[1].replace(/"/g, ''), whereClause: (m[2] || '').trim() };
+
+  m = sql.match(/^delete\s+from\s+([a-zA-Z_][\w.$"]*)(?:\s+where\s+([\s\S]+?))?(?:\s+returning\b[\s\S]*)?$/i);
+  if (m) return { operation: 'delete', table: m[1].replace(/"/g, ''), whereClause: (m[2] || '').trim() };
+
+  m = sql.match(/^insert\s+into\s+([a-zA-Z_][\w.$"]*)/i);
+  if (m) return { operation: 'insert', table: m[1].replace(/"/g, ''), whereClause: '' };
+
+  return null;
+}
+
+/**
+ * Re-numbers the $N placeholders inside a WHERE clause so it can run as a
+ * standalone SELECT (the original numbering references the full statement).
+ */
+function renumberWhereParams(whereClause = '', allValues = []) {
+  const map = new Map();
+  const values = [];
+  const clause = String(whereClause || '').replace(/\$(\d+)/g, (_, n) => {
+    const old = Number(n);
+    if (!map.has(old)) { map.set(old, values.length + 1); values.push(allValues[old - 1]); }
+    return '$' + map.get(old);
+  });
+  return { clause, values };
+}
+
+/** Picks a likely identifier column from a row, for before/after matching. */
+function pickRowIdentifier(row = {}) {
+  for (const k of ['id', 'ID', 'Id', '_id', 'uuid', 'UUID', 'codigo', 'CODIGO']) {
+    if (row && Object.prototype.hasOwnProperty.call(row, k)) return { key: k, value: row[k] };
+  }
+  return null;
+}
+
+/** Runs a bounded SELECT against the target DB to snapshot rows. Never throws. */
+async function snapshotRowsForDetail(table, whereClause, values, targetDatabaseId, dbType, limit = 100) {
+  try {
+    const safeTable = String(table || '').replace(/[^\w.$]/g, '');
+    if (!safeTable) return [];
+    const limitClause = dbType === 'oracle' ? ` FETCH FIRST ${limit} ROWS ONLY` : ` LIMIT ${limit}`;
+    let snapSql = `SELECT * FROM ${safeTable}`;
+    let snapValues = [];
+    if (whereClause && whereClause.trim()) {
+      const renum = renumberWhereParams(whereClause, values);
+      snapSql += ` WHERE ${renum.clause}`;
+      snapValues = renum.values;
+    }
+    snapSql += limitClause;
+    const res = await executeSafeSelectQuery(snapSql, snapValues, 5000, {
+      allowCrossDatabase: true,
+      databaseId: targetDatabaseId,
+      allowUnknownTablesForTarget: true,
+    });
+    return Array.isArray(res?.rows) ? res.rows : [];
+  } catch (err) {
+    console.warn('[WRITE_DETAIL] snapshot falló:', err?.message || err);
+    return [];
+  }
+}
+
+/** Formats a value for the before/after detail lines. */
+function formatDetailValue(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'object') {
+    const s = JSON.stringify(v);
+    return s.length > 80 ? s.slice(0, 80) + '…' : s;
+  }
+  const s = String(v);
+  return s.length > 80 ? s.slice(0, 80) + '…' : s;
+}
+
+/**
+ * Builds a human, multi-line explanation for a write operation, including a
+ * per-row before→after diff (UPDATE), deleted rows (DELETE) or inserted rows (INSERT).
+ */
+function buildWriteDetailExplanation({ operation, table, affectedRows, beforeRows = [], afterRows = [], text = '' }) {
+  const op = String(operation || '').toLowerCase();
+  const preview = String(text || '').replace(/\s+/g, ' ').trim();
+  const queryPreview = preview.length > 160 ? preview.slice(0, 160) + '…' : preview;
+  const n = Number(affectedRows || 0);
+  const plural = (count) => (count === 1 ? '' : 's');
+  const lines = [];
+
+  if (op === 'update') {
+    lines.push(`✅ UPDATE ejecutado en \`${table}\` — ${n} fila${plural(n)} afectada${plural(n)}.`);
+    if (n === 0) {
+      lines.push('ℹ️ Ninguna fila coincidió con el criterio WHERE — no se modificó ningún dato.');
+    } else if (beforeRows.length && afterRows.length) {
+      const afterById = new Map();
+      for (const r of afterRows) {
+        const id = pickRowIdentifier(r);
+        if (id) afterById.set(String(id.value), r);
+      }
+      lines.push('📋 Cambios aplicados (antes → después):');
+      let shown = 0;
+      for (const before of beforeRows) {
+        if (shown >= 20) { lines.push(`  … y ${beforeRows.length - shown} fila${plural(beforeRows.length - shown)} más`); break; }
+        const id = pickRowIdentifier(before);
+        const after = id ? afterById.get(String(id.value)) : null;
+        if (!after) continue;
+        const changes = [];
+        for (const key of Object.keys(before)) {
+          const b = formatDetailValue(before[key]);
+          const a = formatDetailValue(after[key]);
+          if (b !== a) changes.push(`${key}: ${b} → ${a}`);
+        }
+        if (changes.length) {
+          const lbl = id ? `${id.key}=${formatDetailValue(id.value)}` : `fila ${shown + 1}`;
+          lines.push(`  • ${lbl} — ${changes.join('  |  ')}`);
+          shown++;
+        }
+      }
+      if (shown === 0) lines.push('  • Las filas coincidieron pero los valores nuevos eran iguales a los anteriores.');
+    }
+  } else if (op === 'delete') {
+    lines.push(`✅ DELETE ejecutado en \`${table}\` — ${n} fila${plural(n)} eliminada${plural(n)}.`);
+    if (n === 0) {
+      lines.push('ℹ️ Ninguna fila coincidió con el criterio WHERE — no se eliminó ningún dato.');
+    } else if (beforeRows.length) {
+      lines.push('🗑️ Registros eliminados:');
+      beforeRows.slice(0, 20).forEach((r) => {
+        const entries = Object.entries(r).slice(0, 6).map(([k, v]) => `${k}=${formatDetailValue(v)}`);
+        lines.push(`  • ${entries.join(', ')}`);
+      });
+      if (beforeRows.length > 20) lines.push(`  … y ${beforeRows.length - 20} más`);
+    }
+  } else if (op === 'insert') {
+    lines.push(`✅ INSERT ejecutado en \`${table}\` — ${n} fila${plural(n)} insertada${plural(n)}.`);
+    if (afterRows.length) {
+      lines.push('📥 Registros insertados:');
+      afterRows.slice(0, 20).forEach((r) => {
+        const entries = Object.entries(r).slice(0, 8).map(([k, v]) => `${k}=${formatDetailValue(v)}`);
+        lines.push(`  • ${entries.join(', ')}`);
+      });
+    }
+  } else {
+    lines.push(`✅ ${op.toUpperCase()} ejecutado correctamente — ${n} fila${plural(n)} afectada${plural(n)}.`);
+  }
+
+  lines.push(`📝 SQL: ${queryPreview}`);
+  return lines.join('\n');
 }
 
 async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowContext = {}, silent = false, options = {}) {
@@ -3192,15 +3597,24 @@ async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowCont
   let text, values, placeholderOrder, placeholderOccurrences, operation;
 
   if (isMongoDb) {
-    // MongoDB: resolve {{variable}} placeholders via simple string substitution,
+    // MongoDB: resolve {{variable}} placeholders via string substitution,
     // then pass the resulting JSON directly to executeCompiledQuery.
+    // A placeholder may appear two ways inside the JSON:
+    //   "{{dept}}"  → user already quoted it  → replace incl. quotes with JSON value
+    //   {{min}}     → bare placeholder        → replace with JSON value
+    // Both must end up as a single valid JSON token (no double-quoting).
     let resolvedQuery = String(sqlText || '').trim();
     const allContext = { ...(workflowContext || {}), ...(rawParams || {}) };
     for (const [key, val] of Object.entries(allContext)) {
-      const safe = val === null || val === undefined ? 'null'
+      const jsonValue = val === null || val === undefined ? 'null'
         : typeof val === 'string' ? JSON.stringify(val)
-        : String(val);
-      resolvedQuery = resolvedQuery.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), safe);
+        : (typeof val === 'number' || typeof val === 'boolean') ? String(val)
+        : JSON.stringify(val);
+      const keyPattern = `\\{\\{\\s*${key}\\s*\\}\\}`;
+      // 1) quoted form: "{{key}}" → jsonValue (strip the surrounding quotes)
+      resolvedQuery = resolvedQuery.replace(new RegExp(`"${keyPattern}"`, 'g'), jsonValue);
+      // 2) bare form: {{key}} → jsonValue
+      resolvedQuery = resolvedQuery.replace(new RegExp(keyPattern, 'g'), jsonValue);
     }
     text = resolvedQuery;
     values = [];
@@ -3233,20 +3647,57 @@ async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowCont
   const targetDatabaseId = _stepDatabaseId;
 
   let result;
+  let writeDetail = null; // human before/after diff for UPDATE/DELETE/INSERT
   if (isMongoDb) {
     // MongoDB: all operations go through executeCompiledQuery
     const rows = await multiDbRegistry.executeCompiledQuery({ databaseId: targetDatabaseId, sql: text, params: {} });
-    result = { rows: rows || [], rowCount: (rows || []).length };
+    result = { rows: rows || [], rowCount: rows?.rowCount ?? (rows || []).length };
   } else if (operation === 'select') {
-    result = await executeSafeSelectQuery(text, values, 5000, {
+    // Generous timeout (2 min, env-overridable) so heavy analytical SELECTs run
+    result = await executeSafeSelectQuery(text, values, MANUAL_SQL_TIMEOUT_MS, {
       allowCrossDatabase: true,
       databaseId: targetDatabaseId,
       allowUnknownTablesForTarget: true,
     });
   } else {
     // DML, DDL, MERGE, CALL, EXEC, TRUNCATE, DROP, CREATE, ALTER...
-    // Todo pasa al motor del target — la seguridad es la visibilidad del artículo
+    // Todo pasa al motor del target — la seguridad es la visibilidad del artículo.
+    //
+    // Para UPDATE/DELETE/INSERT capturamos un "antes" y un "después" de las filas
+    // afectadas para mostrar al usuario el cambio real (campo: viejo → nuevo).
+    const parsedTarget = parseWriteTarget(text);
+    let beforeRows = [];
+    if (parsedTarget && (parsedTarget.operation === 'update' || parsedTarget.operation === 'delete')) {
+      beforeRows = await snapshotRowsForDetail(
+        parsedTarget.table, parsedTarget.whereClause, values, targetDatabaseId, _stepDbType,
+      );
+    }
+
     result = await executeWriteToTargetDb(text, values, targetDatabaseId);
+
+    if (parsedTarget) {
+      let afterRows = [];
+      if (parsedTarget.operation === 'update') {
+        afterRows = await snapshotRowsForDetail(
+          parsedTarget.table, parsedTarget.whereClause, values, targetDatabaseId, _stepDbType,
+        );
+      } else if (parsedTarget.operation === 'insert' && Array.isArray(result?.rows) && result.rows.length > 0) {
+        // Postgres con RETURNING devuelve las filas insertadas
+        afterRows = result.rows;
+      }
+      try {
+        writeDetail = buildWriteDetailExplanation({
+          operation: parsedTarget.operation,
+          table: parsedTarget.table,
+          affectedRows: Number(result.rowCount || 0),
+          beforeRows,
+          afterRows,
+          text,
+        });
+      } catch (detailErr) {
+        console.warn('[WRITE_DETAIL] no se pudo construir el detalle:', detailErr?.message || detailErr);
+      }
+    }
   }
 
   const executionMs = Date.now() - startedAt;
@@ -3261,14 +3712,36 @@ async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowCont
     });
   }
 
+  // Build a meaningful explanation even when no rows are returned
+  const rows = result.rows || [];
+  let explicacion;
+  if (writeDetail) {
+    // Detailed before/after diff for write operations
+    explicacion = writeDetail;
+  } else if (rows.length > 0) {
+    explicacion = buildHumanSqlExplanation(rows);
+  } else if (operation !== 'select') {
+    // Write operation we couldn't parse for detail — describe what was executed
+    const opUpper = String(operation || 'write').toUpperCase();
+    const queryPreview = text.slice(0, 120).replace(/\s+/g, ' ').trim();
+    const ellipsis = text.length > 120 ? '…' : '';
+    if (affectedRows > 0) {
+      explicacion = `✅ ${opUpper} ejecutado correctamente. ${affectedRows} fila${affectedRows !== 1 ? 's' : ''} afectada${affectedRows !== 1 ? 's' : ''}.\n📝 SQL: ${queryPreview}${ellipsis}`;
+    } else {
+      explicacion = `✅ ${opUpper} ejecutado correctamente (0 filas afectadas).\n📝 SQL: ${queryPreview}${ellipsis}`;
+    }
+  } else {
+    explicacion = 'La consulta se ejecutó correctamente pero no devolvió registros.';
+  }
+
   return {
     success: true,
-    data: result.rows || [],
-    resultado: result.rows || [],
-    resultado_final: (result.rows || [])[0] || null,
+    data: rows,
+    resultado: rows,
+    resultado_final: rows[0] || null,
     affectedRows,
     message: 'Consulta ejecutada correctamente',
-    explicacion: buildHumanSqlExplanation(result.rows || []),
+    explicacion,
     executedQuery: text,
     placeholderOrder,
     placeholderOccurrences,
@@ -3465,7 +3938,14 @@ async function executeStepList(steps, rawParams, workflowContext, startIndex, em
       const stepResult = await executeOneSqlStep(step.sql, rawParams, workflowContext, stepNum, emit);
       finalResult = stepResult;
       workflowContext[`step${stepNum}`] = normalizeWorkflowStoredValue(stepResult);
-      executions.push({ step: `step${stepNum}`, executedQuery: stepResult.executedQuery, executionMs: stepResult.executionMs, title: step.title, affectedRows: stepResult.affectedRows || 0 });
+      executions.push({
+        step: `step${stepNum}`,
+        executedQuery: stepResult.executedQuery,
+        executionMs: stepResult.executionMs,
+        title: step.title,
+        affectedRows: stepResult.affectedRows || 0,
+        explicacion: stepResult.explicacion || '',
+      });
     }
   }
   return { executions, finalResult, notices };
@@ -3659,7 +4139,10 @@ async function executeComplexSqlWorkflow(sqlText, rawParams, emit) {
     message: 'Script procedural ejecutado correctamente',
     explicacion: explanation,
     notices: summaryLines,
-    resumenHumano: summaryLines.length > 0 ? summaryLines.join('\n') : explanation,
+    // Per-step write detail (antes→después) takes priority over RAISE NOTICE lines
+    resumenHumano: /▸|✅\s+(UPDATE|DELETE|INSERT)\b/.test(explanation)
+      ? explanation
+      : (summaryLines.length > 0 ? summaryLines.join('\n') : explanation),
     resultadoSemantico: structuredSemanticResult,
     ...stepPayload,
     data: consolidatedData,
@@ -3719,10 +4202,38 @@ function extractSemanticMetricsFromNotices(lines = []) {
   return metrics;
 }
 
+/**
+ * If any step produced a detailed write explanation (UPDATE/DELETE/INSERT
+ * antes→después), builds a per-step breakdown so the user sees exactly what
+ * each step changed. Returns null when no step has write detail.
+ */
+function buildPerStepWriteSummary(executions = []) {
+  const list = Array.isArray(executions) ? executions : [];
+  const detailedSteps = list.filter(
+    (ex) => typeof ex.explicacion === 'string'
+      && /^✅\s+(UPDATE|DELETE|INSERT)\b/i.test(ex.explicacion.trim()),
+  );
+  if (detailedSteps.length === 0) return null;
+
+  const affectedTotal = list.reduce((sum, ex) => sum + Number(ex.affectedRows || 0), 0);
+  const stepCount = list.length;
+  const blocks = detailedSteps.map((ex, idx) => {
+    const title = String(ex.title || `Paso ${idx + 1}`).trim();
+    return `▸ ${title}\n${ex.explicacion.trim()}`;
+  });
+  const header = `El script ejecutó ${stepCount} ${stepCount === 1 ? 'paso' : 'pasos'}`
+    + (affectedTotal > 0 ? ` y afectó ${affectedTotal} fila${affectedTotal !== 1 ? 's' : ''} en total.` : '.');
+  return `${header}\n\n${blocks.join('\n\n')}`;
+}
+
 function buildComplexWorkflowExplanation(steps, executions, finalResult) {
   const rows = finalResult?.data || [];
   const loopSteps = steps.filter((s) => s.type === 'for_loop');
   const affectedTotal = executions.reduce((sum, ex) => sum + (ex.affectedRows || 0), 0);
+
+  // Per-step write detail (UPDATE/DELETE/INSERT antes→después)
+  const perStepSummary = buildPerStepWriteSummary(executions);
+  if (perStepSummary) return perStepSummary;
 
   if (loopSteps.length > 0 && affectedTotal > 0) {
     return `El script procesó registros en ${loopSteps.length} loop(s) y afectó ${affectedTotal} filas en total.`;
@@ -3737,13 +4248,84 @@ function buildComplexWorkflowExplanation(steps, executions, finalResult) {
 }
 
 async function executeManualSqlScript(script, rawParams, emit) {
-  const sqlText = String(script?.sql || '').trim();
+  // ── Construir sqlText ─────────────────────────────────────────────────────
+  // Para artículos SQL estándar: script.sql contiene el texto de la consulta.
+  // Para artículos MongoDB: el script guarda pipeline/collection/operation por separado
+  // y hay que ensamblar el JSON { collection, aggregate/find/... } que espera executeCompiledQuery.
+  const sqlText = (() => {
+    const rawSql = String(script?.sql || '').trim();
+    if (rawSql) return rawSql;
+
+    const collection = String(script?.collection || '').trim();
+    const pipelineRaw = String(script?.pipeline || '').trim();
+    const filterRaw   = String(script?.filter   || '').trim();
+    const sortRaw     = String(script?.sort      || '').trim();
+    const limitVal    = script?.limit != null ? Number(script.limit) : null;
+    const operation   = String(script?.operation || 'aggregate').trim().toLowerCase();
+
+    if (!collection) return rawSql;
+
+    // ── BSON type normalizer (shared by pipeline and filter parsers) ────────
+    const normalizeBson = (str) => str
+      .replace(/\bObjectId\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+      .replace(/\bNumberInt\s*\(\s*['"]?(-?\d+)['"]?\s*\)/g, '$1')
+      .replace(/\bNumberLong\s*\(\s*['"]?(-?\d+)['"]?\s*\)/g, '$1')
+      .replace(/\bNumberDecimal\s*\(\s*['"]?(-?[\d.]+)['"]?\s*\)/g, '$1')
+      .replace(/\bDouble\s*\(\s*['"]?(-?[\d.eE+\-]+)['"]?\s*\)/g, '$1')
+      .replace(/\bISODate\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+      .replace(/\bnew\s+Date\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+      .replace(/\bBinData\s*\([^)]*\)/g, '"[BinData]"')
+      .replace(/\bTimestamp\s*\([^)]*\)/g, '0')
+      .replace(/\bUUID\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"');
+
+    const relaxMongo = (str) => normalizeBson(str)
+      .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')  // quote unquoted keys
+      .replace(/:\s*'([^'\\]*(\\.[^'\\]*)*)'/g, ': "$1"');              // single→double quotes
+
+    // ── Aggregate pipeline (e.g. MongoDB Pipeline con $group, $addFields) ───
+    if (pipelineRaw) {
+      try {
+        // Try strict JSON first; fall back to relaxed parser for MongoDB shell / BSON syntax
+        let parsedPipeline;
+        try {
+          parsedPipeline = JSON.parse(pipelineRaw);
+        } catch {
+          parsedPipeline = JSON.parse(relaxMongo(pipelineRaw));
+        }
+        const mongoOp = { collection };
+        if (operation === 'aggregate') mongoOp.aggregate = parsedPipeline;
+        else mongoOp[operation] = parsedPipeline;
+        return JSON.stringify(mongoOp);
+      } catch {
+        // Will fall through and fail with clear message at sqlSteps check
+      }
+    }
+
+    // ── Find / findOne con filter (puede contener {{params}} no resueltos aún) ──
+    // Construimos el JSON como string para que executeSingleManualSqlStep pueda
+    // reemplazar los {{placeholders}} antes de parsear.
+    if (operation === 'find' || operation === 'findone' || filterRaw) {
+      const collectionJson = JSON.stringify(collection);
+      // Normalize BSON types in filter (e.g. from MongoDB Compass copy-paste)
+      const findFilter = relaxMongo(filterRaw || '{}');
+      let jsonStr = `{"collection":${collectionJson},"find":${findFilter}`;
+      if (sortRaw)  jsonStr += `,"sort":${relaxMongo(sortRaw)}`;
+      if (limitVal) jsonStr += `,"limit":${limitVal}`;
+      jsonStr += '}';
+      return jsonStr;
+    }
+
+    return rawSql;
+  })();
 
   // ── Resolve target database ───────────────────────────────────────────────
-  // La única fuente de verdad es lo que el admin configuró en "Base de datos destino".
-  // No se usa auto-detección por sintaxis — evita que DATE_TRUNC/NOW() u otros
-  // marcadores anulen la selección explícita del administrador.
-  const resolvedDatabaseId = String(script?.databaseId || '').trim() || null;
+  // target_database es el campo canónico guardado por el admin. databaseId es alias.
+  // target_database SIEMPRE tiene prioridad: es lo que el admin seleccionó en el modal.
+  const resolvedDatabaseId =
+    String(script?.target_database || '').trim() ||
+    String(script?.databaseId || '').trim() ||
+    String(script?.database_id || '').trim() ||
+    null;
 
   console.log(buildEngineLog({
     engine: null,
@@ -3783,7 +4365,10 @@ async function executeManualSqlScript(script, rawParams, emit) {
   }
 
   // ── Complex PostgreSQL procedural scripts ─────────────────────────────────
-  if (shouldForceProceduralMode(sqlText) || isComplexSqlScript(sqlText)) {
+  // Only apply for PostgreSQL targets (or fallback primary). MySQL/Oracle/MongoDB/MSSQL
+  // articles must NOT be intercepted here — INSERT INTO triggers \bINTO\b in isComplexSqlScript.
+  const isPostgresOrDefaultTarget = !resolvedDatabaseId || !resolvedDb || resolvedDb.type === 'postgres';
+  if (isPostgresOrDefaultTarget && (shouldForceProceduralMode(sqlText) || isComplexSqlScript(sqlText))) {
     if (typeof emit === 'function') {
       emit('🔍 Paso 1: Analizando script');
       emit('📊 Paso 2: Procesando lógica');
@@ -3791,6 +4376,17 @@ async function executeManualSqlScript(script, rawParams, emit) {
       emit('🧠 Script procedural detectado. Ejecutando en PostgreSQL real...');
     }
     return executeProceduralScriptWithNotices(sqlText, emit);
+  }
+
+  // Guard: reject raw MongoDB BSON documents (ObjectId/NumberInt/ISODate without db. prefix)
+  // These cause confusing JS parser errors downstream. Users must use db.collection.op() syntax.
+  const BSON_CONSTRUCTOR_RE = /\b(ObjectId|NumberInt|NumberLong|NumberDecimal|Double|ISODate)\s*\(/;
+  if (BSON_CONSTRUCTOR_RE.test(sqlText) && !/^\s*db\./.test(sqlText)) {
+    throw new Error(
+      'Se detectó un documento MongoDB (ObjectId/NumberInt/ISODate). '
+      + 'Para consultar usa: db.conciliacion.find({institutionCode:4}) '
+      + 'o db.conciliacion.aggregate([{$match:{institutionCode:4}}])'
+    );
   }
 
   const sqlSteps = splitManualSqlSteps(sqlText);
@@ -3836,6 +4432,7 @@ async function executeManualSqlScript(script, rawParams, emit) {
         placeholderOrder: stepResult.placeholderOrder,
         affectedRows: stepResult.affectedRows || 0,
         executionMs: stepResult.executionMs,
+        explicacion: stepResult.explicacion || '',
       });
     }
 
@@ -3843,10 +4440,14 @@ async function executeManualSqlScript(script, rawParams, emit) {
     const consolidatedData = aggregatedResult ? [aggregatedResult] : (finalResult?.data ?? []);
     const consolidatedFinal = aggregatedResult ?? finalResult?.resultado_final ?? (consolidatedData[0] || null);
 
+    // Consolidate per-step write detail (antes→después) when present;
+    // otherwise fall back to the last step's explanation.
+    const perStepSummary = buildPerStepWriteSummary(stepExecutions);
+
     return {
       success: true,
       message: 'Proceso SQL ejecutado correctamente',
-      explicacion: finalResult?.explicacion || buildHumanSqlExplanation(consolidatedData),
+      explicacion: perStepSummary || finalResult?.explicacion || buildHumanSqlExplanation(consolidatedData),
       ...stepPayload,
       final: consolidatedData,
       data: consolidatedData,
@@ -3967,6 +4568,28 @@ function extractVariables(scriptJson) {
   return Array.from(collectStructuredVariables(parsedScript));
 }
 
+// SQL write keywords — DML, DDL and privilege/procedure calls that can change the system.
+const SQL_WRITE_KEYWORDS_RE = /\b(insert|update|delete|merge|upsert|replace|truncate|drop|alter|create|grant|revoke|call|exec|execute)\b/i;
+// MongoDB write operations — JSON format, shell syntax, or parsed `operation` field.
+const MONGO_WRITE_OPS_RE = /\b(insertone|insertmany|updateone|updatemany|replaceone|deleteone|deletemany|findandmodify|findoneandupdate|findoneanddelete|findoneandreplace|bulkwrite)\b/i;
+
+/**
+ * Detects whether a raw SQL / MongoDB text performs a write operation.
+ * Strips SQL comments first so leading `-- comment`, block comments, `BEGIN;`
+ * or whitespace cannot hide a real mutation keyword.
+ */
+function sqlTextContainsMutation(rawSql) {
+  const noComments = String(rawSql || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // block comments
+    .replace(/--[^\n]*/g, ' ');           // line comments
+  if (!noComments.trim()) return false;
+  // MongoDB write ops — checked before stripping quotes (Mongo JSON/shell relies on them).
+  if (MONGO_WRITE_OPS_RE.test(noComments)) return true;
+  // SQL — strip single-quoted string literals so data values can't trigger false positives.
+  const sqlOnly = noComments.replace(/'(?:[^']|'')*'/g, "''");
+  return SQL_WRITE_KEYWORDS_RE.test(sqlOnly);
+}
+
 function scriptContainsMutation(node) {
   if (!node || typeof node !== 'object') {
     return false;
@@ -3978,15 +4601,23 @@ function scriptContainsMutation(node) {
 
   const current = node;
   const stepType = String(current.tipo || '').trim().toLowerCase();
-  if (stepType === 'update' || stepType === 'delete' || stepType === 'insert') {
+  if (['update', 'delete', 'insert', 'merge', 'truncate', 'drop', 'alter', 'ddl'].includes(stepType)) {
     return true;
   }
 
-  const mode = String(current.modo || '').trim().toLowerCase();
-  const source = String(current.origen || '').trim().toLowerCase();
-  const sqlText = String(current.sql || '').trim().toLowerCase();
-  if (mode === 'script' && source === 'manual-sql' && /^(update|delete|insert)\b/.test(sqlText)) {
+  // MongoDB shell-parsed format: { operation: 'updateone', ... }
+  const operation = String(current.operation || '').trim().toLowerCase();
+  if (operation && MONGO_WRITE_OPS_RE.test(operation)) {
     return true;
+  }
+
+  // Manual SQL / MongoDB text — check every field that can carry a query,
+  // regardless of modo/origen, so any storage format is covered.
+  for (const key of ['sql', 'pipeline', 'filter', 'query', 'statement']) {
+    const val = current[key];
+    if (typeof val === 'string' && sqlTextContainsMutation(val)) {
+      return true;
+    }
   }
 
   return Object.values(current).some((value) => scriptContainsMutation(value));

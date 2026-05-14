@@ -29,12 +29,26 @@ function shouldSkipRedactionForRequest(req, key, excludeTokenPaths = []) {
   return excludeTokenPaths.some((prefix) => requestPath.startsWith(prefix));
 }
 
+/**
+ * True only for plain objects ({} literals / Object.create(null)).
+ * Date, Buffer, ObjectId, Decimal128 and other class instances are NOT plain —
+ * recursing into them via Object.entries() would strip them to {} because they
+ * have no own enumerable properties. Their own toJSON() serializes them correctly.
+ */
+function isPlainObject(value) {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 function sanitizeValue(value, sensitiveFieldsSet, req, excludeTokenPaths = []) {
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeValue(item, sensitiveFieldsSet, req, excludeTokenPaths));
   }
 
-  if (!value || typeof value !== 'object') {
+  // Primitives and non-plain objects (Date, Buffer, ObjectId, etc.) pass through
+  // untouched — JSON.stringify uses their native toJSON().
+  if (!isPlainObject(value)) {
     return value;
   }
 

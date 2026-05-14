@@ -6,6 +6,7 @@ import { sanitizeUserText } from '../lib/sanitize';
 interface Comment {
   id: number;
   article_id: string;
+  article_title?: string;
   parent_id: number | null;
   author_username: string;
   author_role: string;
@@ -15,6 +16,7 @@ interface Comment {
 
 interface Props {
   articleId: string | number;
+  articleTitle?: string;
   currentUser: { username: string; role: string } | null;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -160,7 +162,7 @@ function CommentItem({
   );
 }
 
-export default function CommentsSection({ articleId, currentUser, collapsed, onToggleCollapse }: Props) {
+export default function CommentsSection({ articleId, articleTitle, currentUser, collapsed, onToggleCollapse }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -229,6 +231,7 @@ export default function CommentsSection({ articleId, currentUser, collapsed, onT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           article_id: String(articleId),
+          article_title: articleTitle || null,
           parent_id: null,
           author_username: resolvedUser.username,
           author_role: resolvedUser.role,
@@ -251,6 +254,7 @@ export default function CommentsSection({ articleId, currentUser, collapsed, onT
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         article_id: String(articleId),
+        article_title: articleTitle || null,
         parent_id: parentId,
         author_username: resolvedUser.username,
         author_role: resolvedUser.role,
@@ -261,7 +265,13 @@ export default function CommentsSection({ articleId, currentUser, collapsed, onT
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/api/comments/${id}`, { method: 'DELETE' });
+    await fetch(`/api/comments/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'x-username':  resolvedUser?.username || '',
+        'x-user-role': resolvedUser?.role     || 'user',
+      },
+    });
     await fetchComments();
   };
 

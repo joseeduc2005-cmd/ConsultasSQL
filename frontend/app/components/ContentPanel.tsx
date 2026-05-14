@@ -508,7 +508,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                         const color = isSep ? 'rgba(148,163,184,0.4)' : isWarn ? '#fbbf24' : isOk ? '#4ade80' : '#7dd3fc';
                         return (
                           <div key={i} style={{ display: 'flex', gap: '8px', color }}>
-                            {!isSep && <span style={{ color: 'rgba(100,116,139,0.7)', flexShrink: 0 }}>NOTICE:</span>}
+                            {!isSep && <span style={{ color: '#94a3b8', flexShrink: 0 }}>›</span>}
                             <span>{line}</span>
                           </div>
                         );

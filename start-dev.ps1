@@ -33,14 +33,14 @@ Write-Host ""
 
 # Iniciar Frontend
 Write-Host "🎨 Iniciando FRONTEND (Next.js)..." -ForegroundColor Magenta
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd frontend; npm run dev" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd frontend; pnpm start" -WindowStyle Normal
 
 # Esperar un poco para que inicie el frontend
 Start-Sleep -Seconds 3
 
 # Iniciar Backend
 Write-Host "🔌 Iniciando BACKEND (Node.js)..." -ForegroundColor Magenta
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; npm run dev" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; pnpm dev" -WindowStyle Normal
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

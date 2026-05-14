@@ -523,7 +523,14 @@ function DashboardPage() {
                 onPrimaryAction={() => {
                   window.location.href = '/admin';
                 }}
-                onLogout={() => {
+                onLogout={async () => {
+                  try {
+                    const token = localStorage.getItem('token');
+                    await fetch('/api/auth/logout', {
+                      method: 'POST',
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    });
+                  } catch {}
                   localStorage.removeItem('token');
                   localStorage.removeItem('user');
                   window.location.href = '/login';

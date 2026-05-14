@@ -32,6 +32,10 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Carga automática del esquema + datos actuales de knowledge_base.
+      # Los scripts de /docker-entrypoint-initdb.d/ se ejecutan SOLO la primera
+      # vez (volumen vacío) → en un servidor nuevo la BD arranca ya poblada.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -96,8 +100,13 @@ services:
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://172.20.91.3:3002
       - BACKEND_URL=http://host.docker.internal:3002
+      # La ruta /api/repair del frontend conecta directo a PostgreSQL.
+      # frontend y postgres comparten la red bridge → se resuelve por nombre de servicio.
+      - DATABASE_URL=postgres://postgres:admin123@postgres:5432/knowledge_base
     depends_on:
       backend:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     ports:
       - "3000:3000"

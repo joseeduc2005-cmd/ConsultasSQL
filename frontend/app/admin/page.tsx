@@ -30,6 +30,7 @@ import {
   validateWorkflowRows, buildWorkflowScriptJson,
   computeScriptForMode, inferCreationModeFromScript,
 } from '../lib/admin/scriptUtils';
+import { scriptHasMutation } from '../lib/contentPanel/scriptInspector';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ function AdminPage() {
   const [dbSaving, setDbSaving] = useState(false);
   const [dbError, setDbError] = useState('');
   const [allDatabases, setAllDatabases] = useState<Array<{ id: string; label: string; type: string; connected?: boolean; primary?: boolean }>>([]);
+  // Mutation warning: fires when a script with INSERT/UPDATE/DELETE is set visible to all users
+  const [mutationWarning, setMutationWarning] = useState<{ onConfirm: () => void; onCancel: () => void } | null>(null);
   const [, startWorkflowSyncTransition] = useTransition();
 
   const handleUploadWorkflowChange = useCallback((data: any) => {
@@ -258,7 +261,14 @@ function AdminPage() {
     return computeScriptForMode(editForm);
   }, [editForm]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    } catch {}
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/login');
@@ -297,7 +307,9 @@ function AdminPage() {
     setEditSaving(false);
     setEditError('');
     const existingTargetDb = String(
-      (parsedSource as Record<string, unknown> | null)?.target_database || ''
+      (parsedSource as Record<string, unknown> | null)?.target_database ||
+      (parsedSource as Record<string, unknown> | null)?.databaseId ||
+      (parsedSource as Record<string, unknown> | null)?.database_id || ''
     ).trim();
 
     setEditForm({
@@ -395,13 +407,25 @@ function AdminPage() {
       return;
     }
 
-    // Inyectar target_database en script_json para que el motor lo use al ejecutar
+    // Inyectar target_database + databaseId en script_json para que el motor lo use al ejecutar.
+    // Ambos campos deben mantenerse sincronizados: target_database es el campo canónico del frontend,
+    // databaseId es el campo camelCase que usa el backend como primera fuente de resolución.
     const baseScriptJson = modeResult.scriptJson as Record<string, unknown> | null;
     const scriptJson = form.target_database
-      ? { ...(baseScriptJson || {}), target_database: form.target_database }
+      ? { ...(baseScriptJson || {}), target_database: form.target_database, databaseId: form.target_database }
       : baseScriptJson;
 
-    setSaving(true);
+    // ── Advertencia de seguridad: script con mutaciones visible para todos los usuarios ──
+    if (form.visible_para === 'todos' && isExecutableSolutionType(form.tipo_solucion) && scriptHasMutation(scriptJson)) {
+      setMutationWarning({
+        onConfirm: () => { setMutationWarning(null); doSave(); },
+        onCancel: () => { setMutationWarning(null); setSaving(false); },
+      });
+      return;
+    }
+
+    async function doSave() {
+      setSaving(true);
     try {
       const token = localStorage.getItem('token');
       const normalizedSubcategory = form.subcategoria.trim() || 'General';
@@ -456,6 +480,9 @@ function AdminPage() {
     } finally {
       setSaving(false);
     }
+    } // end doSave
+
+    doSave();
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -858,7 +885,7 @@ function AdminPage() {
                 <ContentPanel selectedArticle={selectedArticle} loading={loading} error="" onExecuteSolution={async () => 'OK'} currentUser={currentUser} />
               </section>
               <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-auto flex flex-col flex-shrink-0 transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[48px]' : 'w-[260px] xl:w-[300px]'}`}>
-                <CommentsSection articleId={selectedArticle.id} currentUser={currentUser} collapsed={commentsCollapsed} onToggleCollapse={() => setCommentsCollapsed((prev) => !prev)} />
+                <CommentsSection articleId={selectedArticle.id} articleTitle={selectedArticle.titulo} currentUser={currentUser} collapsed={commentsCollapsed} onToggleCollapse={() => setCommentsCollapsed((prev) => !prev)} />
               </section>
             </>
           )}
@@ -918,7 +945,6 @@ function AdminPage() {
                       >
                         <option value="todos">🌐 Administradores y usuarios</option>
                         <option value="admin">🔒 Solo administradores</option>
-                        <option value="usuario">👤 Solo usuarios</option>
                       </select>
                     </div>
                     <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD — puedes incluir SQL con {{parametros}} para que el usuario los complete" className={`min-h-[180px] ${modalInputClass}`} required />
@@ -1102,7 +1128,6 @@ function AdminPage() {
                       >
                         <option value="todos">🌐 Administradores y usuarios</option>
                         <option value="admin">🔒 Solo administradores</option>
-                        <option value="usuario">👤 Solo usuarios</option>
                       </select>
                     </div>
                     <textarea value={editForm.contenido_md} onChange={(e) => setEditForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
@@ -1313,6 +1338,54 @@ function AdminPage() {
                   </div>
                 </form>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Advertencia de seguridad: script con mutaciones visible para usuarios ── */}
+      {mutationWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl border overflow-hidden ${isLightTheme ? 'bg-white border-red-200' : 'bg-slate-900 border-red-700'}`}>
+            {/* Header */}
+            <div className="px-6 py-4 bg-red-600 flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h2 className="text-base font-bold text-white">Advertencia de seguridad</h2>
+                <p className="text-xs text-red-100 mt-0.5">Este artículo puede modificar datos en la base</p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <p className={`text-sm leading-relaxed ${isLightTheme ? 'text-slate-700' : 'text-slate-200'}`}>
+                El script de este artículo contiene operaciones que <strong>modifican datos</strong> (INSERT, UPDATE o DELETE) y está configurado como visible para{' '}
+                <strong className="text-red-500">todos los usuarios</strong>, incluyendo usuarios con rol <em>user</em>.
+              </p>
+              <div className={`rounded-lg p-3 text-sm ${isLightTheme ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-red-950 border border-red-800 text-red-200'}`}>
+                <p className="font-semibold mb-1">¿Estás seguro de otorgar este privilegio?</p>
+                <ul className="list-disc list-inside space-y-1 text-xs opacity-90">
+                  <li>Los usuarios con rol <strong>user</strong> podrán ejecutar escrituras en la base de datos.</li>
+                  <li>Esto puede provocar cambios irreversibles si se usa incorrectamente.</li>
+                  <li>Se recomienda limitar el acceso a <strong>Solo administradores</strong>.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className={`px-6 py-4 flex gap-3 justify-end border-t ${isLightTheme ? 'border-slate-100 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
+              <button
+                onClick={mutationWarning.onCancel}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border ${isLightTheme ? 'border-slate-300 text-slate-700 hover:bg-slate-100' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}`}
+              >
+                Cancelar — revisar permisos
+              </button>
+              <button
+                onClick={mutationWarning.onConfirm}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white"
+              >
+                Sí, guardar con acceso para todos
+              </button>
             </div>
           </div>
         </div>

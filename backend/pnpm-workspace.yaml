@@ -1,0 +1,7 @@
+# pnpm 10+/11 lee la aprobación de build scripts desde este archivo.
+# oracledb necesita su script de instalación; el resto son módulos nativos opcionales.
+onlyBuiltDependencies:
+  - oracledb
+  - unrs-resolver
+  - esbuild
+  - sharp

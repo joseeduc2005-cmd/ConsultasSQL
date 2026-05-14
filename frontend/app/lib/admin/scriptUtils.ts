@@ -96,9 +96,9 @@ export function buildWorkflowScriptJson(rows: WorkflowRow[], solutionType: Solut
 }
 
 // ── SQL / JSON parsing helpers ────────────────────────────────────────────────
-const SQL_FORBIDDEN_KEYWORDS = /\b(drop|alter|truncate|grant|revoke|create\s+role|create\s+user|drop\s+database|drop\s+schema)\b/i;
-// Incluye: SQL estándar + MySQL CALL, SQL Server EXEC/EXECUTE, MERGE (upsert), SET (variables MySQL/Oracle)
-const SQL_ALLOWED_STATEMENT_START = /^(select|with|insert|update|delete|do|begin|declare|call|exec|execute|merge|set)\b/i;
+// Only block truly destructive DDL that cannot be justified in any admin article.
+// The admin panel is a trusted context — the backend handles engine-specific validation.
+const SQL_FORBIDDEN_KEYWORDS = /\b(drop\s+database|drop\s+schema|drop\s+tablespace|revoke|create\s+role|create\s+user)\b/i;
 const PLSQL_MARKER_RE = /\b(DECLARE|EXCEPTION|ELSIF)\b|\bIF\b[\s\S]{0,600}\bTHEN\b|\bFOR\b\s+\w+\s+IN\b|\bBEGIN\b[\s\S]{5,}\bEND\b/i;
 
 export function isComplexSqlScript(sql: string) { return PLSQL_MARKER_RE.test(String(sql || '')); }
@@ -111,23 +111,32 @@ export function parseJsonText(value: string): { ok: true; parsed: Record<string,
   } catch { return { ok: false, error: 'JSON inválido.' }; }
 }
 
+/**
+ * Universal SQL validator for the admin panel.
+ * Accepts ANY SQL statement that is:
+ *  - Non-empty
+ *  - Not a raw MongoDB document (caught upstream by BSON detector)
+ *  - Not explicitly destructive (DROP DATABASE / DROP SCHEMA)
+ * Everything else passes through to the target DB engine.
+ */
 export function validateManualSqlInput(sourceText: string): { ok: true; sql: string } | { ok: false; error: string } {
   const sql = String(sourceText || '').trim();
-  if (!sql) return { ok: false, error: 'Debes ingresar JSON o SQL válido.' };
+  if (!sql) return { ok: false, error: 'Debes ingresar SQL válido.' };
+
+  // Complex procedural scripts (PL/SQL, PL/pgSQL) — always accepted
   if (isComplexSqlScript(sql)) return { ok: true, sql };
 
   const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
-  if (statements.length === 0) return { ok: false, error: 'Debes ingresar al menos una consulta SQL.' };
+  if (statements.length === 0) return { ok: false, error: 'Debes ingresar al menos una sentencia SQL.' };
 
   for (const stmt of statements) {
     const cleaned = stmt.replace(/^(?:\s*(?:--[^\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/))+/, '').trim().replace(/;\s*$/, '').trim();
-    if (!SQL_ALLOWED_STATEMENT_START.test(cleaned)) {
-      return { ok: false, error: 'Solo se aceptan SELECT/UPDATE/DELETE/INSERT/WITH/DO/BEGIN.' };
-    }
     if (SQL_FORBIDDEN_KEYWORDS.test(cleaned)) {
-      return { ok: false, error: 'SQL contiene operaciones bloqueadas (DROP/ALTER/TRUNCATE/GRANT/REVOKE).' };
+      return { ok: false, error: 'SQL contiene operaciones destructivas no permitidas (DROP DATABASE / DROP SCHEMA).' };
     }
   }
+  // Accept any other SQL — SELECT, INSERT, UPDATE, DELETE, SHOW, USE, PRAGMA, CALL,
+  // EXEC, MERGE, SET, CREATE TABLE, ALTER TABLE, TRUNCATE, etc.
   return { ok: true, sql: statements.join(';\n\n') };
 }
 
@@ -135,6 +144,77 @@ export function convertSqlSelectToWorkflow(sourceText: string): { ok: true; pars
   const validation = validateManualSqlInput(sourceText);
   if (!validation.ok) return { ok: false, error: validation.error };
   return { ok: true, parsed: { modo: 'script', origen: 'manual-sql', sql: validation.sql } };
+}
+
+// ── MongoDB shell syntax parser ───────────────────────────────────────────────
+// Converts: db.collection.operation([args]) → { modo, origen, collection, operation, pipeline/filter }
+const MONGO_SHELL_RE = /^db\.([a-zA-Z0-9_]+)\.(aggregate|find|findOne|findone|count|distinct|updateOne|updateMany|deleteOne|deleteMany|insertOne|insertMany)\s*\(([\s\S]*)\)\s*;?\s*$/i;
+
+// ── BSON type normalizer ─────────────────────────────────────────────────────
+// Converts MongoDB shell BSON constructors to plain JSON-compatible values.
+// ObjectId('abc') → "abc",  NumberInt('4') → 4,  ISODate('...') → "...",  etc.
+export function normalizeBsonTypes(text: string): string {
+  return text
+    .replace(/\bObjectId\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+    .replace(/\bNumberInt\s*\(\s*['"]?(-?\d+)['"]?\s*\)/g, '$1')
+    .replace(/\bNumberLong\s*\(\s*['"]?(-?\d+)['"]?\s*\)/g, '$1')
+    .replace(/\bNumberDecimal\s*\(\s*['"]?(-?[\d.]+)['"]?\s*\)/g, '$1')
+    .replace(/\bDouble\s*\(\s*['"]?(-?[\d.eE+\-]+)['"]?\s*\)/g, '$1')
+    .replace(/\bISODate\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+    .replace(/\bnew\s+Date\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"')
+    .replace(/\bBinData\s*\([^)]*\)/g, '"[BinData]"')
+    .replace(/\bTimestamp\s*\([^)]*\)/g, '0')
+    .replace(/\bUUID\s*\(\s*['"]([^'"]*)['"]\s*\)/g, '"$1"');
+}
+
+/** Convert MongoDB shell JS-object syntax to valid JSON string.
+ *  Handles: BSON types, unquoted keys, single-quoted strings.
+ */
+function normalizeMongoArgsToJson(raw: string): string {
+  return normalizeBsonTypes(raw)
+    .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')   // quote unquoted keys
+    .replace(/:\s*'([^'\\]*(\\.[^'\\]*)*)'/g, ': "$1"');               // single→double quotes
+}
+
+export function parseMongoShellSyntax(text: string): { ok: true; parsed: Record<string, unknown> } | { ok: false; error: string } {
+  const trimmed = String(text || '').trim();
+  const match = trimmed.match(MONGO_SHELL_RE);
+  if (!match) return { ok: false, error: 'No reconocido como MongoDB shell (db.collection.operation(...)).' };
+
+  const [, collection, operation, argsRaw] = match;
+  const op = operation.toLowerCase();
+  const args = argsRaw.trim() || '{}';
+
+  // Try to normalize shell syntax to valid JSON so stored data is always parseable
+  let normalizedArgs = args;
+  try {
+    JSON.parse(args); // already valid JSON — no change needed
+  } catch {
+    try {
+      const fixed = normalizeMongoArgsToJson(args);
+      JSON.parse(fixed); // verify normalization worked
+      normalizedArgs = fixed;
+    } catch {
+      normalizedArgs = args; // keep raw — backend has its own relaxed parser
+    }
+  }
+
+  const result: Record<string, unknown> = {
+    modo: 'script',
+    origen: 'manual-sql',
+    collection,
+    operation: op,
+    databaseId: 'mongo_local',
+    target_database: 'mongo_local',
+  };
+
+  if (op === 'aggregate') {
+    result.pipeline = normalizedArgs;
+  } else {
+    result.filter = normalizedArgs;
+  }
+
+  return { ok: true, parsed: result };
 }
 
 export function validateScriptAgainstSchema(script: Record<string, unknown>): string[] {
@@ -169,14 +249,38 @@ export function computeScriptForMode(form: BuilderFormState) {
     return { valid: Boolean(visualScript), error: visualScript ? '' : 'No se pudo generar script', scriptJson: visualScript };
   }
 
-  const sourceText = mode === 'json_unificado' ? form.unified_json_text : form.manual_json_text;
-  if (!sourceText.trim()) {
+  const rawText = mode === 'json_unificado' ? form.unified_json_text : form.manual_json_text;
+  if (!rawText.trim()) {
     return { valid: false, error: mode === 'codigo_manual' ? 'Debes ingresar JSON o SQL SELECT.' : 'Debes ingresar un JSON.', scriptJson: null };
   }
+
+  // ── BSON type detection ───────────────────────────────────────────────────
+  // If the text contains BSON constructors (ObjectId, NumberInt, ISODate, etc.)
+  // and does NOT start with db.collection.operation(), it is a raw MongoDB document
+  // (copy-pasted from Compass). Reject immediately with a helpful message —
+  // never let it reach any SQL/JSON parser which would throw confusing errors.
+  const hasBsonTypes = /\b(ObjectId|NumberInt|NumberLong|NumberDecimal|Double|ISODate|BinData|Timestamp|UUID)\s*\(/.test(rawText);
+  if (hasBsonTypes && !/^db\./.test(rawText.trim())) {
+    return {
+      valid: false,
+      error: '⚠ Pegaste un documento MongoDB (con ObjectId/NumberInt/ISODate). '
+        + 'Para consultar usa: db.conciliacion.find({institutionCode:4}) '
+        + 'o db.conciliacion.aggregate([{$match:{institutionCode:4}}])',
+      scriptJson: null,
+    };
+  }
+
+  // Pre-process: normalize BSON type constructors so MongoDB shell queries
+  // with BSON types in filter/pipeline values are properly converted to JSON.
+  const sourceText = hasBsonTypes ? normalizeBsonTypes(rawText) : rawText;
 
   const parsed = parseJsonText(sourceText);
   if (!parsed.ok) {
     if (mode === 'codigo_manual') {
+      // Try MongoDB shell syntax first: db.collection.operation(...)
+      const mongoShell = parseMongoShellSyntax(sourceText);
+      if (mongoShell.ok) return { valid: true, error: '', scriptJson: mongoShell.parsed };
+      // Fall back to SQL validation
       const converted = convertSqlSelectToWorkflow(sourceText);
       if (!converted.ok) return { valid: false, error: converted.error, scriptJson: null };
       return { valid: true, error: '', scriptJson: converted.parsed };
@@ -193,13 +297,17 @@ export function computeScriptForMode(form: BuilderFormState) {
   }
 
   if (mode === 'codigo_manual' && !parsed.parsed.workflow && !parsed.parsed.tipo && !parsed.parsed.accion) {
-    // Also accept manual-sql format: { modo: 'script', origen: 'manual-sql', sql: '...' }
-    const isManualSqlFormat =
+    // Accept manual-sql format: { modo: 'script', origen: 'manual-sql', sql/pipeline/collection: '...' }
+    // MongoDB articles use 'pipeline' + 'collection' + 'operation' instead of 'sql'
+    const isOriginManualSql =
       String(parsed.parsed.modo || '').toLowerCase() === 'script' &&
-      String(parsed.parsed.origen || '').toLowerCase() === 'manual-sql' &&
-      String(parsed.parsed.sql || '').trim().length > 0;
-    if (!isManualSqlFormat) {
-      return { valid: false, error: 'Código Manual requiere workflow, tipo, accion — o formato manual-sql (modo+origen+sql).', scriptJson: null };
+      String(parsed.parsed.origen || '').toLowerCase() === 'manual-sql';
+    const hasSqlPayload =
+      String(parsed.parsed.sql || '').trim().length > 0 ||
+      String(parsed.parsed.pipeline || '').trim().length > 0 ||
+      (typeof parsed.parsed.collection === 'string' && parsed.parsed.collection.trim().length > 0);
+    if (!isOriginManualSql || !hasSqlPayload) {
+      return { valid: false, error: 'Código Manual requiere workflow, tipo, accion — o formato manual-sql (modo+origen+sql/pipeline).', scriptJson: null };
     }
   }
 

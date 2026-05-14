@@ -17,10 +17,13 @@
 
 // ----- Detection -----
 
+// NOTE: a real PL/SQL `FOR ... IN` is always followed by `LOOP`. Requiring LOOP
+// prevents false positives on Oracle PIVOT's `FOR col IN (...)` and `FOR UPDATE`,
+// which are plain-SQL clauses — not procedural loops.
 const PLSQL_MARKER_RE =
-  /DO\s*\$\$|\bDECLARE\b|\bBEGIN\b|\bFOR\b\s+\w+\s+IN\b|\bLOOP\b|\bIF\b[\s\S]{0,600}\bTHEN\b|\bSELECT\b[\s\S]{1,600}\bINTO\b|\bINTO\b|\bRAISE\s+NOTICE\b|\bEXCEPTION\b|\bELSIF\b/i;
+  /DO\s*\$\$|\bDECLARE\b|\bBEGIN\b|\bFOR\b\s+\w+\s+IN\b[\s\S]{0,400}\bLOOP\b|\bLOOP\b|\bIF\b[\s\S]{0,600}\bTHEN\b|\bSELECT\b[\s\S]{1,600}\bINTO\b|\bINTO\b|\bRAISE\s+NOTICE\b|\bEXCEPTION\b|\bELSIF\b/i;
 
-const PROCEDURAL_KEYWORD_RE = /DO\s*\$\$|\bDECLARE\b|\bBEGIN\b|\bFOR\b|\bLOOP\b|\bIF\b|\bINTO\b|\bRAISE\s+NOTICE\b/i;
+const PROCEDURAL_KEYWORD_RE = /DO\s*\$\$|\bDECLARE\b|\bBEGIN\b|\bFOR\b\s+\w+\s+IN\b[\s\S]{0,400}\bLOOP\b|\bLOOP\b|\bIF\b|\bINTO\b|\bRAISE\s+NOTICE\b/i;
 
 /**
  * Returns true if the SQL text appears to be a complex procedural script.

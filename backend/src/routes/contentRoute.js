@@ -439,7 +439,7 @@ export function createContentRouter({
       }
 
       const result = await pool.query(
-        `SELECT id, article_id, parent_id, author_username, author_role, content, created_at
+        `SELECT id, article_id, article_title, parent_id, author_username, author_role, content, created_at
          FROM comments WHERE article_id = $1 ORDER BY created_at ASC`,
         [String(articleId)]
       );
@@ -454,17 +454,29 @@ export function createContentRouter({
   // POST /api/comments
   router.post('/comments', async (req, res) => {
     try {
-      const { article_id, parent_id, author_username, author_role, content } = req.body;
+      const { article_id, article_title, parent_id, author_username, author_role, content } = req.body;
 
       if (!article_id || !author_username || !content?.trim()) {
         return res.status(400).json({ success: false, error: 'Campos requeridos: article_id, author_username, content' });
       }
 
+      // Si no llega article_title, intentar resolverlo desde knowledge_base
+      let resolvedTitle = article_title ? String(article_title).trim() : null;
+      if (!resolvedTitle) {
+        try {
+          const kbRow = await pool.query(
+            'SELECT titulo FROM knowledge_base WHERE id = $1 LIMIT 1',
+            [String(article_id)]
+          );
+          if (kbRow.rowCount > 0) resolvedTitle = kbRow.rows[0].titulo || null;
+        } catch {}
+      }
+
       const result = await pool.query(
-        `INSERT INTO comments (article_id, parent_id, author_username, author_role, content)
-         VALUES ($1,$2,$3,$4,$5)
-         RETURNING id, article_id, parent_id, author_username, author_role, content, created_at`,
-        [String(article_id), parent_id ? Number(parent_id) : null, String(author_username), String(author_role || 'user'), String(content).trim()]
+        `INSERT INTO comments (article_id, article_title, parent_id, author_username, author_role, content)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING id, article_id, article_title, parent_id, author_username, author_role, content, created_at`,
+        [String(article_id), resolvedTitle, parent_id ? Number(parent_id) : null, String(author_username), String(author_role || 'user'), String(content).trim()]
       );
 
       return res.status(201).json({ success: true, data: result.rows[0] });
@@ -482,7 +494,52 @@ export function createContentRouter({
         return res.status(400).json({ success: false, error: 'ID inválido' });
       }
 
+      // Leer el comentario ANTES de borrarlo para dejar rastro de auditoría
+      const existing = await pool.query(
+        'SELECT id, article_id, article_title, author_username, author_role, content, created_at FROM comments WHERE id = $1',
+        [id]
+      );
+
       await pool.query('DELETE FROM comments WHERE id = $1', [id]);
+
+      // Auditoría: registrar quién borró, qué comentario y en qué artículo
+      if (existing.rowCount > 0 && typeof logArticleChange === 'function') {
+        const c = existing.rows[0];
+        const deletedBy = getUserFromRequest ? getUserFromRequest(req) : null;
+
+        // Resolver título: primero del comentario, si no está buscar en knowledge_base
+        let resolvedTitulo = c.article_title || null;
+        if (!resolvedTitulo && c.article_id) {
+          try {
+            const kb = await pool.query(
+              'SELECT titulo FROM knowledge_base WHERE id = $1 LIMIT 1',
+              [String(c.article_id)]
+            );
+            if (kb.rowCount > 0) resolvedTitulo = kb.rows[0].titulo;
+          } catch {}
+        }
+        resolvedTitulo = resolvedTitulo || c.article_id;
+
+        try {
+          await logArticleChange({
+            articleId:    c.article_id,
+            articleTitulo: resolvedTitulo,
+            accion:       'eliminar_comentario',
+            realizadoPor: deletedBy?.username || req.headers['x-username'] || 'desconocido',
+            realizadoRol: deletedBy?.role     || req.headers['x-user-role'] || 'user',
+            detalle: {
+              comentario_id:    c.id,
+              autor_comentario: c.author_username,
+              rol_autor:        c.author_role,
+              contenido:        c.content,
+              creado_en:        c.created_at,
+            },
+          });
+        } catch (auditErr) {
+          console.error('[COMMENTS] ⚠️ No se pudo auditar eliminación de comentario:', auditErr?.message);
+        }
+      }
+
       return res.status(200).json({ success: true });
     } catch (error) {
       console.error('[COMMENTS] ❌ Error eliminando comentario:', error);

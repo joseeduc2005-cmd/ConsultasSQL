@@ -68,16 +68,48 @@ function formatScriptFieldLabel(name: string) {
   return `Ingrese ${n.replace(/_/g, ' ')}`;
 }
 
+// SQL write keywords — DML, DDL and privilege/procedure calls that can change the system.
+const SQL_WRITE_KEYWORDS = /\b(insert|update|delete|merge|upsert|replace|truncate|drop|alter|create|grant|revoke|call|exec|execute)\b/i;
+// MongoDB write operations — JSON format, shell syntax, or parsed `operation` field.
+const MONGO_WRITE_OPS = /\b(insertone|insertmany|updateone|updatemany|replaceone|deleteone|deletemany|findandmodify|findoneandupdate|findoneanddelete|findoneandreplace|bulkwrite)\b/i;
+
+/**
+ * Detects whether a raw SQL / MongoDB text performs a write operation.
+ * Strips SQL comments first so leading `-- comment`, `/* ... *​/`, `BEGIN;` or
+ * whitespace cannot hide a real mutation keyword (the original bug).
+ */
+export function sqlTextHasMutation(rawSql: string): boolean {
+  const noComments = String(rawSql || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // block comments
+    .replace(/--[^\n]*/g, ' ');           // line comments
+  if (!noComments.trim()) return false;
+  // MongoDB write ops — checked before stripping quotes (Mongo JSON/shell relies on them).
+  if (MONGO_WRITE_OPS.test(noComments)) return true;
+  // SQL — strip single-quoted string literals so data values can't trigger false positives.
+  const sqlOnly = noComments.replace(/'(?:[^']|'')*'/g, "''");
+  return SQL_WRITE_KEYWORDS.test(sqlOnly);
+}
+
 export function scriptHasMutation(node: unknown): boolean {
   if (!node || typeof node !== 'object') return false;
   if (Array.isArray(node)) return node.some((item) => scriptHasMutation(item));
   const current = node as Record<string, unknown>;
+
+  // Visual workflow rows
   const tipo = String(current.tipo || '').trim().toLowerCase();
   if (tipo === 'update' || tipo === 'delete' || tipo === 'insert') return true;
-  const modo = String(current.modo || '').trim().toLowerCase();
-  const origen = String(current.origen || '').trim().toLowerCase();
-  const sql = String(current.sql || '').trim().toLowerCase();
-  if (modo === 'script' && origen === 'manual-sql' && /^(update|delete|insert)\b/.test(sql)) return true;
+
+  // MongoDB shell-parsed format: { operation: 'updateone', ... }
+  const operation = String(current.operation || '').trim().toLowerCase();
+  if (operation && MONGO_WRITE_OPS.test(operation)) return true;
+
+  // Manual SQL / MongoDB text — check every field that can carry a query,
+  // regardless of modo/origen, so any storage format is covered.
+  for (const key of ['sql', 'pipeline', 'filter', 'query', 'statement']) {
+    const val = current[key];
+    if (typeof val === 'string' && sqlTextHasMutation(val)) return true;
+  }
+
   return Object.values(current).some((value) => scriptHasMutation(value));
 }
 
@@ -161,8 +193,8 @@ export function inferArticleExecutionTarget(article: { script_json?: KnowledgeAr
   const parsed = parseStructuredScript(article?.script_json);
   const p = parsed as Record<string, unknown> | null;
   const id = String(
-    p?.databaseId || p?.database_id || p?.targetDatabaseId ||
-    p?.target_database_id || p?.target_database || ''
+    p?.target_database || p?.databaseId || p?.database_id ||
+    p?.targetDatabaseId || p?.target_database_id || ''
   ).trim();
   return id ? { databaseId: id } : {};
 }

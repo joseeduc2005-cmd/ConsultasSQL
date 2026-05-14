@@ -177,5 +177,48 @@ export function createAuthRouter({ pool, logLoginEvent }) {
     }
   });
 
+  // POST /api/auth/logout
+  router.post('/logout', async (req, res) => {
+    try {
+      const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+      if (!token) {
+        return res.status(200).json({ success: true }); // ya no hay sesión
+      }
+
+      // Leer usuario antes de limpiar (para la auditoría)
+      const user = sessions.get(token);
+
+      // 1. Eliminar de cache en memoria
+      sessions.delete(token);
+
+      // 2. Marcar sesión como inactiva en BD
+      try {
+        await pool.query(
+          'UPDATE sessions SET activo = false WHERE token = $1',
+          [token]
+        );
+      } catch (dbErr) {
+        console.warn('[AUTH] ⚠️ No se pudo invalidar sesión en BD:', dbErr?.message);
+      }
+
+      // 3. Auditoría de logout
+      if (typeof logLoginEvent === 'function' && user) {
+        logLoginEvent({
+          username:  user.username,
+          rol:       user.role,
+          ip:        getIp(req),
+          userAgent: getUA(req),
+          estado:    'logout',
+          detalle:   null,
+        }).catch(() => {});
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('[AUTH] ❌ Error logout:', error);
+      return res.status(500).json({ error: 'Error en logout' });
+    }
+  });
+
   return router;
 }

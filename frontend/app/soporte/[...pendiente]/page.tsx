@@ -7,15 +7,12 @@ import { Card } from '@/soporte/components/ui/card';
 import { Vacio } from '@/soporte/components/ui/estados';
 
 /**
- * Marcador para las pantallas que aún no se han traído de ticket v2.0.
+ * Marcador para lo que aún no se ha traído de ticket v2.0, y 404 del módulo.
  *
- * El Panel enlaza a Tickets, Diagnósticos e Interpretar, así que sin esto la
- * pantalla principal estaría llena de enlaces rotos. Este archivo desaparece
- * cuando la última pantalla esté migrada.
+ * Ya solo queda Interpretar mensaje, que depende del modelo de lenguaje. Cuando
+ * esa pantalla exista, este archivo se borra y el módulo queda completo.
  */
 const PENDIENTES: Record<string, string> = {
-  tickets: 'Tickets',
-  diagnostico: 'Diagnósticos',
   interpretar: 'Interpretar mensaje',
 };
 
@@ -31,9 +28,7 @@ export default function Pendiente() {
         titulo={nombre ? `${nombre}: pantalla en migración` : 'Esta página no existe'}
         descripcion={
           nombre
-            ? seccion === 'interpretar'
-              ? 'Depende del modelo de lenguaje, que quedó fuera de esta fase a propósito.'
-              : 'El backend ya responde; falta traer la interfaz desde ticket v2.0.'
+            ? 'Depende del modelo de lenguaje, que quedó fuera de esta fase a propósito.'
             : undefined
         }
         accion={

@@ -663,6 +663,17 @@ body[data-theme='dark'] .dashboard-elevate:hover {
     font-feature-settings: 'cv11', 'ss01';
   }
 
+  /*
+    `.app-shell` pinta el body con un degradado translúcido y sin color de base, y
+    `html` no tiene fondo: el lienzo de la página queda sin pintar. En las pantallas
+    de ConsultasSQL no se nota porque el contenido llena la ventana, pero al hacer
+    scroll en soporte asomaba. Se pinta el body solo cuando hay una pantalla del
+    módulo montada, para no cambiar el resto de la aplicación.
+  */
+  body:has(.soporte-raiz) {
+    background: var(--background);
+  }
+
   /* Gana al `border-color: gray-200` que el codemod de Tailwind 4 puso en `*`. */
   .soporte-raiz *,
   .soporte-raiz ::before,

@@ -6,6 +6,7 @@ import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../components/ThemeProvider';
 import UserIdentityBadge from '../components/UserIdentityBadge';
+import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
 import ContentPanel from '../components/ContentPanel';
 import CommentsSection from '../components/CommentsSection';
@@ -825,6 +826,15 @@ function AdminPage() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            {currentUser?.role === 'admin' && (
+              <Link
+                href="/soporte"
+                className="glass-pill rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap text-(--ink-800) transition-colors hover:bg-white/85 hover:text-(--ink-900)"
+                title="Tickets, diagnósticos automáticos y vigilancia"
+              >
+                Centro de Soporte
+              </Link>
+            )}
             <ThemeToggle className="glass-pill" />
             <span className="glass-pill rounded-full px-3 py-1 text-sm text-(--ink-700)">Articulos: {articleCount}</span>
             <UserIdentityBadge

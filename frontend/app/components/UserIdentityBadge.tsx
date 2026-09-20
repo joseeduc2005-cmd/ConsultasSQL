@@ -89,7 +89,7 @@ export default function UserIdentityBadge({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative z-[70]">
+    <div ref={rootRef} className="relative z-70">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -102,8 +102,8 @@ export default function UserIdentityBadge({
         <div
           className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-md ${
             isAdmin
-              ? 'bg-gradient-to-br from-[#2363eb] to-[#1aa0c8]'
-              : 'bg-gradient-to-br from-[#5f84ba] to-[#46618f]'
+              ? 'bg-linear-to-br from-[#2363eb] to-[#1aa0c8]'
+              : 'bg-linear-to-br from-[#5f84ba] to-[#46618f]'
           }`}
         >
           {initials}
@@ -130,7 +130,7 @@ export default function UserIdentityBadge({
 
       {shouldRenderMenu && (
         <div
-          className={`absolute right-0 top-[calc(100%+0.55rem)] z-[80] min-w-[210px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-md transition-all duration-200 ${
+          className={`absolute right-0 top-[calc(100%+0.55rem)] z-80 min-w-[210px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-md transition-all duration-200 ${
             open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-1 scale-95 opacity-0'
           } ${
             isLightTheme

@@ -14,7 +14,8 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 |---|---|
 | Backend: tickets, biblioteca SQL, diagnósticos, vigilancia | **Integrado y probado** |
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
-| Frontend (6 pantallas) | **Pendiente** — sigue viviendo en `ticket_v2.0` |
+| Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
+| Frontend: las 6 pantallas | **Pendiente** — siguen viviendo en `ticket_v2.0` |
 | Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -173,9 +174,9 @@ Si los DBA entregan un usuario de solo lectura, basta con poner las tres variabl
 
 ## 8. Lo que falta
 
-1. **Frontend**: las 6 pantallas siguen en `ticket_v2.0` (React 19 + Vite + Tailwind 4).
-   Para traerlas al Next de A hay que subir A a Tailwind 4 y React 19 primero. Los tokens
-   de color no chocan: A define 16 variables CSS y B 64, sin ninguna en común.
+1. **Frontend**: las 6 pantallas siguen en `ticket_v2.0`. El frontend de A ya está en
+   Tailwind 4 y React 19 (ver seccion 10), asi que ya se pueden traer. Los tokens de color
+   no chocan: A define 16 variables CSS y B 64, sin ninguna en comun.
 2. **Interpretar mensaje**: `interpreter/` no se movió porque usa el modelo de lenguaje.
 3. **`pnpm importar`**: `leerDashboardHtml()` ya está portado en `knowledge/semillas.ts`,
    falta el script de línea de comandos que lo invoque.
@@ -191,3 +192,48 @@ Si los DBA entregan un usuario de solo lectura, basta con poner las tres variabl
 array de nivel superior: `capRows()` hacía `{ ...payload }`, lo que convierte `[a, b]` en
 `{0: a, 1: b}`. No se había notado porque todos los endpoints de A devuelven
 `{ success, data }`. Los de soporte sí devuelven arrays, y ahí saltó. Ya está corregido.
+
+---
+
+## 10. Migración del frontend de A a Tailwind 4 + React 19
+
+Prerrequisito para traer las pantallas de soporte, que están escritas contra Tailwind 4.
+Se hizo con el codemod oficial (`@tailwindcss/upgrade`), no a mano: A usaba 143 veces
+`rounded`, 38 `shadow`, 26 `ring`, 20 `blur` y 10 `outline-none`, y todas cambian de valor
+o de nombre en la versión 4.
+
+Qué cambió:
+
+- `tailwind.config.mjs` eliminado — estaba vacío (sin `theme` ni `plugins`).
+- `postcss.config.mjs` usa `@tailwindcss/postcss`; `autoprefixer` ya no hace falta.
+- `globals.css`: `@tailwind base/components/utilities` → `@import 'tailwindcss'`, más la
+  capa de compatibilidad que el codemod añade para el color de borde por defecto, que en
+  la versión 4 pasa de `gray-200` a `currentColor`.
+- 10 archivos `.tsx` con las utilidades renombradas.
+- React y React-DOM a 19.3. No hubo nada que adaptar: el código no tenía `useRef()` sin
+  argumento, ni `propTypes`, ni `defaultProps`, ni `forwardRef`, ni `ReactDOM.render`.
+
+### Verificación
+
+| Comprobación | Resultado |
+|---|---|
+| Compilación de producción | correcta |
+| Estilos computados de `/login` (58 elementos) | **cero diferencias** contra la versión anterior |
+| Clases que se generaban antes y ya no | **cero**, tras corregir un `border-opacity-20` |
+
+### Dos cosas que cambian a la vista, a propósito
+
+1. **`border-opacity-20`** en `DynamicForm.tsx` pasó a `border-current/20`. La versión 4
+   eliminó las utilidades `*-opacity-*`. El codemod no la tocó porque el archivo estaba
+   fuera de los `content` de la configuración vieja.
+
+2. **`frontend/components/` nunca se estaba escaneando.** Los `content` de Tailwind 3 solo
+   incluían `./app/**` y `./src/**`, así que las clases de `SqlAssistantBubble.jsx` y de
+   los siete archivos de `WorkflowBuilder/` jamás se generaron. La detección automática de
+   la versión 4 sí los ve: aparecen 31 clases nuevas, entre ellas `bottom-8 right-8 h-14
+   w-14`, que son la posición y el tamaño de la burbuja flotante del asistente SQL. Es
+   decir, esos componentes llevaban tiempo renderizándose a medio estilar y ahora se ven
+   como se diseñaron. El CSS pasó de 59 KB a 91 KB casi todo por esto.
+
+   **Conviene mirar el panel de administración y la burbuja del asistente**, que son los
+   dos sitios donde se nota.

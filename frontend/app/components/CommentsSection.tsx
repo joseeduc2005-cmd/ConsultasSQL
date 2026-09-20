@@ -39,8 +39,8 @@ function Avatar({ name, role }: { name: string; role: string }) {
   const isAdmin = role === 'admin';
   return (
     <div
-      className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold uppercase flex-shrink-0 ${
-        isAdmin ? 'bg-gradient-to-br from-[#2363eb] to-[#1b4fcb]' : 'bg-gradient-to-br from-[#5f84ba] to-[#46618f]'
+      className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold uppercase shrink-0 ${
+        isAdmin ? 'bg-linear-to-br from-[#2363eb] to-[#1b4fcb]' : 'bg-linear-to-br from-[#5f84ba] to-[#46618f]'
       }`}
     >
       {name.charAt(0)}
@@ -86,20 +86,20 @@ function CommentItem({
       <div className="flex-1 min-w-0">
         <div className="glass-panel rounded-xl px-4 py-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-semibold text-[color:var(--ink-900)]">{comment.author_username}</span>
+            <span className="text-sm font-semibold text-(--ink-900)">{comment.author_username}</span>
             {comment.author_role === 'admin' && (
               <span className="text-xs bg-[#2b60df] text-white px-1.5 py-0.5 rounded-full">Admin</span>
             )}
-            <span className="text-xs text-[color:var(--ink-600)] ml-auto">{timeAgo(comment.created_at)}</span>
+            <span className="text-xs text-(--ink-600) ml-auto">{timeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-sm text-[color:var(--ink-800)] whitespace-pre-wrap">{comment.content}</p>
+          <p className="text-sm text-(--ink-800) whitespace-pre-wrap">{comment.content}</p>
         </div>
 
         <div className="flex items-center gap-3 mt-1 ml-1">
           {currentUser && (
             <button
               onClick={() => setShowReplyBox((v) => !v)}
-              className="text-xs text-[color:var(--accent-strong)] hover:underline font-medium"
+              className="text-xs text-(--accent-strong) hover:underline font-medium"
             >
               Responder
             </button>
@@ -133,7 +133,7 @@ function CommentItem({
               </button>
               <button
                 onClick={() => { setShowReplyBox(false); setReplyText(''); }}
-                className="px-3 py-1.5 text-xs glass-pill text-[color:var(--accent-strong)] rounded-lg"
+                className="px-3 py-1.5 text-xs glass-pill text-(--accent-strong) rounded-lg"
               >
                 Cancelar
               </button>
@@ -143,7 +143,7 @@ function CommentItem({
 
         {/* Nested replies */}
         {replies.length > 0 && (
-          <div className="mt-3 pl-4 border-l-2 border-[color:var(--line)] space-y-3">
+          <div className="mt-3 pl-4 border-l-2 border-(--line) space-y-3">
             {replies.map((reply) => (
               <CommentItem
                 key={reply.id}
@@ -279,16 +279,16 @@ export default function CommentsSection({ articleId, articleTitle, currentUser, 
 
   return (
     <div className="flex flex-col h-full">
-      <div className={`mb-4 pb-3 border-b border-[color:var(--line)] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} gap-2`}>
+      <div className={`mb-4 pb-3 border-b border-(--line) flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} gap-2`}>
         {!isCollapsed && (
-          <h3 className="text-sm font-bold text-[color:var(--ink-900)] uppercase tracking-wide">
+          <h3 className="text-sm font-bold text-(--ink-900) uppercase tracking-wide">
             Comentarios ({comments.length})
           </h3>
         )}
         <button
           type="button"
           onClick={handleToggleCollapse}
-          className="inline-flex items-center justify-center text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)] border border-[color:var(--line)] rounded-md w-8 h-8 hover:bg-white/70 transition-colors dark:hover:bg-slate-800/70"
+          className="inline-flex items-center justify-center text-(--ink-700) hover:text-(--ink-900) border border-(--line) rounded-md w-8 h-8 hover:bg-white/70 transition-colors dark:hover:bg-slate-800/70"
           title={isCollapsed ? 'Mostrar comentarios' : 'Ocultar comentarios'}
           aria-label={isCollapsed ? 'Mostrar comentarios' : 'Ocultar comentarios'}
         >
@@ -336,14 +336,14 @@ export default function CommentsSection({ articleId, articleTitle, currentUser, 
               </div>
             </div>
           ) : (
-            <p className="text-sm text-[color:var(--ink-700)] mb-4">Inicia sesión para dejar un comentario.</p>
+            <p className="text-sm text-(--ink-700) mb-4">Inicia sesión para dejar un comentario.</p>
           )}
 
           {/* Comments list */}
           {loading ? (
-            <p className="text-sm text-[color:var(--ink-600)]">Cargando comentarios...</p>
+            <p className="text-sm text-(--ink-600)">Cargando comentarios...</p>
           ) : rootComments.length === 0 ? (
-            <p className="text-sm text-[color:var(--ink-600)]">Sé el primero en comentar esta solución.</p>
+            <p className="text-sm text-(--ink-600)">Sé el primero en comentar esta solución.</p>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pr-1">
               {rootComments.map((comment) => (

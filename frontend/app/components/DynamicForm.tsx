@@ -193,7 +193,7 @@ export default function DynamicForm({
                     onChange={(e) => handleChange(field.name, e.target.value)}
                     required={field.required}
                     placeholder={`Ingresa ${field.label.toLowerCase()}`}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-colors text-sm ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-colors text-sm ${
                       errors[field.name] ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
                     }`}
                     rows={3}
@@ -205,7 +205,7 @@ export default function DynamicForm({
                     onChange={(e) => handleChange(field.name, e.target.value)}
                     required={field.required}
                     placeholder={`Ingresa ${field.label.toLowerCase()}`}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-sm ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-sm ${
                       errors[field.name] ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
                     }`}
                   />
@@ -266,7 +266,7 @@ export default function DynamicForm({
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 px-4 rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-200 flex items-center justify-center space-x-2"
+          className="w-full bg-linear-to-r from-blue-600 to-blue-700 text-white py-3 px-4 rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-200 flex items-center justify-center space-x-2"
         >
           {loading ? (
             <>
@@ -290,7 +290,7 @@ export default function DynamicForm({
             <p className="font-semibold mb-2">{resultMessage.split('\n')[0]}</p>
             
             {repairResult?.pasosEjecutados && repairResult.pasosEjecutados.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-current border-opacity-20">
+              <div className="mt-3 pt-3 border-t border-current/20">
                 <p className="font-semibold text-xs uppercase tracking-wider mb-2">Pasos ejecutados:</p>
                 <ol className="list-decimal list-inside space-y-1 text-xs">
                   {repairResult.pasosEjecutados.map((paso: string, index: number) => (

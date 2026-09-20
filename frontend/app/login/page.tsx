@@ -73,24 +73,24 @@ export default function LoginPage() {
         <section className="glass-panel-strong glass-panel-hover hidden rounded-3xl p-10 lg:flex lg:flex-col lg:justify-between">
           <div>
             <div className="mb-7 flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--accent)] to-[color:var(--accent-2)] text-lg font-extrabold text-white shadow-md">S</span>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-(--accent) to-(--accent-2) text-lg font-extrabold text-white shadow-md">S</span>
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-800)]">Sistema de Soporte</p>
-                <p className="text-xs text-[color:var(--ink-700)]">Workspace inteligente de soluciones</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--ink-800)">Sistema de Soporte</p>
+                <p className="text-xs text-(--ink-700)">Workspace inteligente de soluciones</p>
               </div>
             </div>
 
-            <h1 className="text-5xl font-extrabold leading-tight text-[color:var(--accent-strong)]">
+            <h1 className="text-5xl font-extrabold leading-tight text-(--accent-strong)">
               Portal de Soporte
             </h1>
-            <p className="mt-4 max-w-2xl text-lg text-[color:var(--ink-800)]">
+            <p className="mt-4 max-w-2xl text-lg text-(--ink-800)">
               Aplicación interna para consultar soluciones, ejecutar flujos y gestionar artículos de conocimiento según tu rol.
             </p>
           </div>
 
-          <div className="glass-panel rounded-2xl border border-[color:var(--line)] p-5">
-            <p className="text-sm font-semibold text-[color:var(--ink-900)]">Información de acceso</p>
-            <p className="mt-1 text-sm text-[color:var(--ink-700)]">
+          <div className="glass-panel rounded-2xl border border-(--line) p-5">
+            <p className="text-sm font-semibold text-(--ink-900)">Información de acceso</p>
+            <p className="mt-1 text-sm text-(--ink-700)">
               Inicia sesión con tus credenciales para abrir tu panel personalizado.
             </p>
           </div>
@@ -100,8 +100,8 @@ export default function LoginPage() {
           <div className="glass-panel-strong glass-panel-hover w-full max-w-md rounded-3xl p-7 sm:p-8">
             <div className="mb-6">
               <div>
-                <h2 className="text-3xl font-extrabold text-[color:var(--ink-900)]">Iniciar sesion</h2>
-                <p className="mt-1 text-sm text-[color:var(--ink-700)]">Accede a tu panel de trabajo.</p>
+                <h2 className="text-3xl font-extrabold text-(--ink-900)">Iniciar sesion</h2>
+                <p className="mt-1 text-sm text-(--ink-700)">Accede a tu panel de trabajo.</p>
               </div>
             </div>
 
@@ -113,7 +113,7 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-semibold text-[color:var(--ink-800)]">Usuario</label>
+                <label className="mb-2 block text-sm font-semibold text-(--ink-800)">Usuario</label>
                 <input
                   type="text"
                   value={username}
@@ -124,7 +124,7 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-[color:var(--ink-800)]">Contrasena</label>
+                <label className="mb-2 block text-sm font-semibold text-(--ink-800)">Contrasena</label>
                 <input
                   type="password"
                   value={password}
@@ -143,8 +143,8 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="glass-panel mt-6 rounded-2xl p-4 text-sm text-[color:var(--ink-700)]">
-              <p className="mb-2 font-semibold text-[color:var(--ink-900)]">Usuarios de prueba</p>
+            <div className="glass-panel mt-6 rounded-2xl p-4 text-sm text-(--ink-700)">
+              <p className="mb-2 font-semibold text-(--ink-900)">Usuarios de prueba</p>
               <p>Admin: admin / password123</p>
               <p>User: user / password123</p>
             </div>

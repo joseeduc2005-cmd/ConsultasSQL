@@ -37,9 +37,9 @@ export default function DynamicContent({ articles, onExecuteSolution }: DynamicC
     return (
       <div className="flex-1 p-8">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/2 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-8 bg-gray-200 rounded-sm w-1/2 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded-sm w-full mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded-sm w-3/4"></div>
         </div>
       </div>
     );
@@ -71,7 +71,7 @@ export default function DynamicContent({ articles, onExecuteSolution }: DynamicC
       </div>
 
       {/* Contenido del artículo seleccionado */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-4">{selectedArticle.titulo}</h2>
 
         <div className="mb-4">
@@ -79,7 +79,7 @@ export default function DynamicContent({ articles, onExecuteSolution }: DynamicC
             {selectedArticle.tags.map((tag) => (
               <span
                 key={tag}
-                className="px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded"
+                className="px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-sm"
               >
                 {tag}
               </span>

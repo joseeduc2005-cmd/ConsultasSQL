@@ -19,25 +19,31 @@
     "jsonwebtoken": "^9.0.2",
     "next": "^15.5.15",
     "pg": "^8.11.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.20.0",
     "@types/react": "19.2.14",
-    "autoprefixer": "^10.4.16",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^8.54.0",
     "eslint-config-next": "^15.5.15",
     "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.6",
+    "tailwindcss": "^4.3.3",
     "ts-node": "^10.9.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver", "@next/swc-win32-x64-msvc"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver",
+      "@next/swc-win32-x64-msvc"
+    ]
   }
 }

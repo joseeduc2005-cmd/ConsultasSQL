@@ -112,7 +112,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
   if (categories.length === 0) {
     return (
       <div className="w-full h-full overflow-hidden flex flex-col">
-        <div className="glass-panel rounded-xl p-4 text-[color:var(--ink-700)] text-sm">No hay categorías disponibles.</div>
+        <div className="glass-panel rounded-xl p-4 text-(--ink-700) text-sm">No hay categorías disponibles.</div>
       </div>
     );
   }
@@ -130,11 +130,11 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
   return (
     <div className="w-full h-full overflow-hidden flex flex-col transition-all duration-200">
       {/* Header */}
-      <div className={`p-4 border-b border-[color:var(--line)] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-        {!isCollapsed && <h2 className="text-sm font-bold text-[color:var(--ink-900)] uppercase tracking-wide">Categorías</h2>}
+      <div className={`p-4 border-b border-(--line) flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        {!isCollapsed && <h2 className="text-sm font-bold text-(--ink-900) uppercase tracking-wide">Categorías</h2>}
         <button
           onClick={handleToggleCollapse}
-          className={`p-1 rounded-lg text-[color:var(--ink-700)] transition-colors ${isLightTheme ? 'hover:bg-white/70 hover:text-[color:var(--ink-900)]' : 'hover:bg-slate-800/70 hover:text-white'}`}
+          className={`p-1 rounded-lg text-(--ink-700) transition-colors ${isLightTheme ? 'hover:bg-white/70 hover:text-(--ink-900)' : 'hover:bg-slate-800/70 hover:text-white'}`}
           title={isCollapsed ? 'Expandir' : 'Contraer'}
         >
           {isCollapsed ? (
@@ -159,16 +159,16 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                 className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between font-medium transition-all duration-150 text-sm ${
                   localActiveCategory === category.categoria
                     ? (isLightTheme
-                      ? 'bg-white text-[color:var(--ink-900)] shadow-sm ring-1 ring-[color:var(--line)]'
-                      : 'bg-[rgba(6,182,212,0.14)] text-cyan-100 shadow-sm ring-1 ring-[rgba(6,182,212,0.35)]')
+                      ? 'bg-white text-(--ink-900) shadow-xs ring-1 ring-(--line)'
+                      : 'bg-[rgba(6,182,212,0.14)] text-cyan-100 shadow-xs ring-1 ring-[rgba(6,182,212,0.35)]')
                     : (isLightTheme
-                      ? 'text-[color:var(--ink-800)] hover:bg-white/75'
+                      ? 'text-(--ink-800) hover:bg-white/75'
                       : 'text-slate-300 hover:bg-[rgba(56,189,248,0.07)] hover:text-cyan-100')
                 }`}
               >
                 <span>{category.categoria}</span>
                 <svg
-                  className={`w-4 h-4 text-[color:var(--ink-600)] transition-transform duration-200 ${
+                  className={`w-4 h-4 text-(--ink-600) transition-transform duration-200 ${
                     expandedCategories.has(category.categoria) ? 'rotate-90' : ''
                   }`}
                   fill="none"
@@ -179,7 +179,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                 </svg>
               </button>
               {expandedCategories.has(category.categoria) && (
-                <div className="ml-2 mt-1 space-y-1 border-l-2 border-[color:var(--line)] pl-2">
+                <div className="ml-2 mt-1 space-y-1 border-l-2 border-(--line) pl-2">
                   {articleMap
                     .find((c) => c.categoria === category.categoria)
                     ?.subcategorias.map((subgroup) => {
@@ -208,10 +208,10 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                               selectedArticle?.id === singleArticle.id
                                 ? (isLightTheme
-                                  ? 'bg-gradient-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
-                                  : 'bg-gradient-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
+                                  ? 'bg-linear-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
+                                  : 'bg-linear-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
                                 : (isLightTheme
-                                  ? 'text-[color:var(--ink-700)] hover:bg-white/75 hover:text-[color:var(--ink-900)]'
+                                  ? 'text-(--ink-700) hover:bg-white/75 hover:text-(--ink-900)'
                                   : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100')
                             }`}
                           >
@@ -224,7 +224,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                         <div key={subgroup.subcategoria}>
                           {!hideSubcategoryHeading && visibleArticles.length > 0 && (
                             <p className={`px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-widest select-none ${
-                              isLightTheme ? 'text-[color:var(--ink-500)]' : 'text-slate-500'
+                              isLightTheme ? 'text-(--ink-500)' : 'text-slate-500'
                             }`}>
                               {subgroup.subcategoria}
                             </p>
@@ -240,10 +240,10 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                                 selectedArticle?.id === article.id
                                   ? (isLightTheme
-                                    ? 'bg-gradient-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
-                                    : 'bg-gradient-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
+                                    ? 'bg-linear-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
+                                    : 'bg-linear-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
                                   : (isLightTheme
-                                    ? 'text-[color:var(--ink-700)] hover:bg-white/75 hover:text-[color:var(--ink-900)]'
+                                    ? 'text-(--ink-700) hover:bg-white/75 hover:text-(--ink-900)'
                                     : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100')
                               }`}
                             >

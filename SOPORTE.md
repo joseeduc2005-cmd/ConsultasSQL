@@ -377,7 +377,7 @@ La adaptación desde react-router añadió dos patrones a los ya vistos:
 
 - `useNavigate()` → `useRouter()` de `next/navigation`, con `navegar(x)` → `router.push(x)`.
 - El listado de tickets guarda sus filtros en la URL con `setParams(p, { replace: true })`,
-  que pasa a `router.replace(\`${rutaActual}?${p}\`, { scroll: false })`.
+  que pasa a `router.replace()` con la ruta y los parámetros, sin scroll.
 - `useParams()` de Next tipa los segmentos como `string | string[]`, así que las
   desestructuraciones llevan genérico: `useParams<{ numero: string }>()`.
 

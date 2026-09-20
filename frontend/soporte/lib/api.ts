@@ -24,10 +24,35 @@ export class ErrorApi extends Error {
   }
 }
 
+/**
+ * Cabeceras de autenticación de ConsultasSQL.
+ *
+ * En ticket v2.0 la API no llevaba ninguna: el backend era un servicio interno sin
+ * usuarios. Aquí el backend identifica a la persona por `Authorization: Bearer`, que
+ * es lo que guarda el login, y el proxy de Next lo reenvía tal cual.
+ */
+function cabecerasAuth(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const token = localStorage.getItem('token');
+    const rol = localStorage.getItem('userRole');
+    return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(rol ? { 'x-user-role': rol } : {}),
+    };
+  } catch {
+    return {}; // almacenamiento no disponible
+  }
+}
+
 async function solicitar<T>(ruta: string, init?: RequestInit): Promise<T> {
   const respuesta = await fetch(`/api/soporte${ruta}`, {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers,
+    headers: {
+      ...cabecerasAuth(),
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   });
   const cuerpo = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {

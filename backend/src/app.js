@@ -6556,8 +6556,31 @@ app.use('/api/db', createDbSchemaRouter({
 }));
 app.use('/api/actions', createActionsRouter({ BUSINESS_ACTION_CATALOG, getUserFromRequest }));
 
+/**
+ * El módulo de soporte consulta la Oracle de producción y expone los tickets con
+ * su investigación completa, así que va entero detrás del rol admin.
+ *
+ * A diferencia de adminRoute, aquí NO se acepta la cabecera `x-user-role`: la
+ * pone el navegador y cualquiera podría mandarla. El rol sale solo de la sesión
+ * asociada al token, que es lo único que el backend emitió.
+ */
+async function soloAdminSoporte(req, res, next) {
+  try {
+    const usuario = await getUserFromRequestAsync(req);
+    if (!usuario) {
+      return res.status(401).json({ error: 'Inicie sesión para acceder al módulo de soporte.' });
+    }
+    if (normalizeRole(usuario.role) !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado: el módulo de soporte requiere rol admin.' });
+    }
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 // Soporte: /api/soporte/{estado,resumen,tickets,consultas,playbooks,diagnosticos,monitores,alertas}
-app.use('/api/soporte', crearSoporteRouter({
+app.use('/api/soporte', soloAdminSoporte, crearSoporteRouter({
   log: (datos, mensaje) => logger.info(mensaje, datos),
 }));
 // GET /api/query/suggestions - Deterministic suggestions based on schema and relations

@@ -15,8 +15,9 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Backend: tickets, biblioteca SQL, diagnósticos, vigilancia | **Integrado y probado** |
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
-| Frontend: sistema de diseño y Biblioteca SQL | **Integrados** — `/soporte/biblioteca` |
-| Frontend: las otras 5 pantallas | **Pendiente** — siguen en `ticket_v2.0` |
+| Frontend: Panel, Vigilancia y Biblioteca SQL | **Integradas** |
+| Frontend: Tickets y Diagnósticos | **Pendientes** — siguen en `ticket_v2.0` |
+| Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -175,9 +176,9 @@ Si los DBA entregan un usuario de solo lectura, basta con poner las tres variabl
 
 ## 8. Lo que falta
 
-1. **Frontend**: las 6 pantallas siguen en `ticket_v2.0`. El frontend de A ya está en
-   Tailwind 4 y React 19 (ver seccion 10), asi que ya se pueden traer. Los tokens de color
-   no chocan: A define 16 variables CSS y B 64, sin ninguna en comun.
+1. **Frontend**: faltan Tickets y Diagnósticos. Son las que llevan parámetros de ruta y
+   formularios, por eso se dejaron para el final. Mientras tanto, una ruta comodín
+   (`app/soporte/[...pendiente]`) evita que el Panel tenga enlaces rotos.
 2. **Interpretar mensaje**: `interpreter/` no se movió porque usa el modelo de lenguaje.
 3. **`pnpm importar`**: `leerDashboardHtml()` ya está portado en `knowledge/semillas.ts`,
    falta el script de línea de comandos que lo invoque.
@@ -305,3 +306,46 @@ La página se envuelve en `<Suspense>` porque Next lo exige para `useSearchParam
 > diferencias" contra una compilación obsoleta: había quedado un `next-server` vivo
 > sirviendo el build anterior. Al levantar un servidor hay que matar el proceso `next-server`,
 > no el `pnpm` que lo lanza, y confirmar que el hash del CSS servido cambió.
+
+---
+
+## 12. Acceso restringido a rol admin
+
+El módulo consulta la Oracle de producción y muestra los tickets con su investigación
+completa, así que va entero detrás del rol `admin`. Hay dos barreras:
+
+**En el navegador.** `app/soporte/layout.tsx` se exporta envuelto en el `withAuth` que
+ConsultasSQL ya tenía, con rol `admin`. No se fía de `localStorage`: confirma contra
+`/api/auth/me`. Sin sesión manda a `/login`; con sesión de usuario normal, a `/dashboard`.
+
+**En el backend.** `soloAdminSoporte` protege `/api/soporte/*` entero. A diferencia de
+`adminRoute`, **no acepta la cabecera `x-user-role`**: la pone el navegador y cualquiera
+podría mandarla. El rol sale solo de la sesión asociada al token.
+
+Comprobado endpoint por endpoint:
+
+| Petición | Respuesta |
+|---|---|
+| Sin autenticación | 401 |
+| Token inválido | 401 |
+| Solo la cabecera `x-user-role: admin` | 401 |
+| Sesión de usuario normal | 403 |
+| Sesión de usuario normal + `x-user-role: admin` | 403 |
+| Sesión de admin | 200 |
+
+La capa de API del módulo tuvo que aprender a autenticarse: en ticket v2.0 el backend no
+tenía usuarios y `fetch` iba sin cabeceras. Ahora `soporte/lib/api.ts` adjunta el
+`Authorization: Bearer` que guarda el login, igual que el resto del frontend.
+
+---
+
+## 13. Un arreglo de fondo en el lienzo
+
+`.app-shell` pinta el `body` con un degradado **translúcido y sin color de base**, y
+`html` no tiene fondo: el lienzo de la página queda sin pintar. En las pantallas de
+ConsultasSQL no se nota porque su contenido llena la ventana, pero las de soporte son más
+largas y al hacer scroll asomaba una banda negra.
+
+Se arregla con `body:has(.soporte-raiz) { background: var(--background) }`, que pinta el
+body solo cuando hay una pantalla del módulo montada. Verificado que en `/login` la regla
+no aplica y el degradado de A sigue intacto.

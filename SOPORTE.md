@@ -15,7 +15,8 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Backend: tickets, biblioteca SQL, diagnósticos, vigilancia | **Integrado y probado** |
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
-| Frontend: las 6 pantallas | **Pendiente** — siguen viviendo en `ticket_v2.0` |
+| Frontend: sistema de diseño y Biblioteca SQL | **Integrados** — `/soporte/biblioteca` |
+| Frontend: las otras 5 pantallas | **Pendiente** — siguen en `ticket_v2.0` |
 | Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -237,3 +238,70 @@ Qué cambió:
 
    **Conviene mirar el panel de administración y la burbuja del asistente**, que son los
    dos sitios donde se nota.
+
+---
+
+## 11. El frontend: sistema de diseño y pantalla piloto
+
+`frontend/soporte/` contiene el código de interfaz traído de ticket v2.0:
+
+```
+frontend/soporte/
+├── components/ui/          9 componentes (badge, card, code-block, form, …)
+├── components/layout/      solo EncabezadoPagina; el Shell no se trajo
+├── lib/                    api, types, formato, utils, claves de caché
+└── features/biblioteca/    la pantalla piloto
+```
+
+Los imports `@/…` del proyecto original se reescribieron a `@/soporte/…`, que con el
+alias de ConsultasSQL (`@/*` → raíz del frontend) resuelve solo.
+
+### Los tokens, acotados
+
+Los 64 tokens de diseño viven en `app/globals.css`. Ninguno choca con los 16 de A —se
+comprobó uno por uno—, pero **lo que sí hubo que acotar es todo lo que el original
+aplicaba a `body` y a `*`**: `bg-background`, `text-foreground` y `border-border`
+globales habrían repintado ConsultasSQL entera. Ahora cuelgan de `.soporte-raiz`, la
+clase que pone el layout del módulo.
+
+Dos detalles de esa integración:
+
+- **El tema oscuro.** El original usaba la clase `.dark`; ConsultasSQL usa
+  `data-theme="dark"`. Se redefinió el variante: `@custom-variant dark
+  (&:where([data-theme='dark'], [data-theme='dark'] *))`. Así el módulo sigue el
+  interruptor de tema que ya existe, sin cablear nada.
+
+- **Las tipografías.** A usa la utilidad `font-mono` 14 veces, así que redefinir
+  `--font-mono` en `@theme` le habría cambiado los bloques de código. En vez de eso,
+  `--font-sans` y `--font-mono` se redefinen como variables normales sobre
+  `.soporte-raiz`: como las utilidades de Tailwind 4 compilan a `font-family:
+  var(--font-mono)` y las variables se heredan, dentro del módulo resuelven a Inter y
+  JetBrains Mono, y fuera siguen resolviendo a las de Tailwind. Verificado.
+
+### El proxy
+
+`app/api/soporte/[...ruta]/route.ts` es una sola ruta comodín que reenvía los 18
+endpoints al backend, reutilizando `fwd()` y `proxyRaw()` de `backend-client.ts`. Como el
+resto de handlers de A, la llamada al backend nunca sale del servidor.
+
+### Adaptación de react-router a Next
+
+Fue mecánico: `Link to=` → `Link href=`, y `useSearchParams` de react-router (que
+devuelve un par valor/actualizador) por el de `next/navigation` más `useRouter().replace`.
+La página se envuelve en `<Suspense>` porque Next lo exige para `useSearchParams`.
+
+### Verificación
+
+- La pantalla carga las 111 consultas a través del proxy; buscador, filtro por categoría
+  y segmentado de riesgo funcionan; la selección se refleja en la URL.
+- El tema oscuro responde al `data-theme` de ConsultasSQL.
+- `/login` de A: todas las propiedades computadas idénticas salvo `border-color`, que pasa
+  de `rgb(229, 231, 235)` a `oklch(0.928 0.006 264.531)` — es el mismo gris de Tailwind
+  escrito en oklch, comprobado pintando ambos en un canvas: diferencia de 0 en los tres
+  canales.
+- Ninguna clase que se generara antes dejó de generarse.
+
+> **Nota de método.** Una primera verificación de la migración a Tailwind 4 dio "cero
+> diferencias" contra una compilación obsoleta: había quedado un `next-server` vivo
+> sirviendo el build anterior. Al levantar un servidor hay que matar el proceso `next-server`,
+> no el `pnpm` que lo lanza, y confirmar que el hash del CSS servido cambió.

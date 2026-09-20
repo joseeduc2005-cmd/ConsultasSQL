@@ -1,0 +1,237 @@
+export type EstadoTicket = 'abierto' | 'investigacion' | 'pendiente' | 'resuelto';
+export type Severidad = 'critica' | 'alta' | 'media' | 'info';
+export type EstadoPaso = 'ok' | 'alerta' | 'falla' | 'omitido' | 'error';
+export type Veredicto = 'problema' | 'sin_hallazgos' | 'incompleto';
+export type EstadoAlerta = 'abierta' | 'atendida' | 'resuelta';
+export type Fila = Record<string, unknown>;
+
+export interface EstadoSistema {
+  version: string;
+  oracle: { modo: 'demo' | 'oracle'; conectado: boolean; detalle: string };
+  modelo: { configurado: boolean; conectado: boolean; detalle: string };
+  vigilancia: boolean;
+  reglas: { maxIntentosPin: number; maxIntentosClave: number; limiteReporte: number };
+}
+
+export interface Resumen {
+  tickets: {
+    abiertos: number;
+    investigacion: number;
+    pendientes: number;
+    resueltos: number;
+    porSistema: { sistema: string; total: number }[];
+  };
+  alertas: { total: number; criticas: number };
+  diagnosticos: { ultimos7dias: number; veredictos30dias: { veredicto: Veredicto; total: number }[] };
+  consultas: number;
+}
+
+export interface Ticket {
+  numero: string;
+  titulo: string;
+  descripcion: string | null;
+  autor: string | null;
+  sistema: string | null;
+  modulo: string | null;
+  categoria: string | null;
+  prioridad: string | null;
+  estado: EstadoTicket;
+  resultado: string | null;
+  url_sir: string | null;
+  causa_raiz: string | null;
+  solucion: string | null;
+  observaciones: string | null;
+  creado_en: string | null;
+  resuelto_en: string | null;
+  actualizado_en: string;
+}
+
+export interface TicketListado extends Ticket {
+  pasos: number;
+}
+
+export interface PasoTicket {
+  id: number;
+  ticket: string;
+  numero: number;
+  fecha: string | null;
+  titulo: string;
+  sql: string | null;
+  resultado: string | null;
+  evidencia: string | null;
+  conclusion: string | null;
+  origen: 'manual' | 'diagnostico' | 'importado';
+  diagnostico_id: number | null;
+}
+
+export interface TicketSimilar {
+  numero: string;
+  titulo: string;
+  estado: EstadoTicket;
+  sistema: string | null;
+  modulo: string | null;
+  relevancia: number;
+}
+
+export interface TicketDetalle extends Ticket {
+  pasos: PasoTicket[];
+  similares: TicketSimilar[];
+}
+
+export interface ConsultaBiblioteca {
+  codigo: string;
+  nombre: string;
+  categoria: string | null;
+  tipo: string | null;
+  riesgo: 'lectura' | 'escritura';
+  sql: string;
+  parametros: string | null;
+  uso: string | null;
+  sistema: string | null;
+  tickets: string | null;
+}
+
+export interface CampoEntrada {
+  clave: string;
+  etiqueta: string;
+  tipo: 'texto' | 'fecha';
+  ayuda?: string;
+  ejemplo?: string;
+  patron?: string;
+  requerido?: boolean;
+}
+
+export interface PlaybookInfo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  sistema: string;
+  categoria: string;
+  ticketsReferencia: string[];
+  campos: CampoEntrada[];
+  requiereAlguno: string[][];
+}
+
+export interface ConsultaEjecutada {
+  nombre: string;
+  descripcion: string;
+  biblioteca?: string;
+  sql: string;
+  parametros: Record<string, unknown>;
+  filas: Fila[];
+  duracionMs: number;
+}
+
+export interface PasoDiagnostico {
+  id: string;
+  titulo: string;
+  estado: EstadoPaso;
+  detalle: string;
+  consultas: ConsultaEjecutada[];
+  duracionMs: number;
+}
+
+export interface AccionSugerida {
+  descripcion: string;
+  riesgo: 'lectura' | 'escritura';
+  responsable: string;
+  biblioteca?: string;
+  sql?: string;
+}
+
+export interface Hallazgo {
+  severidad: Severidad;
+  titulo: string;
+  detalle: string;
+  ticketsRelacionados?: string[];
+  acciones?: AccionSugerida[];
+}
+
+export interface ResultadoDiagnostico {
+  id?: number;
+  ticket?: string | null;
+  playbook: string;
+  nombrePlaybook: string;
+  entrada: Record<string, string>;
+  veredicto: Veredicto;
+  resumen: string;
+  pasos: PasoDiagnostico[];
+  hallazgos: Hallazgo[];
+  origenDatos: 'demo' | 'oracle';
+  inicio: string;
+  duracionMs: number;
+}
+
+export interface DiagnosticoResumen {
+  id: number;
+  playbook: string;
+  entrada: Record<string, string>;
+  veredicto: Veredicto;
+  resumen: string | null;
+  ticket: string | null;
+  origen_datos: string | null;
+  duracion_ms: number | null;
+  creado_en: string;
+}
+
+export interface EjecucionMonitor {
+  id: number;
+  monitor: string;
+  estado: 'ok' | 'alerta' | 'error';
+  hallazgos: number;
+  detalle: string | null;
+  duracion_ms: number | null;
+  creado_en: string;
+}
+
+export interface MonitorInfo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  intervaloMin: number;
+  ticketsReferencia: string[];
+  playbook: string | null;
+  enCurso: boolean;
+  ultimaEjecucion: EjecucionMonitor | null;
+}
+
+export interface Alerta {
+  id: number;
+  monitor: string;
+  clave: string;
+  titulo: string;
+  detalle: string | null;
+  severidad: Severidad;
+  datos: Record<string, string> | null;
+  estado: EstadoAlerta;
+  primera_vez: string;
+  ultima_vez: string;
+  veces: number;
+}
+
+export interface Interpretacion {
+  motor: 'reglas' | 'modelo';
+  modelo: string | null;
+  avisoModelo: string | null;
+  resumen: string | null;
+  sistema: string | null;
+  categoria: string | null;
+  orientacion: string | null;
+  respuestaSugerida: string | null;
+  identificadores: {
+    macs: string[];
+    cedulas: string[];
+    usuarios: string[];
+    tickets: string[];
+    fechas: string[];
+    cuentas: string[];
+  };
+  sugerencia: {
+    playbook: PlaybookInfo;
+    confianza: number;
+    motivos: string[];
+    entrada: Record<string, string>;
+    faltantes: string[];
+  } | null;
+  similares: TicketSimilar[];
+}

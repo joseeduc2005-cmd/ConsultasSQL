@@ -229,7 +229,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#25295c] mb-3"></div>
-          <p className="text-[color:var(--ink-700)]">Cargando...</p>
+          <p className="text-(--ink-700)">Cargando...</p>
         </div>
       </div>
     );
@@ -239,11 +239,11 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="text-center">
-          <svg className="w-16 h-16 text-[color:var(--ink-500)] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-16 h-16 text-(--ink-500) mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <h2 className="text-lg font-semibold text-[color:var(--ink-900)]">Selecciona una categoría</h2>
-          <p className="text-sm text-[color:var(--ink-700)] mt-1">Elige un problema del menú para ver los detalles</p>
+          <h2 className="text-lg font-semibold text-(--ink-900)">Selecciona una categoría</h2>
+          <p className="text-sm text-(--ink-700) mt-1">Elige un problema del menú para ver los detalles</p>
         </div>
       </div>
     );
@@ -265,11 +265,11 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
       <div className="p-4 w-full">
         {/* Article header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[color:var(--ink-900)] mb-2">{selectedArticle.titulo}</h1>
+          <h1 className="text-3xl font-bold text-(--ink-900) mb-2">{selectedArticle.titulo}</h1>
           {selectedArticle.tags && selectedArticle.tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {selectedArticle.tags.map((tag, idx) => (
-                <span key={idx} className="glass-pill inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-[color:var(--ink-800)]">
+                <span key={idx} className="glass-pill inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-(--ink-800)">
                   #{tag}
                 </span>
               ))}
@@ -292,15 +292,15 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                 Markdown
               </span>
             </div>
-            <div className="prose prose-sm max-w-none text-[color:var(--ink-800)]">
+            <div className="prose prose-sm max-w-none text-(--ink-800)">
               <ReactMarkdown
                 components={{
-                  h1: ({ children }) => <h1 className="text-2xl font-bold text-[color:var(--ink-900)] mb-4 mt-6">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-xl font-semibold text-[color:var(--ink-900)] mb-3 mt-5">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-medium text-[color:var(--ink-900)] mb-2 mt-4">{children}</h3>,
-                  p: ({ children }) => <p className="text-[color:var(--ink-800)] mb-3 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside space-y-2 mb-4 text-[color:var(--ink-800)]">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 mb-4 text-[color:var(--ink-800)]">{children}</ol>,
+                  h1: ({ children }) => <h1 className="text-2xl font-bold text-(--ink-900) mb-4 mt-6">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-xl font-semibold text-(--ink-900) mb-3 mt-5">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-lg font-medium text-(--ink-900) mb-2 mt-4">{children}</h3>,
+                  p: ({ children }) => <p className="text-(--ink-800) mb-3 leading-relaxed">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-inside space-y-2 mb-4 text-(--ink-800)">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 mb-4 text-(--ink-800)">{children}</ol>,
                   li: ({ children }) => <li className="ml-2">{children}</li>,
                   code: ({ className, children }) => {
                     const text = String(children);
@@ -326,9 +326,9 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
         {isExecutableArticle && (
           <div className="glass-panel glass-panel-hover rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-[color:var(--ink-900)] uppercase tracking-wide">🔧 Ejecutar Solución</h2>
+              <h2 className="text-sm font-bold text-(--ink-900) uppercase tracking-wide">🔧 Ejecutar Solución</h2>
               {execDone && (
-                <button onClick={resetExec} className="text-xs text-[color:var(--accent-strong)] hover:text-[color:var(--ink-900)] font-medium glass-pill px-3 py-1 rounded-lg transition-colors">
+                <button onClick={resetExec} className="text-xs text-(--accent-strong) hover:text-(--ink-900) font-medium glass-pill px-3 py-1 rounded-lg transition-colors">
                   🔄 Reiniciar
                 </button>
               )}
@@ -339,13 +339,13 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
               <div className="flex gap-2 mb-5 glass-pill rounded-xl p-1.5 w-fit">
                 <button
                   onClick={() => setExecView('script')}
-                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'script' ? 'bg-[color:var(--accent)] text-white shadow-sm' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'script' ? 'bg-(--accent) text-white shadow-xs' : 'text-(--ink-700) hover:text-(--ink-900)'}`}
                 >
                   📋 Ver Script
                 </button>
                 <button
                   onClick={() => setExecView('execute')}
-                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'execute' ? 'bg-[color:var(--accent)] text-white shadow-sm' : 'text-[color:var(--ink-700)] hover:text-[color:var(--ink-900)]'}`}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${execView === 'execute' ? 'bg-(--accent) text-white shadow-xs' : 'text-(--ink-700) hover:text-(--ink-900)'}`}
                 >
                   ▶ Ejecutar
                 </button>
@@ -357,7 +357,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
               <div className="mb-5 rounded-lg border border-slate-700 bg-[#1e1e2e] overflow-hidden">
                 <div className="px-3 py-2 bg-[#2a2a3d] border-b border-slate-700 text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center justify-between">
                   <span>📋 Script configurado</span>
-                  <button onClick={() => setExecView('execute')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-sm">
+                  <button onClick={() => setExecView('execute')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-xs">
                     ▶ Ir a ejecutar
                   </button>
                 </div>
@@ -373,19 +373,19 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
 
             {businessScriptDetails && (
               <div className="mb-5 rounded-lg glass-panel p-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--ink-900)] mb-1">Script</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-(--ink-900) mb-1">Script</p>
                 {businessScriptDetails.script && (
-                  <p className="text-sm text-[color:var(--ink-800)] mb-1"><span className="font-semibold">Proceso:</span> {businessScriptDetails.script}</p>
+                  <p className="text-sm text-(--ink-800) mb-1"><span className="font-semibold">Proceso:</span> {businessScriptDetails.script}</p>
                 )}
                 {businessScriptDetails.descripcion && (
-                  <p className="text-sm text-[color:var(--ink-700)] mb-2">{businessScriptDetails.descripcion}</p>
+                  <p className="text-sm text-(--ink-700) mb-2">{businessScriptDetails.descripcion}</p>
                 )}
                 {businessScriptDetails.pasos.length > 0 && (
                   <ul className="space-y-2">
                     {businessScriptDetails.pasos.map((step) => (
-                      <li key={`business-step-${step.orden}`} className="rounded glass-panel p-2">
-                        <p className="text-sm text-[color:var(--ink-900)] font-medium">Paso {step.orden}: {step.descripcion}</p>
-                        <p className="text-xs text-[color:var(--ink-700)]">Acción: {step.accion}</p>
+                      <li key={`business-step-${step.orden}`} className="rounded-sm glass-panel p-2">
+                        <p className="text-sm text-(--ink-900) font-medium">Paso {step.orden}: {step.descripcion}</p>
+                        <p className="text-xs text-(--ink-700)">Acción: {step.accion}</p>
                       </li>
                     ))}
                   </ul>
@@ -397,13 +397,13 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
             {!execDone && executionFields.length > 0 && (
               <div className="space-y-3 mb-5">
                 {hasStructuredScript && (
-                  <div className="rounded-lg glass-panel px-3 py-2 text-xs text-[color:var(--ink-700)]">
+                  <div className="rounded-lg glass-panel px-3 py-2 text-xs text-(--ink-700)">
                     Los campos se generaron automáticamente desde el script_json del artículo.
                   </div>
                 )}
                 {executionFields.map((field: any) => (
                   <div key={field.name}>
-                    <label className="block text-sm font-medium text-[color:var(--ink-900)] mb-1">
+                    <label className="block text-sm font-medium text-(--ink-900) mb-1">
                       {field.label}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
@@ -411,8 +411,8 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                       <textarea value={dynamicInputs[field.name] || ''} onChange={(e) => handleInputChange(field.name, e.target.value)} placeholder={`Ingresa ${field.label.toLowerCase()}`} disabled={executing} rows={3} className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70 resize-none" />
                     ) : field.type === 'checkbox' ? (
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={dynamicInputs[field.name] === 'true' || false} onChange={(e) => handleInputChange(field.name, e.target.checked ? 'true' : 'false')} disabled={executing} className="w-4 h-4 text-[#2363eb] rounded border-[#cfe0ff] focus:ring-2 focus:ring-[#2363eb] disabled:opacity-50" />
-                        <span className="text-sm text-[color:var(--ink-800)]">{field.label}</span>
+                        <input type="checkbox" checked={dynamicInputs[field.name] === 'true' || false} onChange={(e) => handleInputChange(field.name, e.target.checked ? 'true' : 'false')} disabled={executing} className="w-4 h-4 text-[#2363eb] rounded-sm border-[#cfe0ff] focus:ring-2 focus:ring-[#2363eb] disabled:opacity-50" />
+                        <span className="text-sm text-(--ink-800)">{field.label}</span>
                       </label>
                     ) : (
                       <input type={field.type || 'text'} value={dynamicInputs[field.name] || ''} onChange={(e) => handleInputChange(field.name, e.target.value)} placeholder={`Ingresa ${field.label.toLowerCase()}`} disabled={executing} className="input-glass w-full px-3 py-2 rounded-lg text-sm disabled:opacity-70" />
@@ -423,7 +423,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
             )}
 
             {!execDone && executionFields.length === 0 && (
-              <div className="mb-5 text-sm text-[color:var(--ink-700)] glass-panel rounded-lg p-3">
+              <div className="mb-5 text-sm text-(--ink-700) glass-panel rounded-lg p-3">
                 Esta acción no requiere parámetros de entrada.
               </div>
             )}
@@ -432,14 +432,14 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
               <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
                 <p className="font-semibold">Esta acción modificará datos en la base de datos.</p>
                 <label className="mt-2 flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={writeConfirmed} onChange={(e) => setWriteConfirmed(e.target.checked)} disabled={executing} className="h-4 w-4 rounded border-amber-300" />
+                  <input type="checkbox" checked={writeConfirmed} onChange={(e) => setWriteConfirmed(e.target.checked)} disabled={executing} className="h-4 w-4 rounded-sm border-amber-300" />
                   <span>Confirmo que deseo continuar con UPDATE/DELETE/INSERT</span>
                 </label>
               </div>
             )}
 
             {!execDone && (
-              <div className="mb-5 rounded-lg glass-panel px-3 py-2 text-xs text-[color:var(--ink-700)]">
+              <div className="mb-5 rounded-lg glass-panel px-3 py-2 text-xs text-(--ink-700)">
                 {preExecutionSummary}
               </div>
             )}
@@ -447,7 +447,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
             {/* Real-time progress log */}
             {(humanWorkflowSteps.length > 0 || Boolean(latestVisibleError)) && (
               <div className="mb-4 glass-panel rounded-lg p-4">
-                <p className="text-xs font-bold text-[color:var(--ink-900)] uppercase tracking-wide mb-2">Progreso del proceso</p>
+                <p className="text-xs font-bold text-(--ink-900) uppercase tracking-wide mb-2">Progreso del proceso</p>
                 <div className="max-h-64 overflow-y-auto pr-1">
                   <div className="space-y-3">
                     {humanWorkflowSteps.map((step, index) => {
@@ -458,7 +458,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                       return (
                         <div key={`${step.key}-${index}`} className={`rounded-lg border ${tone.row} px-4 py-3`}>
                           <p className={`text-sm font-semibold ${tone.title}`}>{step.icon} Paso {index + 1}: {step.startLabel}</p>
-                          <p className={`mt-1 text-sm ${isCompleted || isDone ? 'text-emerald-700' : 'text-[color:var(--ink-700)]'}`}>
+                          <p className={`mt-1 text-sm ${isCompleted || isDone ? 'text-emerald-700' : 'text-(--ink-700)'}`}>
                             {isCompleted || isDone ? `✅ ${step.completeLabel}` : isCurrent ? '⏳ En proceso' : '⏳ Pendiente'}
                           </p>
                         </div>
@@ -476,7 +476,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                 </div>
 
                 {executing && (
-                  <div className="mt-2 text-sm text-[color:var(--ink-700)] flex items-center gap-2">
+                  <div className="mt-2 text-sm text-(--ink-700) flex items-center gap-2">
                     <span className="inline-block animate-spin">⏳</span>
                     <span>Procesando...</span>
                   </div>
@@ -663,7 +663,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                     <button
                       onClick={downloadExcel}
                       title="Descargar Excel"
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -730,9 +730,9 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
         )}
 
         {/* Footer — Auditoría */}
-        <div className="mt-6 pt-4 border-t border-[color:var(--line)] flex flex-wrap gap-x-6 gap-y-1 text-xs text-[color:var(--ink-600)]">
+        <div className="mt-6 pt-4 border-t border-(--line) flex flex-wrap gap-x-6 gap-y-1 text-xs text-(--ink-600)">
           {selectedArticle.creado_por_username && (
-            <span>✍️ Creado por <span className="font-semibold text-[color:var(--ink-800)]">{selectedArticle.creado_por_username}</span></span>
+            <span>✍️ Creado por <span className="font-semibold text-(--ink-800)">{selectedArticle.creado_por_username}</span></span>
           )}
           {selectedArticle.creado_en && (() => {
             const d = new Date(selectedArticle.creado_en);
@@ -741,7 +741,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
             );
           })()}
           {selectedArticle.actualizado_por && (
-            <span>🔄 Editado por <span className="font-semibold text-[color:var(--ink-800)]">{selectedArticle.actualizado_por}</span></span>
+            <span>🔄 Editado por <span className="font-semibold text-(--ink-800)">{selectedArticle.actualizado_por}</span></span>
           )}
           {selectedArticle.actualizado_en && (() => {
             const d = new Date(selectedArticle.actualizado_en as string);

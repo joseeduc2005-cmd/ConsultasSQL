@@ -474,10 +474,10 @@ function DashboardPage() {
   const chartTickStyle = { fill: isLightTheme ? '#64748b' : '#94a3b8', fontSize: 11 };
   const chartLegendStyle = { color: isLightTheme ? '#64748b' : '#cbd5e1', fontSize: 12 };
   const areaColor = isLightTheme ? '#2363eb' : '#22d3ee';
-  const skeletonClass = `animate-pulse rounded ${isLightTheme ? 'bg-sky-200' : 'bg-slate-800'}`;
+  const skeletonClass = `animate-pulse rounded-sm ${isLightTheme ? 'bg-sky-200' : 'bg-slate-800'}`;
 
   const shellClass = isLightTheme
-    ? 'dashboard-shell min-h-screen bg-gradient-to-br from-sky-100 via-blue-100 to-cyan-100 text-slate-900'
+    ? 'dashboard-shell min-h-screen bg-linear-to-br from-sky-100 via-blue-100 to-cyan-100 text-slate-900'
     : 'dashboard-shell min-h-screen bg-transparent text-slate-100';
   const panelClass = isLightTheme
     ? 'dashboard-panel dashboard-elevate dashboard-animate rounded-2xl border border-sky-200 p-4'
@@ -489,7 +489,7 @@ function DashboardPage() {
   return (
     <div className={shellClass}>
       {notice.open && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 px-4">
+        <div className="fixed inset-0 z-120 flex items-center justify-center bg-slate-950/45 px-4">
           <div className={`w-full max-w-md rounded-2xl border p-4 shadow-2xl ${isLightTheme ? 'border-amber-300 bg-white text-slate-900' : 'border-amber-500/40 bg-slate-900 text-slate-100'}`}>
             <p className={`text-sm font-semibold ${isLightTheme ? 'text-amber-700' : 'text-amber-300'}`}>{notice.title}</p>
             <p className={`mt-2 text-sm ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`}>{notice.message}</p>
@@ -619,7 +619,7 @@ function DashboardPage() {
 
             <div className="mt-3 space-y-2">
               <div className="flex justify-end">
-                <div className={`max-w-[92%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border px-3 py-2 text-sm ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-950' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'}`}>
+                <div className={`max-w-[92%] whitespace-pre-wrap wrap-break-word rounded-2xl rounded-br-md border px-3 py-2 text-sm ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-950' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'}`}>
                   {query}
                 </div>
               </div>
@@ -637,7 +637,7 @@ function DashboardPage() {
                 <div className="flex justify-start">
                   <div className={`max-w-[92%] rounded-2xl rounded-bl-md border p-3 text-xs ${isLightTheme ? 'border-amber-200 bg-amber-50 text-slate-800' : 'border-amber-500/30 bg-amber-500/10 text-slate-200'}`}>
                     <p className={`mb-1 font-semibold ${isLightTheme ? 'text-amber-700' : 'text-amber-300'}`}>Resumen de debugging</p>
-                    <p className="whitespace-pre-wrap break-words">{result?.resumenHumano || 'Análisis de error completado.'}</p>
+                    <p className="whitespace-pre-wrap wrap-break-word">{result?.resumenHumano || 'Análisis de error completado.'}</p>
                   </div>
                 </div>
               )}
@@ -648,10 +648,10 @@ function DashboardPage() {
                     <p className={`mb-1 font-semibold ${isLightTheme ? 'text-emerald-700' : 'text-emerald-300'}`}>
                       IA de presentación
                     </p>
-                    <p className="break-words font-medium">{presentationPlan.headline}</p>
-                    <p className="mt-1 break-words opacity-90">{presentationPlan.reason}</p>
+                    <p className="wrap-break-word font-medium">{presentationPlan.headline}</p>
+                    <p className="mt-1 wrap-break-word opacity-90">{presentationPlan.reason}</p>
                     {result?.resumenHumano ? (
-                      <p className="mt-2 whitespace-pre-wrap break-words rounded-lg border border-emerald-300/40 bg-white/60 px-2 py-1.5 text-[11px] leading-relaxed dark:bg-slate-900/50">
+                      <p className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg border border-emerald-300/40 bg-white/60 px-2 py-1.5 text-[11px] leading-relaxed dark:bg-slate-900/50">
                         {result.resumenHumano}
                       </p>
                     ) : null}
@@ -663,7 +663,7 @@ function DashboardPage() {
 
           <div className={panelClass}>
             <p className={`text-sm font-semibold ${isLightTheme ? 'text-sky-700' : 'text-cyan-200'}`}>Visualización automática</p>
-            <p className={`mt-1 break-words text-[11px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Modo: {presentationPlan.mode} · {presentationPlan.reason}</p>
+            <p className={`mt-1 wrap-break-word text-[11px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Modo: {presentationPlan.mode} · {presentationPlan.reason}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'}`}>
                 {chartTypeLabel}
@@ -698,7 +698,7 @@ function DashboardPage() {
                   </div>
                 </div>
               ) : activeDashboard?.chartType === 'bar' && chartRows.length > 0 ? (
-                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
+                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-linear-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartRows}>
                       <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" />
@@ -715,7 +715,7 @@ function DashboardPage() {
                   </ResponsiveContainer>
                 </div>
               ) : activeDashboard?.chartType === 'line' && chartRows.length > 0 ? (
-                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
+                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-linear-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartRows}>
                       <defs>
@@ -733,7 +733,7 @@ function DashboardPage() {
                   </ResponsiveContainer>
                 </div>
               ) : activeDashboard?.chartType === 'pie' && chartRows.length > 0 ? (
-                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
+                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-linear-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Tooltip contentStyle={chartTooltipStyle} />
@@ -747,7 +747,7 @@ function DashboardPage() {
                   </ResponsiveContainer>
                 </div>
               ) : activeDashboard?.chartType === 'histogram' && chartRows.length > 0 ? (
-                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-gradient-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
+                <div className={`h-full rounded-2xl border p-2 ${isLightTheme ? 'border-sky-200 bg-linear-to-b from-white to-sky-50/60' : 'border-slate-700 bg-slate-950/55'}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartRows}>
                       <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" />
@@ -797,7 +797,7 @@ function DashboardPage() {
                       {visualizationSummary.preview.map(([key, value]) => (
                         <div key={`viz-preview-${key}`} className="flex items-start justify-between gap-3">
                           <span className="opacity-70">{key}</span>
-                          <span className="max-w-[62%] whitespace-normal break-words text-right font-medium">{String(value ?? '')}</span>
+                          <span className="max-w-[62%] whitespace-normal wrap-break-word text-right font-medium">{String(value ?? '')}</span>
                         </div>
                       ))}
                     </div>
@@ -891,7 +891,7 @@ function DashboardPage() {
                   <thead>
                     <tr className={`sticky top-0 z-10 ${isLightTheme ? 'bg-sky-50/95' : 'bg-slate-950/95'}`}>
                       {Object.keys(result.data![0]).map((col) => (
-                        <th key={col} className={`max-w-[200px] whitespace-normal break-words px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+                        <th key={col} className={`max-w-[200px] whitespace-normal wrap-break-word px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                           {col}
                         </th>
                       ))}
@@ -912,7 +912,7 @@ function DashboardPage() {
                           const boolValue = normalizeBooleanValue(rawValue);
 
                           return (
-                            <td key={col} className={`max-w-[200px] whitespace-normal break-words px-3 py-2 align-top ${isLightTheme ? 'text-slate-700' : 'text-slate-200'}`}>
+                            <td key={col} className={`max-w-[200px] whitespace-normal wrap-break-word px-3 py-2 align-top ${isLightTheme ? 'text-slate-700' : 'text-slate-200'}`}>
                               {boolValue === null ? (
                                 <span className="leading-relaxed">{formatCellValue(rawValue)}</span>
                               ) : (

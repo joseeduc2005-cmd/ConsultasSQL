@@ -588,8 +588,8 @@ function AdminPage() {
     updateFormRows: (updater: (rows: WorkflowRow[]) => WorkflowRow[]) => void,
   ) => {
     const commonInputClass = isLightTheme
-      ? 'w-full rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--ink-900)] placeholder:text-[color:var(--ink-500)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-strong)]'
-      : 'w-full rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-400';
+      ? 'w-full rounded-md border border-(--line) bg-white px-3 py-2 text-sm text-(--ink-900) placeholder:text-(--ink-500) focus:outline-hidden focus:ring-2 focus:ring-(--accent-strong)'
+      : 'w-full rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-cyan-400';
     const enterpriseMode = isScriptSolutionType(solutionType);
 
     if (row.tipo === 'select') {
@@ -646,14 +646,14 @@ function AdminPage() {
           {row.config.condicion === 'igual' ? (
             <input value={row.config.valorValidacion} onChange={(e) => updateFormRows((rows) => updateRowConfig(rows, rowIndex, { valorValidacion: e.target.value }))} placeholder="Valor esperado" className={commonInputClass} />
           ) : (
-            <div className="flex items-center rounded-md border border-dashed border-[color:var(--line)] px-3 py-2 text-sm text-[color:var(--ink-600)]">Sin valor esperado</div>
+            <div className="flex items-center rounded-md border border-dashed border-(--line) px-3 py-2 text-sm text-(--ink-600)">Sin valor esperado</div>
           )}
           <input value={row.config.mensajeError} onChange={(e) => updateFormRows((rows) => updateRowConfig(rows, rowIndex, { mensajeError: e.target.value }))} placeholder="Mensaje error (opcional)" className={commonInputClass} />
         </div>
       );
     }
 
-    return <div className="text-sm text-[color:var(--ink-600)]">Selecciona un tipo para configurar este paso.</div>;
+    return <div className="text-sm text-(--ink-600)">Selecciona un tipo para configurar este paso.</div>;
   };
 
   const renderWorkflowBuilder = (
@@ -670,23 +670,23 @@ function AdminPage() {
     };
 
     return (
-      <div className="space-y-4 rounded-2xl border border-[color:var(--line)] bg-gradient-to-b from-white to-[color:var(--surface-2)] p-4">
+      <div className="space-y-4 rounded-2xl border border-(--line) bg-linear-to-b from-white to-(--surface-2) p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold text-[color:var(--ink-900)]">Workflow Builder</p>
-            <p className="text-xs text-[color:var(--ink-700)]">Una sola tabla visual. El modo de ejecución solo cambia reglas, campos habilitados y payload generado.</p>
+            <p className="text-sm font-semibold text-(--ink-900)">Workflow Builder</p>
+            <p className="text-xs text-(--ink-700)">Una sola tabla visual. El modo de ejecución solo cambia reglas, campos habilitados y payload generado.</p>
           </div>
           <div className="flex items-center gap-3">
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${enterpriseMode ? 'bg-[#e7f0ff] text-[#1746a2]' : 'bg-[#e8f7ef] text-[#17633b]'}`}>
               {enterpriseMode ? 'Script' : 'Base de Datos'}
             </span>
-            <button type="button" onClick={() => updateFormRows((rows) => addWorkflowRow(rows))} className="inline-flex items-center justify-center rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]">
+            <button type="button" onClick={() => updateFormRows((rows) => addWorkflowRow(rows))} className="inline-flex items-center justify-center rounded-lg border border-(--line) bg-white px-3 py-2 text-sm font-medium text-(--ink-900) hover:bg-(--surface-2)">
               + Agregar paso
             </button>
           </div>
         </div>
 
-        <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-xs text-[color:var(--ink-700)]">
+        <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-xs text-(--ink-700)">
           {enterpriseMode
             ? 'Permite validaciones, guardar_en, contexto entre pasos y variables reutilizables.'
             : 'Permite solo operaciones select, update, insert y delete. No usa validaciones complejas ni contexto entre pasos.'}
@@ -694,9 +694,9 @@ function AdminPage() {
 
         {attempted && !validation.valid && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{validation.generalError}</div>}
 
-        <div className="overflow-x-auto rounded-2xl border border-[color:var(--line)] bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-(--line) bg-white">
           <table className="min-w-full border-collapse">
-            <thead className="bg-[color:var(--surface-2)] text-left text-xs uppercase tracking-[0.08em] text-[color:var(--ink-700)]">
+            <thead className="bg-(--surface-2) text-left text-xs uppercase tracking-[0.08em] text-(--ink-700)">
               <tr>
                 <th className="px-4 py-3">Orden</th>
                 <th className="px-4 py-3">Descripción</th>
@@ -713,13 +713,13 @@ function AdminPage() {
 
                 return (
                   <tr key={`workflow-row-${rowIndex}`} className={hasErrors ? 'bg-red-50/40' : 'bg-white'}>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--surface-2)] text-sm font-semibold text-[color:var(--ink-900)]">{rowIndex + 1}</div>
+                    <td className="border-t border-(--line) px-4 py-4 align-top">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-(--surface-2) text-sm font-semibold text-(--ink-900)">{rowIndex + 1}</div>
                     </td>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top">
-                      <input value={row.descripcion} onChange={(e) => setForm((prev) => ({ ...prev, workflow_rows: updateRows(prev.workflow_rows, rowIndex, { descripcion: e.target.value }) }))} placeholder="Descripción del paso" className="w-full rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--ink-900)] placeholder:text-[color:var(--ink-500)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-strong)]" />
+                    <td className="border-t border-(--line) px-4 py-4 align-top">
+                      <input value={row.descripcion} onChange={(e) => setForm((prev) => ({ ...prev, workflow_rows: updateRows(prev.workflow_rows, rowIndex, { descripcion: e.target.value }) }))} placeholder="Descripción del paso" className="w-full rounded-md border border-(--line) bg-white px-3 py-2 text-sm text-(--ink-900) placeholder:text-(--ink-500) focus:outline-hidden focus:ring-2 focus:ring-(--accent-strong)" />
                     </td>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top">
+                    <td className="border-t border-(--line) px-4 py-4 align-top">
                       <select
                         value={row.tipo}
                         onChange={(e) => {
@@ -742,7 +742,7 @@ function AdminPage() {
                             ),
                           }));
                         }}
-                        className="w-full rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--ink-900)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-strong)]"
+                        className="w-full rounded-md border border-(--line) bg-white px-3 py-2 text-sm text-(--ink-900) focus:outline-hidden focus:ring-2 focus:ring-(--accent-strong)"
                       >
                         <option value="">Selecciona un tipo</option>
                         {allowedTypes.map((type) => (
@@ -750,11 +750,11 @@ function AdminPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top">
+                    <td className="border-t border-(--line) px-4 py-4 align-top">
                       {row.tipo === 'validacion' ? (
-                        <div className="flex h-10 items-center rounded-md border border-dashed border-[color:var(--line)] px-3 text-sm text-[color:var(--ink-600)]">No aplica</div>
+                        <div className="flex h-10 items-center rounded-md border border-dashed border-(--line) px-3 text-sm text-(--ink-600)">No aplica</div>
                       ) : (
-                        <select value={row.tabla} onChange={(e) => setForm((prev) => ({ ...prev, workflow_rows: updateRows(prev.workflow_rows, rowIndex, { tabla: e.target.value as WorkflowTableName | '' }) }))} className="w-full rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--ink-900)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-strong)]">
+                        <select value={row.tabla} onChange={(e) => setForm((prev) => ({ ...prev, workflow_rows: updateRows(prev.workflow_rows, rowIndex, { tabla: e.target.value as WorkflowTableName | '' }) }))} className="w-full rounded-md border border-(--line) bg-white px-3 py-2 text-sm text-(--ink-900) focus:outline-hidden focus:ring-2 focus:ring-(--accent-strong)">
                           <option value="">Selecciona tabla</option>
                           {WORKFLOW_TABLES.map((tableName) => (
                             <option key={`table-${rowIndex}-${tableName}`} value={tableName}>{tableName}</option>
@@ -762,7 +762,7 @@ function AdminPage() {
                         </select>
                       )}
                     </td>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top">
+                    <td className="border-t border-(--line) px-4 py-4 align-top">
                       {renderConfigFields(row, rowIndex, form.tipo_solucion, updateFormRows)}
                       {hasErrors && (
                         <div className="mt-2 space-y-1 text-xs text-red-700">
@@ -772,7 +772,7 @@ function AdminPage() {
                         </div>
                       )}
                     </td>
-                    <td className="border-t border-[color:var(--line)] px-4 py-4 align-top text-right">
+                    <td className="border-t border-(--line) px-4 py-4 align-top text-right">
                       <button type="button" onClick={() => updateFormRows((rows) => removeWorkflowRow(rows, rowIndex))} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">
                         Eliminar
                       </button>
@@ -789,7 +789,7 @@ function AdminPage() {
             <p className="text-sm font-semibold text-white">JSON generado automáticamente</p>
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">Solo lectura</span>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-slate-200">
+          <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word text-xs leading-6 text-slate-200">
             {generatedScript ? JSON.stringify(generatedScript, null, 2) : 'Completa el workflow para generar el script_json.'}
           </pre>
         </div>
@@ -798,19 +798,19 @@ function AdminPage() {
   };
 
   const modalInputClass = isLightTheme
-    ? 'w-full rounded-lg border border-[color:var(--line)] bg-white p-3 text-[color:var(--ink-900)] placeholder:text-[color:var(--ink-500)]'
+    ? 'w-full rounded-lg border border-(--line) bg-white p-3 text-(--ink-900) placeholder:text-(--ink-500)'
     : 'w-full rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-slate-100 placeholder:text-slate-400';
   const modalFileClass = isLightTheme
-    ? 'w-full rounded-lg border border-[color:var(--line)] bg-white p-2 text-[color:var(--ink-800)]'
+    ? 'w-full rounded-lg border border-(--line) bg-white p-2 text-(--ink-800)'
     : 'w-full rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-slate-100';
   const modalTopSectionClass = isLightTheme
-    ? 'space-y-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4'
+    ? 'space-y-4 rounded-2xl border border-(--line) bg-(--surface-2) p-4'
     : 'space-y-4 rounded-2xl border border-slate-700 bg-slate-900/60 p-4';
   const modalExecSectionClass = isLightTheme
-    ? 'space-y-4 rounded-2xl border border-[color:var(--line)] bg-white p-4'
+    ? 'space-y-4 rounded-2xl border border-(--line) bg-white p-4'
     : 'space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-4';
   const modeSwitchContainerClass = isLightTheme
-    ? 'inline-flex rounded-xl border border-[color:var(--line)] bg-white p-1'
+    ? 'inline-flex rounded-xl border border-(--line) bg-white p-1'
     : 'inline-flex rounded-xl border border-slate-700 bg-slate-900/80 p-1';
 
   return (
@@ -818,15 +818,15 @@ function AdminPage() {
       <div className="glass-panel-strong sticky top-0 z-40 overflow-visible rounded-2xl border px-4 sm:px-6">
         <div className="w-full py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2363eb] to-[#1aa0c8] flex items-center justify-center text-white font-bold shadow-md">S</div>
+            <div className="w-9 h-9 rounded-xl bg-linear-to-br from-[#2363eb] to-[#1aa0c8] flex items-center justify-center text-white font-bold shadow-md">S</div>
             <div>
-              <h1 className="text-xl font-bold text-[color:var(--ink-900)]">Panel de Administracion - Soluciones MD</h1>
-              <p className="text-xs text-[color:var(--ink-700)]">Gestiona articulos, workflows y ejecuciones desde una sola vista.</p>
+              <h1 className="text-xl font-bold text-(--ink-900)">Panel de Administracion - Soluciones MD</h1>
+              <p className="text-xs text-(--ink-700)">Gestiona articulos, workflows y ejecuciones desde una sola vista.</p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle className="glass-pill" />
-            <span className="glass-pill rounded-full px-3 py-1 text-sm text-[color:var(--ink-700)]">Articulos: {articleCount}</span>
+            <span className="glass-pill rounded-full px-3 py-1 text-sm text-(--ink-700)">Articulos: {articleCount}</span>
             <UserIdentityBadge
               username={currentUser?.username || 'usuario'}
               role={currentUser?.role || 'user'}
@@ -837,7 +837,7 @@ function AdminPage() {
             />
           </div>
         </div>
-        <div className="w-full py-3 border-t border-[color:var(--line)]">
+        <div className="w-full py-3 border-t border-(--line)">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <input value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Buscar..." className="input-glass flex-1 min-w-[220px] p-2 rounded-xl" />
             {currentUser?.role === 'admin' ? (
@@ -845,7 +845,7 @@ function AdminPage() {
                 <button onClick={openUploadModal} className="btn-accent px-4 py-2 rounded-xl text-sm font-semibold">Subir Nueva Solucion MD</button>
                 {selectedArticle && (
                   <>
-                    <button onClick={() => openEditModal(selectedArticle)} className="glass-pill px-4 py-2 rounded-xl text-[color:var(--ink-900)] transition-colors hover:bg-white/85">Editar articulo</button>
+                    <button onClick={() => openEditModal(selectedArticle)} className="glass-pill px-4 py-2 rounded-xl text-(--ink-900) transition-colors hover:bg-white/85">Editar articulo</button>
                     <button onClick={() => handleDelete(selectedArticle.id)} className="bg-[#fff1f1]/90 text-red-700 border border-red-200 hover:bg-[#ffe3e3] px-4 py-2 rounded-xl transition-colors">Eliminar articulo</button>
                   </>
                 )}
@@ -859,7 +859,7 @@ function AdminPage() {
 
       <div className="flex-1 min-h-0 w-full py-4">
         <div className="flex gap-3 h-full min-w-0">
-          <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-hidden flex-shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
+          <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
             <Sidebar
               categories={categories}
               articles={visibleArticles}
@@ -876,15 +876,15 @@ function AdminPage() {
           {!selectedArticle ? (
             <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 flex flex-col items-center justify-center gap-3">
               <div className="text-4xl opacity-30">📄</div>
-              <p className="text-base font-medium text-[color:var(--ink-700)]">Selecciona un artículo del menú</p>
-              <p className="text-xs text-[color:var(--ink-500)]">Haz clic en una categoría o usa el buscador</p>
+              <p className="text-base font-medium text-(--ink-700)">Selecciona un artículo del menú</p>
+              <p className="text-xs text-(--ink-500)">Haz clic en una categoría o usa el buscador</p>
             </section>
           ) : (
             <>
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 overflow-auto">
                 <ContentPanel selectedArticle={selectedArticle} loading={loading} error="" onExecuteSolution={async () => 'OK'} currentUser={currentUser} />
               </section>
-              <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-auto flex flex-col flex-shrink-0 transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[48px]' : 'w-[260px] xl:w-[300px]'}`}>
+              <section className={`glass-panel-strong glass-panel-hover rounded-2xl p-3 h-full min-h-0 overflow-auto flex flex-col shrink-0 transition-[width] duration-300 ease-in-out ${commentsCollapsed ? 'w-[48px]' : 'w-[260px] xl:w-[300px]'}`}>
                 <CommentsSection articleId={selectedArticle.id} articleTitle={selectedArticle.titulo} currentUser={currentUser} collapsed={commentsCollapsed} onToggleCollapse={() => setCommentsCollapsed((prev) => !prev)} />
               </section>
             </>
@@ -896,8 +896,8 @@ function AdminPage() {
         <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4">
           <div className="glass-panel-strong w-full max-w-7xl rounded-3xl border max-h-[92vh] overflow-hidden">
             <div className="border-b border-[#e6eaf8] px-6 py-5">
-              <h2 className="text-2xl font-bold text-[color:var(--ink-900)]">Subir Solucion MD</h2>
-              <p className="mt-1 text-sm text-[color:var(--ink-700)]">Configura el workflow visualmente. El sistema generará el script automáticamente.</p>
+              <h2 className="text-2xl font-bold text-(--ink-900)">Subir Solucion MD</h2>
+              <p className="mt-1 text-sm text-(--ink-700)">Configura el workflow visualmente. El sistema generará el script automáticamente.</p>
             </div>
             <form onSubmit={handleUpload} className="flex h-[calc(92vh-96px)] flex-col">
               <div className="space-y-5 overflow-y-auto px-6 py-5">
@@ -915,10 +915,10 @@ function AdminPage() {
                     </div>
                     {/* Base de datos destino */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">
+                      <p className="text-sm font-semibold text-(--ink-900)">
                         Base de datos destino <span className="text-red-500">*</span>
                       </p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
+                      <p className="text-xs text-(--ink-600)">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
                       <select
                         value={uploadForm.target_database}
                         onChange={(e) => setUploadForm((prev) => ({ ...prev, target_database: e.target.value }))}
@@ -936,8 +936,8 @@ function AdminPage() {
                     </div>
                     {/* Visibilidad del artículo */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Visible para</p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Controla quién puede ver y ejecutar este artículo.</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Visible para</p>
+                      <p className="text-xs text-(--ink-600)">Controla quién puede ver y ejecutar este artículo.</p>
                       <select
                         value={uploadForm.visible_para}
                         onChange={(e) => setUploadForm((prev) => ({ ...prev, visible_para: e.target.value as 'todos' | 'admin' | 'usuario' }))}
@@ -949,7 +949,7 @@ function AdminPage() {
                     </div>
                     <textarea value={uploadForm.contenido_md} onChange={(e) => setUploadForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD — puedes incluir SQL con {{parametros}} para que el usuario los complete" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 1 · Modo de ejecución</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Nivel 1 · Modo de ejecución</p>
                       <div className={modeSwitchContainerClass}>
                         <button
                           type="button"
@@ -964,7 +964,7 @@ function AdminPage() {
                               script_creation_mode: currentModeAllowed ? prev.script_creation_mode : availableModes[0].value,
                             };
                           })}
-                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isDatabaseSolutionType(uploadForm.tipo_solucion) ? 'bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isDatabaseSolutionType(uploadForm.tipo_solucion) ? 'bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                         >
                           Base de Datos
                         </button>
@@ -981,7 +981,7 @@ function AdminPage() {
                               script_creation_mode: currentModeAllowed ? prev.script_creation_mode : availableModes[0].value,
                             };
                           })}
-                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isScriptSolutionType(uploadForm.tipo_solucion) ? 'bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isScriptSolutionType(uploadForm.tipo_solucion) ? 'bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                         >
                           Script
                         </button>
@@ -992,20 +992,20 @@ function AdminPage() {
                 {isExecutableSolutionType(uploadForm.tipo_solucion) && (
                   <div className={modalExecSectionClass}>
                     <div className="space-y-2">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 2 · Forma de creación</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Nivel 2 · Forma de creación</p>
                       <div className="flex flex-wrap gap-2">
                         {getCreationModesForSolutionType(uploadForm.tipo_solucion).map((mode) => (
                           <button
                             key={`upload-mode-${mode.value}`}
                             type="button"
                             onClick={() => setUploadForm((prev) => ({ ...prev, script_creation_mode: mode.value }))}
-                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${uploadForm.script_creation_mode === mode.value ? 'border-[color:var(--accent-strong)] bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'border-[color:var(--line)] bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'border-slate-700 bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${uploadForm.script_creation_mode === mode.value ? 'border-(--accent-strong) bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'border-(--line) bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'border-slate-700 bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                           >
                             {mode.label} · {mode.level}
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-[color:var(--ink-700)]">
+                      <p className="text-xs text-(--ink-700)">
                         {isDatabaseSolutionType(uploadForm.tipo_solucion)
                           ? 'Base de Datos: Visual Builder y JSON. Código Manual está deshabilitado.'
                           : 'Script: solo Código Manual (JSON workflow).'}
@@ -1032,7 +1032,7 @@ function AdminPage() {
                         value={uploadForm.unified_json_text}
                         onChange={(e) => setUploadForm((prev) => ({ ...prev, unified_json_text: e.target.value }))}
                         placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['name'] }], where: { 'users.id': '{{usuario_id}}' }, guardar_en: 'usuario_info' }] }, null, 2)}
-                        className="min-h-[260px] w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 font-mono text-sm text-[color:var(--ink-900)]"
+                        className="min-h-[260px] w-full rounded-lg border border-(--line) bg-(--surface-2) p-3 font-mono text-sm text-(--ink-900)"
                       />
                     )}
 
@@ -1045,30 +1045,30 @@ function AdminPage() {
                           value={uploadForm.manual_json_text}
                           onChange={(e) => setUploadForm((prev) => ({ ...prev, manual_json_text: e.target.value }))}
                           placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['cargo'] }], where: { 'users.username': '{{usuario}}' }, guardar_en: 'user_data' }] }, null, 2)}
-                          className={`min-h-[260px] w-full rounded-lg border border-[color:var(--line)] p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-[color:var(--ink-900)]' : 'bg-slate-900 text-slate-100'}`}
+                          className={`min-h-[260px] w-full rounded-lg border border-(--line) p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-(--ink-900)' : 'bg-slate-900 text-slate-100'}`}
                         />
                       </div>
                     )}
 
-                    <div className="rounded-xl border border-[color:var(--line)] bg-[#0f172a] p-4">
+                    <div className="rounded-xl border border-(--line) bg-[#0f172a] p-4">
                       <div className="mb-2 flex items-center justify-between">
                         <p className="text-sm font-semibold text-white">Preview JSON unificado</p>
-                        <span className={`rounded px-2 py-1 text-xs ${uploadModeResult.valid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                        <span className={`rounded-sm px-2 py-1 text-xs ${uploadModeResult.valid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
                           {uploadModeResult.valid ? 'Válido' : 'Error'}
                         </span>
                       </div>
                       {!uploadModeResult.valid && (
                         <p className="mb-2 text-xs text-red-300">{uploadModeResult.error}</p>
                       )}
-                      <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-slate-200">
+                      <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word text-xs leading-6 text-slate-200">
                         {uploadModeResult.scriptJson ? JSON.stringify(uploadModeResult.scriptJson, null, 2) : 'Completa el contenido según el modo seleccionado.'}
                       </pre>
                     </div>
                   </div>
                 )}
               </div>
-              <div className="flex justify-end gap-3 border-t border-[color:var(--line)] px-6 py-4">
-                <button type="button" onClick={() => setShowUploadModal(false)} className="rounded-lg border border-[color:var(--line)] px-4 py-2 text-[color:var(--ink-800)]">Cancelar</button>
+              <div className="flex justify-end gap-3 border-t border-(--line) px-6 py-4">
+                <button type="button" onClick={() => setShowUploadModal(false)} className="rounded-lg border border-(--line) px-4 py-2 text-(--ink-800)">Cancelar</button>
                 <button type="submit" disabled={uploadSaving || !uploadEnterpriseValidation.isValid} className="rounded-lg bg-[#25295c] px-5 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">{uploadSaving ? 'Guardando...' : 'Subir'}</button>
               </div>
             </form>
@@ -1079,9 +1079,9 @@ function AdminPage() {
       {showEditModal && selectedArticle && (
         <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4">
           <div className="glass-panel-strong w-full max-w-7xl rounded-3xl border max-h-[92vh] overflow-hidden">
-            <div className="border-b border-[color:var(--line)] px-6 py-5">
-              <h2 className="text-2xl font-bold text-[color:var(--ink-900)]">Editar articulo</h2>
-              <p className="mt-1 text-sm text-[color:var(--ink-700)]">Actualiza el workflow visual y el sistema regenerará el script automáticamente.</p>
+            <div className="border-b border-(--line) px-6 py-5">
+              <h2 className="text-2xl font-bold text-(--ink-900)">Editar articulo</h2>
+              <p className="mt-1 text-sm text-(--ink-700)">Actualiza el workflow visual y el sistema regenerará el script automáticamente.</p>
             </div>
             <form onSubmit={handleEdit} className="flex h-[calc(92vh-96px)] flex-col">
               <div className="space-y-5 overflow-y-auto px-6 py-5">
@@ -1098,10 +1098,10 @@ function AdminPage() {
                     </div>
                     {/* Base de datos destino */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">
+                      <p className="text-sm font-semibold text-(--ink-900)">
                         Base de datos destino <span className="text-red-500">*</span>
                       </p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
+                      <p className="text-xs text-(--ink-600)">Solo aparecen las BDs con conexión activa. Obligatorio.</p>
                       <select
                         value={editForm.target_database}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, target_database: e.target.value }))}
@@ -1119,8 +1119,8 @@ function AdminPage() {
                     </div>
                     {/* Visibilidad del artículo */}
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Visible para</p>
-                      <p className="text-xs text-[color:var(--ink-600)]">Controla quién puede ver y ejecutar este artículo.</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Visible para</p>
+                      <p className="text-xs text-(--ink-600)">Controla quién puede ver y ejecutar este artículo.</p>
                       <select
                         value={editForm.visible_para}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, visible_para: e.target.value as 'todos' | 'admin' | 'usuario' }))}
@@ -1132,7 +1132,7 @@ function AdminPage() {
                     </div>
                     <textarea value={editForm.contenido_md} onChange={(e) => setEditForm((prev) => ({ ...prev, contenido_md: e.target.value }))} placeholder="Contenido MD" className={`min-h-[180px] ${modalInputClass}`} required />
                     <div className="space-y-2">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 1 · Modo de ejecución</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Nivel 1 · Modo de ejecución</p>
                       <div className={modeSwitchContainerClass}>
                         <button
                           type="button"
@@ -1147,7 +1147,7 @@ function AdminPage() {
                               script_creation_mode: currentModeAllowed ? prev.script_creation_mode : availableModes[0].value,
                             };
                           })}
-                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isDatabaseSolutionType(editForm.tipo_solucion) ? 'bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isDatabaseSolutionType(editForm.tipo_solucion) ? 'bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                         >
                           Base de Datos
                         </button>
@@ -1164,7 +1164,7 @@ function AdminPage() {
                               script_creation_mode: currentModeAllowed ? prev.script_creation_mode : availableModes[0].value,
                             };
                           })}
-                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isScriptSolutionType(editForm.tipo_solucion) ? 'bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                          className={`rounded-lg px-4 py-2 text-sm font-semibold ${isScriptSolutionType(editForm.tipo_solucion) ? 'bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                         >
                           Script
                         </button>
@@ -1175,20 +1175,20 @@ function AdminPage() {
                 {isExecutableSolutionType(editForm.tipo_solucion) && (
                   <div className={modalExecSectionClass}>
                     <div className="space-y-2">
-                      <p className="text-sm font-semibold text-[color:var(--ink-900)]">Nivel 2 · Forma de creación</p>
+                      <p className="text-sm font-semibold text-(--ink-900)">Nivel 2 · Forma de creación</p>
                       <div className="flex flex-wrap gap-2">
                         {getCreationModesForSolutionType(editForm.tipo_solucion).map((mode) => (
                           <button
                             key={`edit-mode-${mode.value}`}
                             type="button"
                             onClick={() => setEditForm((prev) => ({ ...prev, script_creation_mode: mode.value }))}
-                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editForm.script_creation_mode === mode.value ? 'border-[color:var(--accent-strong)] bg-[color:var(--accent-strong)] text-white shadow-sm' : isLightTheme ? 'border-[color:var(--line)] bg-white text-[color:var(--ink-900)] hover:bg-[color:var(--surface-2)]' : 'border-slate-700 bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
+                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editForm.script_creation_mode === mode.value ? 'border-(--accent-strong) bg-(--accent-strong) text-white shadow-xs' : isLightTheme ? 'border-(--line) bg-white text-(--ink-900) hover:bg-(--surface-2)' : 'border-slate-700 bg-slate-900/80 text-slate-100 hover:bg-slate-800'}`}
                           >
                             {mode.label} · {mode.level}
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-[color:var(--ink-700)]">
+                      <p className="text-xs text-(--ink-700)">
                         {isDatabaseSolutionType(editForm.tipo_solucion)
                           ? 'Base de Datos: Visual Builder y JSON. Código Manual está deshabilitado.'
                           : 'Script: solo Código Manual (JSON workflow).'}
@@ -1215,7 +1215,7 @@ function AdminPage() {
                         value={editForm.unified_json_text}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, unified_json_text: e.target.value }))}
                         placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['name'] }], where: { 'users.id': '{{usuario_id}}' }, guardar_en: 'usuario_info' }] }, null, 2)}
-                        className="min-h-[260px] w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 font-mono text-sm text-[color:var(--ink-900)]"
+                        className="min-h-[260px] w-full rounded-lg border border-(--line) bg-(--surface-2) p-3 font-mono text-sm text-(--ink-900)"
                       />
                     )}
 
@@ -1228,30 +1228,30 @@ function AdminPage() {
                           value={editForm.manual_json_text}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, manual_json_text: e.target.value }))}
                           placeholder={JSON.stringify({ workflow: [{ tipo: 'select', tabla: 'users', columnas: ['id', 'username'], join: [{ tabla: 'employees', on: { 'users.id': 'employees.user_id' }, columnas: ['cargo'] }], where: { 'users.username': '{{usuario}}' }, guardar_en: 'user_data' }] }, null, 2)}
-                          className={`min-h-[260px] w-full rounded-lg border border-[color:var(--line)] p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-[color:var(--ink-900)]' : 'bg-slate-900 text-slate-100'}`}
+                          className={`min-h-[260px] w-full rounded-lg border border-(--line) p-3 font-mono text-sm ${isLightTheme ? 'bg-[#fff9f0] text-(--ink-900)' : 'bg-slate-900 text-slate-100'}`}
                         />
                       </div>
                     )}
 
-                    <div className="rounded-xl border border-[color:var(--line)] bg-[#0f172a] p-4">
+                    <div className="rounded-xl border border-(--line) bg-[#0f172a] p-4">
                       <div className="mb-2 flex items-center justify-between">
                         <p className="text-sm font-semibold text-white">Preview JSON unificado</p>
-                        <span className={`rounded px-2 py-1 text-xs ${editModeResult.valid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                        <span className={`rounded-sm px-2 py-1 text-xs ${editModeResult.valid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
                           {editModeResult.valid ? 'Válido' : 'Error'}
                         </span>
                       </div>
                       {!editModeResult.valid && (
                         <p className="mb-2 text-xs text-red-300">{editModeResult.error}</p>
                       )}
-                      <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-slate-200">
+                      <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word text-xs leading-6 text-slate-200">
                         {editModeResult.scriptJson ? JSON.stringify(editModeResult.scriptJson, null, 2) : 'Completa el contenido según el modo seleccionado.'}
                       </pre>
                     </div>
                   </div>
                 )}
               </div>
-              <div className="flex justify-end gap-3 border-t border-[color:var(--line)] px-6 py-4">
-                <button type="button" onClick={() => setShowEditModal(false)} className="rounded-lg border border-[color:var(--line)] px-4 py-2 text-[color:var(--ink-800)]">Cancelar</button>
+              <div className="flex justify-end gap-3 border-t border-(--line) px-6 py-4">
+                <button type="button" onClick={() => setShowEditModal(false)} className="rounded-lg border border-(--line) px-4 py-2 text-(--ink-800)">Cancelar</button>
                 <button type="submit" disabled={editSaving || !editEnterpriseValidation.isValid} className="rounded-lg bg-[#25295c] px-5 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">{editSaving ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
@@ -1261,27 +1261,27 @@ function AdminPage() {
 
       {/* ── Modal Gestión de Bases de Datos ───────────────────────────────── */}
       {showDbModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden ${isLightTheme ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-700'}`}>
             <div className={`px-6 py-4 border-b flex items-center justify-between ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
               <div>
-                <h2 className="text-lg font-bold text-[color:var(--ink-900)]">🗄 Gestión de Bases de Datos</h2>
-                <p className="text-xs text-[color:var(--ink-600)] mt-0.5">Los cambios se aplican automáticamente — sin reiniciar el sistema.</p>
+                <h2 className="text-lg font-bold text-(--ink-900)">🗄 Gestión de Bases de Datos</h2>
+                <p className="text-xs text-(--ink-600) mt-0.5">Los cambios se aplican automáticamente — sin reiniciar el sistema.</p>
               </div>
-              <button onClick={() => setShowDbModal(false)} className="text-[color:var(--ink-600)] hover:text-[color:var(--ink-900)] text-xl font-bold leading-none">×</button>
+              <button onClick={() => setShowDbModal(false)} className="text-(--ink-600) hover:text-(--ink-900) text-xl font-bold leading-none">×</button>
             </div>
 
             <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
               {/* Lista de BDs actuales */}
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-[color:var(--ink-900)]">Bases configuradas</p>
+                <p className="text-sm font-semibold text-(--ink-900)">Bases configuradas</p>
                 <div className="space-y-2">
                   {allDatabases.map((db) => (
                     <div key={db.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
                       <span className={`shrink-0 w-2 h-2 rounded-full ${db.connected ? 'bg-emerald-400' : 'bg-slate-400'}`} title={db.connected ? 'Conectada' : 'Sin conexión'} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[color:var(--ink-900)] truncate">{db.label}</p>
-                        <p className="text-xs text-[color:var(--ink-600)]">{db.type} · {db.id} {db.primary ? '· BD primaria del sistema' : ''}</p>
+                        <p className="text-sm font-semibold text-(--ink-900) truncate">{db.label}</p>
+                        <p className="text-xs text-(--ink-600)">{db.type} · {db.id} {db.primary ? '· BD primaria del sistema' : ''}</p>
                       </div>
                       <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${db.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                         {db.connected ? 'conectada' : 'sin conexión'}
@@ -1298,14 +1298,14 @@ function AdminPage() {
                     </div>
                   ))}
                   {allDatabases.length === 0 && (
-                    <p className="text-sm text-[color:var(--ink-600)] text-center py-4">No hay bases configuradas aún.</p>
+                    <p className="text-sm text-(--ink-600) text-center py-4">No hay bases configuradas aún.</p>
                   )}
                 </div>
               </div>
 
               {/* Formulario para agregar nueva BD */}
               <div className={`rounded-xl border p-4 space-y-4 ${isLightTheme ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800'}`}>
-                <p className="text-sm font-semibold text-[color:var(--ink-900)]">Agregar nueva base de datos</p>
+                <p className="text-sm font-semibold text-(--ink-900)">Agregar nueva base de datos</p>
                 {dbError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{dbError}</p>}
                 <form onSubmit={handleAddDatabase} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
@@ -1328,7 +1328,7 @@ function AdminPage() {
                     <input required placeholder="Usuario" value={dbForm.user} onChange={e => setDbForm(p => ({...p, user: e.target.value}))} className={modalInputClass} />
                     <input required placeholder="Contraseña" type="password" value={dbForm.password} onChange={e => setDbForm(p => ({...p, password: e.target.value}))} className={modalInputClass} />
                   </div>
-                  <p className="text-xs text-[color:var(--ink-600)]">
+                  <p className="text-xs text-(--ink-600)">
                     💡 Al guardar, el sistema conectará automáticamente en segundos. El estado aparecerá actualizado sin reiniciar nada.
                   </p>
                   <div className="flex justify-end">
@@ -1345,7 +1345,7 @@ function AdminPage() {
 
       {/* ── Advertencia de seguridad: script con mutaciones visible para usuarios ── */}
       {mutationWarning && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border overflow-hidden ${isLightTheme ? 'bg-white border-red-200' : 'bg-slate-900 border-red-700'}`}>
             {/* Header */}
             <div className="px-6 py-4 bg-red-600 flex items-center gap-3">

@@ -19,6 +19,7 @@ import {
   YAxis,
 } from 'recharts';
 import { withAuth } from '../components/ProtectedRoute';
+import Link from 'next/link';
 import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../components/ThemeProvider';
 import UserIdentityBadge from '../components/UserIdentityBadge';
@@ -514,6 +515,15 @@ function DashboardPage() {
               <h1 className="dashboard-gradient-text mt-1 text-2xl font-semibold">Panel SQL Automático</h1>
             </div>
             <div className="ml-auto flex items-center gap-3">
+              {currentUser?.role === 'admin' && (
+                <Link
+                  href="/soporte"
+                  className="glass-pill rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap text-(--ink-800) transition-colors hover:bg-white/85 hover:text-(--ink-900)"
+                  title="Tickets, diagnósticos automáticos y vigilancia"
+                >
+                  Centro de Soporte
+                </Link>
+              )}
               <ThemeToggle />
               <UserIdentityBadge
                 username={currentUser?.username || 'usuario'}

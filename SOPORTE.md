@@ -16,6 +16,7 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
 | Frontend: Panel, Vigilancia, Biblioteca, Tickets y Diagnósticos | **Integradas** — 5 de 6 |
+| Navegación propia y entrada desde ConsultasSQL | **Hecho** — ver sección 15 |
 | Frontend: Interpretar mensaje | **Pendiente** — depende del modelo de lenguaje |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
@@ -178,8 +179,8 @@ Si los DBA entregan un usuario de solo lectura, basta con poner las tres variabl
 
 1. **Frontend**: solo falta Interpretar mensaje, que usa el modelo de lenguaje. La ruta
    comodín `app/soporte/[...pendiente]` la cubre mientras tanto y hace de 404 del módulo.
-2. **Navegación**: las pantallas están en `/soporte/*` pero todavía no cuelgan de la barra
-   lateral de ConsultasSQL; hay que escribir la URL a mano.
+2. **Vigilancia en producción**: arranca apagada. Encenderla (`VIGILANCIA=on`) es una
+   decisión a tomar cuando el usuario de Oracle de solo lectura esté listo.
 2. **Interpretar mensaje**: `interpreter/` no se movió porque usa el modelo de lenguaje.
 3. **`pnpm importar`**: `leerDashboardHtml()` ya está portado en `knowledge/semillas.ts`,
    falta el script de línea de comandos que lo invoque.
@@ -391,3 +392,31 @@ detalle con su investigación, ejecutar el diagnóstico de MAC duplicada, y **re
 como paso del ticket 2026091974** — el paso aparece en la línea de tiempo con el SQL
 utilizado, la evidencia y la conclusión. El historial abre el resultado guardado. Los
 datos de prueba se borraron al terminar.
+
+---
+
+## 15. Navegación
+
+ConsultasSQL **no tenía navegación global**: `Sidebar.tsx` es el árbol de categorías y
+artículos del panel de administración —se alimenta de props, no de rutas— y `Header.tsx`
+ni siquiera está en uso. Las pantallas se enlazaban entre sí con `router.push` sueltos.
+
+Así que "engancharlo a la barra lateral" se resolvió en dos piezas:
+
+**Dentro del módulo**, se trajo la barra de navegación de ticket v2.0
+(`soporte/components/layout/barra-lateral.tsx`), con el `NavLink` de react-router
+cambiado por `next/link` más `usePathname` para la pestaña activa. Incluye las insignias
+de alertas abiertas y tickets en curso, el estado de Oracle y de la vigilancia, y un
+enlace de vuelta. En pantallas pequeñas se convierte en menú desplegable que se cierra
+solo al navegar.
+
+La cabecera (`cabecera.tsx`) viene del Shell original con dos cambios: el título se deduce
+de la ruta en vez de los `handle` de react-router, y **el tema usa el `ThemeProvider` de
+ConsultasSQL**, de modo que el interruptor del módulo y el de la aplicación son el mismo.
+
+**Desde ConsultasSQL**, un enlace "Centro de Soporte" en las cabeceras del panel de
+administración y del panel SQL, visible solo con rol admin.
+
+`Interpretar mensaje` aparece en la barra marcada como *pendiente*: lleva al marcador que
+explica que depende del modelo de lenguaje. La entrada desaparece cuando esa pantalla
+exista.

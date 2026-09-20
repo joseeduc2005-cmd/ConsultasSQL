@@ -67,6 +67,10 @@ function sanitizeValue(value, sensitiveFieldsSet, req, excludeTokenPaths = []) {
 function capRows(payload, maxRows) {
   if (!payload || typeof payload !== 'object') return payload;
 
+  // Un array de nivel superior no tiene campo `data` que recortar, y copiarlo con
+  // { ...payload } lo convertiría en un objeto { 0: …, 1: … }. Se devuelve tal cual.
+  if (Array.isArray(payload)) return payload;
+
   const output = { ...payload };
   if (Array.isArray(output.data) && output.data.length > maxRows) {
     output.data = output.data.slice(0, maxRows);

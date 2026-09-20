@@ -1,0 +1,619 @@
+[
+ {
+  "numero_ticket": "SIN-NUMERO-1105681702",
+  "url_sir": "",
+  "titulo": "Socia con corresponsal no puede resetear clave: \"usuario no encontrado\"",
+  "descripcion": "Socia ESENIA MARIBEL CASTILLO SUING, cédula 1105681702, tiene corresponsal asignado. No recuerda clave ni contraseña. Al intentar resetear el usuario, el sistema responde \"usuario no encontrado\".",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Usuarios / Reset de clave",
+  "categoria": "Autenticación",
+  "prioridad": "Alta",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-08-22T00:00",
+  "fecha_inicio_analisis": "2026-08-22T00:00",
+  "fecha_resolucion": "2026-08-23T00:00",
+  "causa_raiz": "CONFIRMADA: el POS físico que usaba Esenia tenía registrada en el sistema una MAC (860090060131281) que en realidad pertenecía a otro equipo (POS) distinto, el cual figuraba INACTIVO y había sido reasignado a otro socio. Al no coincidir la MAC real del dispositivo con el registro esperado para su usuario, el backend no lograba ubicarla y devolvía \"usuario no encontrado\" en el reseteo de clave. Se descartaron el espacio en blanco en el parámetro de login (Paso 2) y reasignar esa MAC (Paso 4, pertenecía a un tercero). Mismo patrón (MAC de equipo inactivo interfiriendo con uno activo) confirmado luego en el ticket 2026083700.",
+  "solucion_aplicada": "Soporte operativo corrigió la asignación de equipo/MAC de la socia, dejando su POS correctamente vinculado a su usuario activo. Con esto el flujo de reset de clave ya identifica correctamente a Esenia.",
+  "observaciones": "Misma cédula (1105681702) que aparece al inicio de OptenerClavesPos.txt (L3, L32, L34, L39) en un caso anterior de obtención de clave/PIN. La MAC 866080060887986 registrada en base también aparece en OptenerClavesPos.txt (L22, L46) en un caso anterior. Ticket cerrado con causa raíz confirmada.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-22",
+    "descripcion": "Buscar usuario por cédula en Oracle",
+    "sql_utilizado": "SELECT * FROM CORRESPONSALES.Usuario WHERE Usr_Cedula='1105681702';",
+    "resultado": "Ejecutada por el técnico; resultado exacto no compartido en el chat.",
+    "evidencia": "",
+    "conclusion": "Pendiente de revisar si el usuario existe y en qué estado."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-08-22",
+    "descripcion": "Prueba de login quemando el IMEI en un POS de prueba y logueándose el propio técnico",
+    "sql_utilizado": "",
+    "resultado": "Se detectó que el parámetro de usuario se enviaba con un espacio en blanco, provocando el mensaje \"usuario no existe\".",
+    "evidencia": "",
+    "conclusion": "Causa probable: espacio en blanco en el parámetro de login (mismo patrón ya documentado en la base de conocimiento)."
+   },
+   {
+    "numero_paso": 3,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Revisión de logs del backend (UsuarioServiceImpl) de un intento de login real",
+    "sql_utilizado": "",
+    "resultado": "El dispositivo envía MAC 860090060131281, pero en la base el usuario tiene registrada la MAC 866080060887986 (distinta) — por eso la búsqueda por mac+usuario no encuentra al usuario.",
+    "evidencia": "authUsernamePassword() usuario=yesenia.castillo idDispositivo=860090060131281\nbuscando por mac=860090060131281 usuario=yesenia.castillo\nusuario no encontrado para mac=860090060131281 usuario=yesenia.castillo\nvalidateRepositorioOTPAuth() El usuario no existe",
+    "conclusion": "Hipótesis pendiente de validar (aún NO confirmada): la causa real podría ser MAC distinta entre el dispositivo y la base, no necesariamente el espacio en blanco del Paso 2. Falta validar antes de dar por definitiva."
+   },
+   {
+    "numero_paso": 4,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Verificar a quién pertenece la MAC 860090060131281 detectada en el log",
+    "sql_utilizado": "SELECT * FROM CORRESPONSALES.Pos WHERE pos_mac = '860090060131281';\nSELECT u.usr_codigo, u.usr_usuario, u.usr_cedula, u.usr_estado, up.up_pos FROM corresponsales.usuario u JOIN corresponsales.usuario_pos up ON up.up_usuario=u.usr_codigo JOIN corresponsales.pos p ON p.pos_id=up.up_pos WHERE p.pos_mac='860090060131281';",
+    "resultado": "Esa MAC está asignada a otra persona, no a Esenia.",
+    "evidencia": "Confirmado por el técnico.",
+    "conclusion": "Se descarta cambiar/reasignar la MAC de Esenia como solución — ese dispositivo es de otro usuario. La causa raíz real todavía no está confirmada; falta entender por qué el intento de login de Esenia llegó con la MAC de un dispositivo ajeno."
+   },
+   {
+    "numero_paso": 5,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Revisar el estado del equipo/POS que tenía asignado Esenia",
+    "sql_utilizado": "",
+    "resultado": "El equipo asignado a Esenia está en estado inactivo, y fue reasignado a otra persona.",
+    "evidencia": "",
+    "conclusion": "Confirma el mix-up del Paso 4: hay un problema de reasignación de equipos, no solo de datos de login. Soporte operativo (la misma gente que reactivó el usuario antes) está revisando el caso. El ticket sigue abierto, no se cierra todavía."
+   },
+   {
+    "numero_paso": 6,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Cierre del ticket con comentario de causa raiz",
+    "sql_utilizado": "",
+    "resultado": "Se documento la causa raiz final: el POS de Esenia tenia registrada la MAC de otro equipo distinto que figuraba inactivo y estaba reasignado a otro socio.",
+    "evidencia": "",
+    "conclusion": "Causa raiz CONFIRMADA: MAC 860090060131281 pertenecia a un POS inactivo reasignado a otra persona, no al equipo de Esenia. Soporte operativo corrigio la asignacion de equipo/MAC. Mismo patron de causa confirmado despues en el ticket 2026083700. TICKET RESUELTO Y CERRADO."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026083700",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026083700",
+  "titulo": "No permite ingresar al corresponsal",
+  "descripcion": "Socio JOSE FRANCISCO CHILLOGALLI YARI, cédula 0105609176, tiene corresponsal. Funcionaba con normalidad; hoy ingresó mal la clave y el usuario se inhabilitó. Soporte operativo lo reactivó, pero se volvió a inhabilitar. Al intentar ingresar, el sistema muestra un mensaje de error (imagen adjunta en el reporte original, no disponible aquí).",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "",
+  "categoria": "",
+  "prioridad": "",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-08-18T12:00",
+  "fecha_inicio_analisis": "2026-08-18T12:00",
+  "fecha_resolucion": "2026-08-24T00:00",
+  "causa_raiz": "CONFIRMADA Y RESUELTA. La MAC del POS de José (860718041153392) estaba duplicada con la de otro equipo (POS de otro socio, en estado inactivo), interfiriendo en la búsqueda del backend al autenticar por PIN y generando \"Unexpected Error\". Adicionalmente se identificó en el código de authPIN() un bloque (\"// CAMBIAR BUG PRODUCCCION\") que no manejaba correctamente este escenario de duplicado.",
+  "solucion_aplicada": "Se corrigió CODIGO_SUCURSAL, se corrigió la MAC duplicada y se reactivó la cuenta. Se reportó el hallazgo de código (bloque CAMBIAR BUG PRODUCCCION en authPIN) al equipo de desarrollo para corrección definitiva en el backend. José confirmó telefónicamente el 2026-08-24 que ya puede ingresar con normalidad usando su PIN.",
+  "observaciones": "Mismo socio ya aparece en OptenerClavesPos.txt (L53, L628) en un caso anterior de reseteo de clave. Ticket cerrado con confirmación telefónica del socio.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-18",
+    "descripcion": "Revisar sucursal asignada al usuario",
+    "sql_utilizado": "SELECT * FROM CORRESPONSALES.Usuario WHERE Usr_Cedula='0105609176';",
+    "resultado": "La sucursal figuraba como Coordinación General en vez de Sigsig.",
+    "evidencia": "",
+    "conclusion": "Corregir CODIGO_SUCURSAL al código de Sigsig (4)."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-08-18",
+    "descripcion": "Aplicar corrección de sucursal",
+    "sql_utilizado": "UPDATE CORRESPONSALES.Usuario SET CODIGO_SUCURSAL = 4 WHERE Usr_Cedula = '0105609176';\ncommit;",
+    "resultado": "Ejecutado y confirmado (commit).",
+    "evidencia": "",
+    "conclusion": "Corrección aplicada; el problema de ingreso persiste."
+   },
+   {
+    "numero_paso": 3,
+    "fecha_hora": "2026-08-18",
+    "descripcion": "Reactivación repetida por soporte operativo",
+    "sql_utilizado": "",
+    "resultado": "El usuario se inhabilita otra vez después de cada reactivación al intentar ingresar, mostrando un mensaje de error.",
+    "evidencia": "",
+    "conclusion": "Pendiente de determinar la causa raíz del bloqueo recurrente."
+   },
+   {
+    "numero_paso": 4,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Revisión de logs del servidor (ventana 10:27-10:29) buscando la cédula/usuario de José; sin coincidencia directa (log general, no filtrado)",
+    "sql_utilizado": "",
+    "resultado": "No se encontró \"0105609176\" ni \"chillogalli\" en el extracto de logs revisado.",
+    "evidencia": "El extracto de log pegado no correspondía al intento exacto (no aparece la URL \"autenticarCorresponsal\" del error real).",
+    "conclusion": "Se descarta este log como evidencia directa; hace falta filtrar logs por el usr_usuario real de José."
+   },
+   {
+    "numero_paso": 5,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Revisión del código fuente del método authPIN() (endpoint autenticarCorresponsal?tipo=2)",
+    "sql_utilizado": "",
+    "resultado": "Se encontró un bloque marcado por el propio desarrollador como bug pendiente (\"// CAMBIAR BUG PRODUCCCION\"): si findByMac() devuelve una lista vacía, o si el PIN sí coincide para algún usuario de la lista, ningún \"if\" del bloque se cumple y el método retorna una respuesta sin mensaje ni estado seteados.",
+    "evidencia": "Código fuente del backend (authPIN), aportado por el técnico.",
+    "conclusion": "Causa probable confirmada a nivel de código: la respuesta vacía del backend explica el \"Unexpected Error\" con URL en vez de un mensaje claro. Falta confirmar si la MAC del dispositivo de José tiene 0, 1 o más registros en USUARIO_POS/POS para saber si cae en este bug."
+   },
+   {
+    "numero_paso": 6,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "El técnico cuestiona la hipótesis del bug de código: si fuera un bug de código general, debería haber muchos más tickets con el mismo problema. Se obtuvo el código exacto de findByMacAndPin() del repositorio para validar consulta por consulta en vez de solo inferir por lectura de código",
+    "sql_utilizado": "@Query(value = \"SELECT u.* FROM corresponsales.usuario u, corresponsales.pos_view p WHERE p.usr_usuario = u.usr_usuario AND p.pos_mac = :mac AND p.pos_estado_id=1 AND u.usr_clave_pin = :pin\", nativeQuery = true)\nUsuario findByMacAndPin(@Param(\"mac\") String mac, @Param(\"pin\") String pin);",
+    "resultado": "Punto clave: el JOIN real no es contra usuario_pos+pos directamente sino contra la VISTA corresponsales.pos_view (p.usr_usuario = u.usr_usuario), filtrando pos_estado_id=1. Esto es distinto de lo que se había asumido antes (join vía usuario_pos/pos). Pendiente ejecutar esta consulta exacta con la MAC real y el pin encriptado de José (23978951b9d351e12943ac5807dd4807), y obtener también el código de findByMac() (el fallback donde está el bug) para reconstruir el flujo completo.",
+    "evidencia": "",
+    "conclusion": "Objeción válida: el bug tal como se describía (dispara con cualquier PIN correcto) generaría muchos tickets, no solo dos — por lo que solo puede explicar el caso si se activa en un escenario puntual (ej. cuando pos_view no devuelve fila para el JOIN exacto pese a que el PIN sí es correcto, posiblemente ligado a reasignación/estado de equipos, igual que en el ticket de Esenia). Aún NO confirmado; falta ejecutar la consulta real y ver el resultado."
+   },
+   {
+    "numero_paso": 7,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se ejecutó la consulta exacta de findByMacAndPin() (en base local/de pruebas del técnico, NO producción) y se obtuvo el código de findByMac() y la definición completa de la vista corresponsales.pos_view",
+    "sql_utilizado": "-- Resultado obtenido en base local/pruebas (no representativo de producción):\nSELECT u.* FROM corresponsales.usuario u, corresponsales.pos_view p WHERE p.usr_usuario=u.usr_usuario AND p.pos_mac=:mac AND p.pos_estado_id=1 AND u.usr_clave_pin=:pin;\n-- -> SÍ devolvió la fila de José (28769, jose.chillogalli, cedula 0105609176, usr_estado=0/Activo, codigo_sucursal=4)\n\n-- Definición de pos_view: todos los joins son OUTER (+) excepto el último:\n-- ...p.pos_id=up.up_pos(+) and u.usr_codigo(+)=up.up_usuario and p.establecimiento_ce_id(+)=ce.ce_id\n-- and cr.cr_id=ce.ce_representante   <- este JOIN NO es outer\n\n-- Consulta propuesta para validar en PRODUCCION si el enlace establecimiento->representante está roto para el POS de José:\nSELECT p.pos_id, p.pos_mac, p.pos_estado_id, p.establecimiento_ce_id,\n       ce.ce_id, ce.ce_representante, ce.ce_razon_social,\n       cr.cr_id, cr.cr_cuenta\nFROM corresponsales.pos p\nLEFT JOIN corresponsales.corresponsalEstablecimiento ce ON p.establecimiento_ce_id = ce.ce_id\nLEFT JOIN corresponsalRepresentante cr ON cr.cr_id = ce.ce_representante\nWHERE p.pos_mac = '860718041153392';",
+    "resultado": "En la base local del técnico, findByMacAndPin SÍ encuentra a José normalmente (usuario activo, sucursal correcta) — pero el técnico aclaró que esa base NO es producción, así que no representa necesariamente lo que pasa ahí. Al revisar la definición completa de pos_view se detectó que el join final (corresponsalEstablecimiento -> corresponsalRepresentante) NO es outer join, a diferencia de todos los anteriores.",
+    "evidencia": "Definición de pos_view aportada por el técnico (comentario propio: \"Creado por: Christian Estrada, 05/06/2023, Motivo: Fondeo Corresponsales\").",
+    "conclusion": "Nueva hipótesis más precisa (aún NO confirmada): si el establecimiento del POS de José tiene el enlace a corresponsalRepresentante roto o nulo (ce_representante inválido, representante inactivo, etc.), pos_view descarta la fila completa aunque el usuario/POS estén bien — y ni findByMacAndPin ni findByMac encontrarían nada, cayendo en el bloque del bug de respuesta vacía. Esto sí es un escenario puntual (no todo login), consistente con la objeción de que solo hay 1-2 tickets así. Pendiente correr la consulta propuesta contra PRODUCCION para confirmar si ce.ce_id o cr.cr_id salen NULL para el POS de José (mac 860718041153392)."
+   },
+   {
+    "numero_paso": 8,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se ejecutó (corregida por el técnico) la consulta LEFT JOIN establecimiento/representante contra la MAC 860718041153392, en la base réplica de producción (el técnico advierte que esta réplica no siempre está sincronizada con producción real)",
+    "sql_utilizado": "SELECT p.pos_id, p.pos_mac, p.pos_estado_id, p.establecimiento_ce_id,\n       ce.ce_id, ce.ce_representante, ce.ce_razon_social,\n       cr.cr_id, cr.cr_cuenta\nFROM corresponsales.pos p\nLEFT JOIN corresponsales.corresponsalEstablecimiento ce ON p.establecimiento_ce_id = ce.ce_id\nLEFT JOIN corresponsales.corresponsalRepresentante cr ON cr.cr_id = ce.ce_representante\nWHERE p.pos_mac = '860718041153392';\n\n-- Consultas propuestas para pedirle a producción (no ejecutadas ahi todavia):\n-- 1) La misma consulta de arriba contra producción real.\n-- 2) Auditoria general de MACs duplicadas en todo el sistema:\nSELECT pos_mac, COUNT(*) cnt\nFROM corresponsales.pos\nGROUP BY pos_mac\nHAVING COUNT(*) > 1;",
+    "resultado": "La MAC 860718041153392 esta asignada a DOS POS distintos: pos_id 48331 (estado 0/inactivo, establecimiento GUEL CYBER CAFE, representante cr_id 50212) y pos_id 50661 (estado 1/activo, establecimiento POS LOMA LARGA FRANCISCO CHILLOGALLI, representante cr_id 51567, que parece ser el propio POS de Jose). En ambas filas ce_id y cr_id existen (no hay nulos) -- se descarta la hipotesis del Paso 7 sobre el enlace roto a corresponsalRepresentante.",
+    "evidencia": "Consulta corregida y ejecutada por el técnico contra la base réplica.",
+    "conclusion": "Nueva causa raíz más fuerte (aún NO confirmada en producción real): la MAC del POS de José está DUPLICADA con la de otro POS (Guel Cyber Café, inactivo en esta réplica). Si en producción real ambos POS estuvieran activos, findByMac() (el fallback sin filtro de PIN) devolvería una lista con 2 usuarios en vez de 1 -- un caso que el bloque marcado CAMBIAR BUG PRODUCCCION probablemente tampoco contempla. Esto explica por qué el problema es puntual (solo los POS con MAC duplicada se ven afectados) y no masivo, respondiendo directamente a la objeción del técnico. Falta: correr la misma consulta y la auditoría de MACs duplicadas en la base de PRODUCCIÓN real (no la réplica) para confirmar."
+   },
+   {
+    "numero_paso": 9,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se ejecutó la consulta equivalente a findByMac() (via usuario_pos+pos, sin filtro de PIN) contra la MAC 860718041153392",
+    "sql_utilizado": "SELECT u.*\nFROM CORRESPONSALES.Usuario u\nJOIN CORRESPONSALES.Usuario_Pos up ON up.up_usuario = u.usr_codigo\nJOIN CORRESPONSALES.Pos p ON p.pos_id = up.up_pos\nWHERE p.pos_mac = '860718041153392';\n\n-- Query propuesta para confirmar la asignacion duplicada en usuario_pos:\nSELECT up.up_id, up.up_usuario, up.up_pos, u.usr_usuario, u.usr_cedula, u.usr_estado\nFROM CORRESPONSALES.Usuario_Pos up\nJOIN CORRESPONSALES.Usuario u ON u.usr_codigo = up.up_usuario\nJOIN CORRESPONSALES.Pos p ON p.pos_id = up.up_pos\nWHERE p.pos_mac = '860718041153392';",
+    "resultado": "La consulta devolvio DOS usuarios para la misma MAC: 17544 MARTHA NOHEMI PORTILLA LEON (martha.portilla, cedula 0104388988, campo usr_clave_pin VACIO) y 28769 JOSE FRANCISCO CHILLOGALLI YARI (jose.chillogalli, cedula 0105609176, usr_clave_pin con valor). Confirma que la MAC esta ligada a dos usuarios distintos via usuario_pos, no solo a dos POS.",
+    "evidencia": "Consulta ejecutada por el técnico contra la base réplica.",
+    "conclusion": "Confirmacion fuerte de la causa raiz (aun pendiente de validar en PRODUCCION real, no la replica): findByMac() devuelve una lista de 2 usuarios para esta MAC, el escenario exacto que el bloque CAMBIAR BUG PRODUCCCION no contempla (solo maneja lista vacia o un unico match), explicando la respuesta vacia/Unexpected Error sin importar que el PIN de Jose sea correcto. Hipotesis de origen: Martha tuvo asignado antes ese POS y su registro en usuario_pos nunca se dio de baja al reasignarlo a Jose (mismo patron de equipo reasignado sin limpiar que en el ticket de Esenia) -- como Martha no usa login por PIN (campo vacio) nunca genero un ticket antes. Solucion propuesta (no aplicada aun): pedir a soporte operativo dar de baja el registro usuario_pos de Martha para esa MAC/POS, sin tocar codigo. Falta ejecutar la consulta de usuario_pos propuesta para confirmar cual de los dos registros es el obsoleto, y validar en produccion real."
+   },
+   {
+    "numero_paso": 10,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Confirmacion de la causa raiz: el registro de Martha (usuario_pos) esta inactivo y el de Jose esta activo, pero findByMac() no filtra por usr_estado del usuario -- solo por la MAC",
+    "sql_utilizado": "",
+    "resultado": "El tecnico confirma: el registro de Martha para esa MAC esta INACTIVO y el de Jose esta ACTIVO, pero el sistema (findByMac) no controla/filtra el estado del usuario en esa consulta -- por eso el registro inactivo de Martha sigue apareciendo en la lista y contamina el resultado para Jose.",
+    "evidencia": "",
+    "conclusion": "Causa raiz CONFIRMADA por el tecnico: findByMac() deberia filtrar solo usuarios activos (usr_estado) y no lo hace, permitiendo que un usuario_pos inactivo (Martha) siga apareciendo junto al activo (Jose) para la misma MAC duplicada, disparando el bloque CAMBIAR BUG PRODUCCCION. El tecnico ya mando a hacer una prueba (posiblemente correccion de codigo o de datos) para validar el fix. Ticket sigue ABIERTO -- no se cierra hasta que el tecnico confirme el resultado de esa prueba."
+   },
+   {
+    "numero_paso": 11,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se cambio la MAC del dispositivo inactivo (el de Martha) para eliminar el duplicado, y se intento loguear de nuevo con Jose. El error persiste (misma captura Unexpected Error / autenticarCorresponsal tipo=2). Se aporto un dump grande de logs del servidor (ventana ~11:44-11:46) como evidencia",
+    "sql_utilizado": "",
+    "resultado": "El error Unexpected Error persiste tras el cambio de MAC. El dump de logs revisado NO contiene ninguna linea con la MAC 860718041153392, el usuario jose.chillogalli, ni el endpoint autenticarCorresponsal -- solo aparecen logins (authUsernamePassword) de otros usuarios en esa ventana de tiempo. No se pudo confirmar con este log si el intento real de Jose llego al backend ni por que fallo.",
+    "evidencia": "Captura de pantalla del error Unexpected Error (misma URL autenticarCorresponsal?tipo=2) + dump de logs del servidor sin coincidencias para Jose/MAC.",
+    "conclusion": "Resultado NO concluyente. Dos preguntas abiertas antes de seguir: (1) el cambio de MAC del dispositivo de Martha, se aplico en PRODUCCION real o en la base replica/de pruebas -- si fue en la replica, el duplicado en produccion real seguiria intacto y explicaria que el error persista; (2) se necesita un log filtrado especificamente por la MAC 860718041153392 o el usuario jose.chillogalli (o por la hora exacta del intento) tomado directo de produccion, ya que este dump generico no capturo el request real que falla. Ticket sigue ABIERTO, la hipotesis de la MAC duplicada sigue siendo la mas fuerte pero aun sin confirmar el fix."
+   },
+   {
+    "numero_paso": 12,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Nuevo intento de login en el POS: el mensaje cambio completamente. Ya NO sale Unexpected Error, ahora sale un mensaje especifico y claro: perfil bloqueado por exceder el limite de 3 intentos de PIN",
+    "sql_utilizado": "",
+    "resultado": "La captura de pantalla y el log coinciden exactamente: linea de las 12:00:38 en UsuarioServiceImpl.validateRepositorioOTPAuth() con el mensaje \"Ha excedido el limite de tres intentos en el ingreso de su PIN, por lo que su perfil fue provisionalmente bloqueado. Para solicitar el desbloqueo de su perfil debera acercarse a una agencia o sucursal de la institucion o llamar a nuestro Call Center.\"",
+    "evidencia": "Captura de pantalla del mensaje de bloqueo por intentos + linea de log validateRepositorioOTPAuth() a las 12:00:38 con el mismo texto exacto.",
+    "conclusion": "Fuerte indicio de que el bug de la MAC duplicada SI quedo resuelto: el backend ya identifico correctamente al usuario (por eso pudo contar los intentos y bloquear el perfil) en vez de devolver la respuesta vacia/Unexpected Error de antes. El bloqueo actual es un comportamiento normal de seguridad (3 intentos de PIN fallidos), no el bug original. Pendiente confirmar con el tecnico si esos 3 intentos fueron pruebas suyas (con PIN cualquiera) o si Jose probo su PIN real y fallo -- de eso depende si solo hace falta desbloquear (UPDATE CORRESPONSALES.USUARIO SET USR_INTENTOS_PIN = 0 WHERE USR_CODIGO = :usr_codigo, catalogado como U10 en la Biblioteca SQL) o si falta investigar algo mas. Ticket sigue ABIERTO."
+   },
+   {
+    "numero_paso": 13,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se encontro en el log la linea exacta del intento real de Jose (12:10:48), confirmando que la MAC enviada es correcta y coincide",
+    "sql_utilizado": "",
+    "resultado": "Log real de Jose encontrado: authUsernamePassword() usuario decrypt=jose.chillogalli idDispositivo decrypt=860718041153392 -> buscando por mac=860718041153392 usuario=jose.chillogalli -> validateRepositorioOTPAuth() El usuario se encuentra inhabilitado.",
+    "evidencia": "Linea de log de las 12:10:48 en UsuarioServiceImpl, con usuario y MAC decrypt coincidiendo exactamente con los datos de Jose.",
+    "conclusion": "Confirmacion definitiva de que el bug de la MAC duplicada esta resuelto: el sistema ya encuentra al usuario correcto por su MAC real (860718041153392) y devuelve un mensaje claro y especifico (usuario inhabilitado), no la respuesta vacia de antes. El estado inhabilitado es consecuencia logica del bloqueo por 3 intentos de PIN del Paso 12 (el mismo patron que motivo el ticket original). Solucion: reactivar usuario y resetear intentos con la consulta U8 (UPDATE CORRESPONSALES.USUARIO SET USR_INTENTOS = 0, USR_ESTADO = 1, USR_INTENTOS_PIN = 0 WHERE USR_USUARIO = jose.chillogalli). Pendiente: ejecutar esa reactivacion y que Jose confirme login exitoso con su PIN real antes de cerrar el ticket."
+   },
+   {
+    "numero_paso": 14,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "El tecnico probo login por usuario y contrasenia en un POS de prueba con el mismo ID quemado que el de Jose -- funciono correctamente. Le pidio a Jose que reinicie su equipo",
+    "sql_utilizado": "",
+    "resultado": "Login exitoso por usuario/contrasenia en el POS de prueba (mismo ID quemado). El tecnico le indico a Jose que reinicie su equipo real y esta a la espera de confirmacion.",
+    "evidencia": "",
+    "conclusion": "Confirma que la cuenta ya esta activa y las credenciales son correctas -- coherente con el diagnostico de los pasos anteriores (bug de MAC duplicada resuelto, solo faltaba reactivacion). Falta la confirmacion final: que Jose, tras reiniciar su equipo, entre exitosamente con su PIN real (el flujo especifico que originó el ticket). Ticket sigue ABIERTO, en espera."
+   },
+   {
+    "numero_paso": 15,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Correccion del mecanismo exacto del bug: el tecnico aporto el codigo fuente REAL de findByMacAndPin() y findByMac()",
+    "sql_utilizado": "@Query(value = \"SELECT u.* FROM corresponsales.usuario u, corresponsales.pos_view p WHERE p.usr_usuario = u.usr_usuario AND p.pos_mac = :mac AND p.pos_estado_id=1 AND u.usr_clave_pin = :pin\", nativeQuery = true)\nUsuario findByMacAndPin(@Param(\"mac\") String mac, @Param(\"pin\") String pin);\n\n@Query(value = \"SELECT u.* FROM corresponsales.usuario u, corresponsales.pos_view p WHERE p.usr_usuario = u.usr_usuario AND p.pos_mac = :mac AND p.pos_estado_id=1\", nativeQuery = true)\nList<Usuario> findByMac(@Param(\"mac\") String mac);",
+    "resultado": "El codigo real confirma que findByMac() SI filtra por p.pos_estado_id=1 (estado del POS via pos_view). Esto contradice lo registrado en el Paso 10, donde se afirmo que findByMac() no filtraba ningun estado -- en realidad si filtra, pero por el estado del POS, no del usuario.",
+    "evidencia": "Codigo fuente exacto de ambos metodos, aportado por el tecnico.",
+    "conclusion": "CORRECCION: el bug de lista ambigua (findByMac devolviendo 2+ usuarios) solo se dispara si AMBOS POS duplicados de la misma MAC estan activos (pos_estado_id=1) simultaneamente -- si uno esta inactivo (como el 48331 del Paso 8), ese filtro ya lo excluye y la lista vuelve a tener 1 solo elemento. Pendiente: correr la consulta corregida (ver U16 en Biblioteca SQL) contra produccion con la MAC de Jose para confirmar cuantas filas trae realmente hoy, y asi saber si el mecanismo exacto del Unexpected Error original fue este u otro. La resolucion practica del ticket (Pasos 11-14) no cambia, pero el diagnostico tecnico exacto del bug de fondo queda pendiente de precisar."
+   },
+   {
+    "numero_paso": 16,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se ejecuto la consulta corregida (U16) con la MAC real de Jose",
+    "sql_utilizado": "SELECT u.*\nFROM corresponsales.usuario u,\n     corresponsales.pos_view p\nWHERE p.usr_usuario = u.usr_usuario\n  AND p.pos_mac = '860718041153392'\n  AND p.pos_estado_id = 1;",
+    "resultado": "La consulta trajo exactamente 1 registro (Jose).",
+    "evidencia": "",
+    "conclusion": "Confirma el Paso 15: el filtro por pos_estado_id YA existe y funciona correctamente en findByMacAndPin() y findByMac() -- no hace falta agregarlo ahi, ya esta. Pendiente aclarar con el tecnico: si preguntaba por agregar el filtro de estado del POS en OTRO metodo distinto (ej. authUsernamePassword(), visible en los logs pero de codigo fuente aun no compartido), hace falta que comparta ese codigo para revisarlo igual que se hizo con authPIN()."
+   },
+   {
+    "numero_paso": 17,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "El tecnico aporto el CODIGO FUENTE COMPLETO del metodo authPIN() -- ya no hay que inferir, se puede leer el mecanismo exacto del bug",
+    "sql_utilizado": "private RespuestaMS authPIN(AutenticacionME autenticacionME) {\n  ...\n  Usuario user = repository.findByMacAndPin(macDecrypt, encryptPin);\n  if (user != null) {\n    // camino feliz\n  } else {\n    // CAMBIAR BUG PRODUCCCION\n    List<Usuario> list = repository.findByMac(macDecrypt);\n    for (Usuario userA : list) {\n      if (userA.getUsrEstado() == Constantes.LOCKED_STATE) { ... }\n      else if (a punto de bloquear Y pin incorrecto) { ... }\n      else if (pin incorrecto) { ... }\n      // NO HAY rama para: usuario activo Y pin SI correcto\n    }\n    return respuesta; // vacia: sin mensaje, sin estado\n  }\n  ...\n}",
+    "resultado": "El bloque CAMBIAR BUG PRODUCCCION itera sobre la lista de findByMac() y maneja 3 casos (usuario bloqueado, a punto de bloquear con pin malo, pin malo) pero NO maneja el caso donde el usuario esta activo y el PIN SI es correcto -- ese caso no dispara ningun if, el for termina sin tocar la respuesta, y el metodo retorna un objeto vacio (sin mensaje ni estado). Eso es exactamente el Unexpected Error.",
+    "evidencia": "Codigo fuente completo de authPIN(), aportado por el tecnico.",
+    "conclusion": "CORRECCION IMPORTANTE: este bug NO requiere que la MAC este duplicada -- se dispara con una sola cuenta, cada vez que findByMacAndPin() (busqueda combinada MAC+estado+PIN en una sola consulta) falla a pesar de que el PIN es correcto, sin importar si la lista de findByMac() tiene 1 o mas usuarios (confirmado en Paso 16 que aplica igual con lista de 1). La duplicacion de MAC entre Jose y Martha (Pasos 8-10) es un problema de datos real que vale la pena limpiar, pero NO esta confirmado que haya sido la causa de que findByMacAndPin() fallara para Jose especificamente. La pregunta que falta responder con evidencia: por que findByMacAndPin() (la consulta con las 3 condiciones juntas) a veces no encuentra al usuario aunque el PIN si sea correcto. Pendiente: correr la consulta U15 completa (con el pin real encriptado de Jose) contra PRODUCCION para ver si falla ahi. La resolucion practica del ticket (Pasos 11-14) sigue en pie, pero el mecanismo exacto de la causa raiz original queda abierto."
+   },
+   {
+    "numero_paso": 18,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se propuso el fix de codigo COMPLETO (version final, lista para copiar/pegar) para el bloque CAMBIAR BUG PRODUCCCION (para pasarle al equipo de desarrollo)",
+    "sql_utilizado": "} else {\n    // CAMBIAR BUG PRODUCCCION -> CORREGIDO\n    List<Usuario> list = repository.findByMac(macDecrypt);\n    if (list.isEmpty()) {\n        respuesta.setMensaje(messages.get(\"msgAuthUsuarioNoEncontrado\"));\n        respuesta.setEstado(-1);\n        return respuesta;\n    }\n    for (Usuario userA : list) {\n        if (userA.getUsrEstado() == Constantes.LOCKED_STATE) {\n            respuesta.setMensaje(messages.get(\"msgAuthInhabilitado\"));\n            respuesta.setEstado(-1);\n        } else if (((userA.getUsrIntentosPin() == null ? 0 : userA.getUsrIntentosPin()) + userA.getUsrIntentos()) + 1 >= getMaxAttempts()\n                && !encryptPin.equals(userA.getUsrClavePIN())) {\n            long usrIntentosPin = safeLong(userA.getUsrIntentosPin());\n            long intentos = safeLong(userA.getUsrIntentos());\n            if ((usrIntentosPin + intentos) + 1 >= getMaxAttempts()) {\n                userA.setUsrIntentosPin(usrIntentosPin + 1);\n                userA.setUsrEstado(2L);\n                repository.save(userA);\n            }\n            respuesta.setMensaje(messages.get(\"msgAuthBloqueoPIN\", new String[]{\"PIN\"}));\n            respuesta.setToken(\"PIN\");\n            respuesta.setEstado(-1);\n        } else if (!encryptPin.equals(userA.getUsrClavePIN())) {\n            int intentosPin = (int) (safeLong(userA.getUsrIntentosPin()) + 1);\n            userA.setUsrIntentosPin((long) intentosPin);\n            repository.save(userA);\n            respuesta.setEstado(-1);\n\n            Long intentos = userA.getUsrIntentos();\n            if ((intentosPin + safeLong(intentos)) == getMaxAttempts() - 1) {\n                respuesta.setMensaje(messages.get(\"msgAuthBloquedWarning\"));\n            } else if ((intentosPin + safeLong(intentos)) <= getMaxAttempts()) {\n                respuesta.setMensaje(messages.get(\"msgErrorPin\", new String[]{\"PIN\"}));\n            }\n        } else {\n            // NUEVO: el PIN SI es correcto y el usuario no esta bloqueado ni a punto de bloquearse\n            userA.setUsrIntentos(0L);\n            userA.setUsrIntentosPin(0L);\n            repository.save(userA);\n\n            autenticacionME.setIdDispositivo(macDecrypt);\n            autenticacionME.setUsuario(userA.getUsrUsuario());\n\n            respuesta.setEstado(1);\n            respuesta.setMensaje(messages.get(\"msgAuthLoginOk\"));\n            return respuesta; // salir apenas se encuentra el match correcto\n        }\n    }\n    return respuesta;\n}",
+    "resultado": "Propuesta de codigo COMPLETA para el equipo de desarrollo (no aplicada, no es codigo de este tecnico de soporte). Solo se agregaron dos cosas respecto al original: el chequeo de lista vacia al inicio, y el else final dentro del for. Todo lo demas queda identico al codigo actual.",
+    "evidencia": "",
+    "conclusion": "Agrega la rama faltante (usuario activo + PIN correcto) y sale del for con return inmediato al encontrar el match, para no seguir iterando sobre otros usuarios de una lista con MAC duplicada (evita que un segundo usuario en la lista sobrescriba una respuesta ya exitosa). Tambien maneja el caso de lista vacia, que caia en el mismo hueco. Recomendacion adicional: aprovechar este cambio para que findByMac() tambien filtre por usr_estado activo (ver Paso 19, ya aplicado por el tecnico). Este fix debe pasarse al equipo de desarrollo para revision y despliegue -- no se aplica desde aqui."
+   },
+   {
+    "numero_paso": 19,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "Se determino el valor correcto de usr_estado activo (conteo: 1=1014, 0=814, 2=317) y se aplico usr_estado=1 en findByMacAndPin() y findByMac()",
+    "sql_utilizado": "@Query(value = \"\" +\n        \"SELECT u.*\\n\" +\n        \"FROM corresponsales.usuario u,\\n\" +\n        \"     corresponsales.pos_view p\\n\" +\n        \"WHERE p.usr_usuario = u.usr_usuario \"\n        + \" AND p.pos_mac = :mac \"\n        + \" AND p.pos_estado_id=1\"\n        + \" AND u.usr_estado = 1\"\n        + \" AND u.usr_clave_pin = :pin \",\n        nativeQuery = true)\nUsuario findByMacAndPin(@Param(\"mac\") String mac, @Param(\"pin\") String pin);\n\n@Query(value = \"\" +\n        \"SELECT u.*\\n\" +\n        \"FROM corresponsales.usuario u,\\n\" +\n        \"     corresponsales.pos_view p\\n\" +\n        \"WHERE p.usr_usuario = u.usr_usuario AND p.pos_mac = :mac AND p.pos_estado_id=1 AND u.usr_estado = 1\",\n        nativeQuery = true)\nList<Usuario> findByMac(@Param(\"mac\") String mac);",
+    "resultado": "Sintaxis Java/SQL revisada y correcta en ambos metodos -- concatenacion de strings valida, SQL resultante bien formado. Pendiente de validar en ambiente de pruebas antes de aplicar a produccion (decision correcta del tecnico, dado que usr_estado=1 es el grupo mas grande de la tabla -- 1014 registros -- y un error aqui bloquearia login a mucha gente).",
+    "evidencia": "",
+    "conclusion": "Filtro aplicado con el valor confirmado empiricamente (conteo de usr_estado). IMPORTANTE: este cambio reduce el riesgo de MAC duplicada con cuentas inactivas, pero NO reemplaza el fix del Paso 18 (rama faltante en el for de authPIN()) -- si algun dia hay dos POS duplicados ambos con usr_estado=1, la lista de findByMac() seguiria teniendo 2+ elementos y el bug de respuesta vacia volveria a aparecer. Ambos fixes (Paso 18 y este) deben aplicarse juntos. Pendiente: validacion en ambiente de pruebas antes de pasar a produccion."
+   },
+   {
+    "numero_paso": 20,
+    "fecha_hora": "2026-08-23",
+    "descripcion": "CORRECCION al fix del Paso 18: el tecnico detecto que la version anterior mandaba login exitoso (msgAuthLoginOk) sin pasar por autenticarPos(), ni por los checks de clave/PIN temporal ni caducidad",
+    "sql_utilizado": "Usuario user = repository.findByMacAndPin(macDecrypt, encryptPin);\n\nif (user == null) {\n    // CAMBIAR BUG PRODUCCCION -> CORREGIDO\n    List<Usuario> list = repository.findByMac(macDecrypt);\n    if (list.isEmpty()) {\n        respuesta.setMensaje(messages.get(\"msgAuthUsuarioNoEncontrado\"));\n        respuesta.setEstado(-1);\n        return respuesta;\n    }\n    for (Usuario userA : list) {\n        if (userA.getUsrEstado() == Constantes.LOCKED_STATE) {\n            respuesta.setMensaje(messages.get(\"msgAuthInhabilitado\"));\n            respuesta.setEstado(-1);\n        } else if (a punto de bloquear Y pin incorrecto) {\n            // igual que antes, sin cambios\n        } else if (!encryptPin.equals(userA.getUsrClavePIN())) {\n            // igual que antes, sin cambios\n        } else {\n            // PIN correcto: NO declarar exito aqui.\n            // Se asigna a \"user\" y se sale del for para seguir\n            // el MISMO flujo de abajo (autenticarPos, temporal, etc.)\n            user = userA;\n            break;\n        }\n    }\n    if (user == null) {\n        return respuesta; // nadie de la lista califico\n    }\n}\n\nautenticacionME.setIdDispositivo(macDecrypt);\nautenticacionME.setUsuario(user.getUsrUsuario());\n\n// A PARTIR DE AQUI: el codigo actual sigue exactamente igual,\n// sin tocar nada (autenticarPos, checks de temporal, etc.)",
+    "resultado": "El fix del Paso 18 (version anterior) declaraba login exitoso directo apenas coincidia el PIN, saltandose autenticarPos() y los checks de clave/PIN temporal y caducidad que el camino feliz original SI hace despues de encontrar al usuario.",
+    "evidencia": "",
+    "conclusion": "CORRECCION IMPORTANTE: en vez de duplicar/reimplementar la logica de exito dentro del for (riesgoso, se puede desincronizar del camino feliz), la solucion correcta es reasignar la variable user (dejar de ser efectivamente inmutable) y hacer break para que el metodo siga el MISMO flujo compartido que ya existe abajo para cuando user != null -- asi no hay dos copias de la logica de login exitoso, solo una. Esto reemplaza la version del Paso 18 como la propuesta final a pasarle al equipo de desarrollo. Requiere que el equipo de desarrollo revise que reestructurar el flujo asi no rompa nada mas (scope de variables, etc.) antes de aplicarlo."
+   },
+   {
+    "numero_paso": 21,
+    "fecha_hora": "2026-08-24",
+    "descripcion": "CIERRE: Jose confirmo telefonicamente que ya puede ingresar con normalidad usando su PIN",
+    "sql_utilizado": "",
+    "resultado": "Confirmacion telefonica del socio: login exitoso con su PIN real.",
+    "evidencia": "",
+    "conclusion": "TICKET RESUELTO Y CERRADO. Causa raiz: MAC del POS duplicada con otro equipo inactivo, corregida en datos (MAC + reactivacion de cuenta). Se reporto al equipo de desarrollo el hallazgo de codigo (bloque CAMBIAR BUG PRODUCCCION en authPIN, fix propuesto en Pasos 18-20, pendiente de aplicar por ellos)."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026084289",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026084289",
+  "titulo": "Reporte en corresponsal no muestra mas de 300 transacciones",
+  "descripcion": "Los reportes de corresponsal solo permiten visualizar hasta 300 transacciones; al consultar un rango mayor el sistema genera un error. Existen socios con mas de 300 transacciones en una semana (periodo en que entregan comprobantes), por lo que se solicito aumentar el limite del rango, de ser posible a 600 transacciones. Se adjunto una captura del error.",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Reportes",
+  "categoria": "",
+  "prioridad": "",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-08-24T00:00",
+  "fecha_inicio_analisis": "2026-08-24T00:00",
+  "fecha_resolucion": "2026-08-24T00:00",
+  "causa_raiz": "El reporte de corresponsales tiene un limite fijo de 300 transacciones por consulta; al solicitar un rango con mas transacciones que ese limite, el sistema genera un error en lugar de mostrar los resultados.",
+  "solucion_aplicada": "Se informo al usuario que el equipo de desarrollo ya se encuentra trabajando en una mejora de este reporte, que estara disponible proximamente en produccion. Como medida temporal se recomendo evitar generar el reporte con un rango de fechas demasiado amplio, ya que el alto volumen de datos provoca el error reportado, sugiriendo consultar por rangos mas cortos (ej. semanales) hasta que la mejora sea implementada.",
+  "observaciones": "No es un caso puntual de un socio: es una limitacion general del reporte que afecta a cualquier socio con mas de 300 transacciones en el rango consultado. Sin numero de ticket SIR asignado.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-24",
+    "descripcion": "Registro y cierre del caso: limitacion conocida del reporte (limite de 300 transacciones)",
+    "sql_utilizado": "",
+    "resultado": "Se confirmo que el limite es una restriccion actual del reporte, ya identificada por el equipo de desarrollo, que trabaja en una mejora para produccion.",
+    "evidencia": "Captura de pantalla del error aportada por el usuario (no adjunta en este registro).",
+    "conclusion": "Se comunico al usuario el estado (mejora en desarrollo) y la medida temporal (evitar rangos de fechas muy amplios). Caso cerrado como resuelto a nivel de soporte; la mejora definitiva del reporte queda a cargo del equipo de desarrollo."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026082703",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026082703",
+  "titulo": "Error en reimpresion de comprobante de Recaudacion Local - Corresponsal Solidario",
+  "descripcion": "La socia corresponsal 0104889860 CONTRERAS VILLAVICENCIO ROSA GUADALUPE, POS 50535, reporta que al recaudar una Recaudacion Local de CBVISION-AZUAY CAÑAR Y EL ORO (codigo de pago 0104887666I, monto $20,00), el sistema genera un mensaje de error que no permite imprimir los documentos de respaldo (comprobantes). El valor si fue cobrado correctamente a la socia que realizo el pago.",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Recaudaciones Locales",
+  "categoria": "",
+  "prioridad": "",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-08-15T00:00",
+  "fecha_inicio_analisis": "2026-08-26T00:00",
+  "fecha_resolucion": "2026-08-26T00:00",
+  "causa_raiz": "Error en la generacion/reimpresion del comprobante de respaldo al procesar una recaudacion local en el modulo de Corresponsal Solidario. La transaccion (cobro) se registra y procesa correctamente; el problema es exclusivo de la emision del comprobante impreso.",
+  "solucion_aplicada": "Estimados,\n\nConfirmamos que la transaccion de recaudacion local (codigo de pago 0104887666I, CBVISION-AZUAY CAÑAR Y EL ORO, monto $20,00) se proceso y cobro correctamente; el error reportado corresponde unicamente a la generacion/reimpresion del comprobante de respaldo en el POS, no a la transaccion en si.\n\nEl equipo de desarrollo ya identifico este inconveniente en el modulo de Recaudaciones Locales y se encuentra trabajando en la correccion correspondiente, la cual saldra proximamente a produccion.\n\nQuedamos atentos a cualquier novedad adicional.",
+  "observaciones": "Ticket creado en SIR por Mercy Susana Sanisaca Naula el 2026-08-15. No se realizo investigacion tecnica a nivel de logs/SQL para este caso; se cierra en base al contexto ya conocido de que el fix para este error del modulo de Recaudaciones Locales esta en desarrollo y saldra a produccion proximamente.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-26",
+    "descripcion": "Registro y cierre del caso: error conocido de reimpresion de comprobante en Recaudaciones Locales (Corresponsal Solidario), con correccion pendiente de salir a produccion",
+    "sql_utilizado": "",
+    "resultado": "Se confirmo que la transaccion de la socia se cobro correctamente y que el error es exclusivo de la impresion del comprobante, ya identificado por el equipo de desarrollo.",
+    "evidencia": "Mensaje de error en pantalla reportado por la socia (no adjunto en este registro).",
+    "conclusion": "Se comunico el estado del caso (correccion en desarrollo, proxima a salir a produccion). Caso cerrado como resuelto a nivel de soporte; la correccion definitiva queda a cargo del equipo de desarrollo."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026085243",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026085243",
+  "titulo": "Error al momento de la recaudacion Municipio GAD Mejia",
+  "descripcion": "Error al procesar una recaudacion del MUNICIPIO GAD MEJIA en un POS Z90. Tendera GUZMAN LAGOS CLARA NELY, CI 0400927174, oficina MACHACHI, socio 987750, codigo activo 1.8.06.01.042.4209826, MAC 866080060889529. La maquina se reporta como actualizada. Se adjunto una captura del error y un numero de contacto (0959190999).",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Recaudaciones Locales",
+  "categoria": "",
+  "prioridad": "",
+  "estado": "abierto",
+  "fecha_creacion": "2026-08-28T16:30",
+  "fecha_inicio_analisis": "2026-08-28T16:30",
+  "fecha_resolucion": "",
+  "causa_raiz": "",
+  "solucion_aplicada": "",
+  "observaciones": "Caso recien reportado (28/08/2026, 16:30), sin investigacion tecnica todavia. Datos de contacto: telefono 0959190999. Captura de pantalla del error aportada por el usuario, no adjunta en este registro.",
+  "resultado": "pendiente",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-28",
+    "descripcion": "Registro del caso reportado",
+    "sql_utilizado": "",
+    "resultado": "Reportado error al procesar la recaudacion de MUNICIPIO GAD MEJIA en el POS Z90 de la tendera Clara Nely Guzman Lagos (CI 0400927174), oficina Machachi, socio 987750, codigo activo 1.8.06.01.042.4209826, MAC 866080060889529. Maquina reportada como actualizada.",
+    "evidencia": "Captura de pantalla del error aportada por el usuario (no adjunta en este registro).",
+    "conclusion": "Pendiente de investigacion tecnica (logs/SQL) para determinar la causa del error en la recaudacion local del Municipio GAD Mejia."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026085232",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026085232",
+  "titulo": "Formato de contraseña y PIN de corresponsal: el cambio \"se guarda\" pero no persiste",
+  "descripcion": "Soporte solicita que se indiquen las condiciones/politicas que deben cumplir actualmente el PIN y la CONTRASEÑA del corresponsal. Con 2 socios no se pudo configurar: al poner \"2008\" como PIN el sistema mostraba \"guardado exitosamente\" pero al validar en el portal el cambio no quedaba guardado; lo mismo con la contraseña, al poner un \"*\" tampoco se guardaba el cambio. Como no muestra ningun error, el socio queda en un bucle: intenta configurar, no da error, pero no logra guardar ni el PIN ni la contraseña. No se entregaron las cedulas/usuarios de los 2 socios afectados.",
+  "autor": "Diego Uyaguari",
+  "sistema": "Corresponsales",
+  "modulo": "Usuarios / Cambio de clave y PIN (portal corresponsal)",
+  "categoria": "Autenticación",
+  "prioridad": "Media",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-08-28T00:00",
+  "fecha_inicio_analisis": "2026-08-28T00:00",
+  "fecha_resolucion": "2026-08-31T00:00",
+  "causa_raiz": "El sistema SI valida el PIN y la contraseña, con reglas distintas para cada uno. Contraseña (politica en JST_SEGURIDADES.politica_seguridad, validada en el procedimiento P_VALIDA_CLAVE): entre 8 y 15 caracteres, minimo 1 mayuscula, 1 minuscula, 1 digito, 1 caracter especial, no reutilizar ninguna de las ultimas 3 claves. PIN (validado en UsuarioServiceImpl.createPIN() via util.validarNumerosConsecutivosPIN/RepetidosPIN/ContainsPIN): 4 digitos, no puede ser secuencia consecutiva (ej. 1234), no puede ser numero repetido, no puede contener la cedula ni la fecha de nacimiento del socio, no puede ser igual al PIN anterior. Ademas se confirmo un bug de codigo real en el flujo de cambio de CONTRASEÑA (UsuarioServiceImpl.cambiarClaveCorresponsal()): cuando el procedimiento PL/SQL rechaza el cambio, el backend no resetea el estado de la respuesta y el frontend muestra \"guardado exitosamente\" aunque el cambio no se aplico -- mismo patron de bug que el de authPIN() en el ticket de Jose (2026083700). En el flujo de cambio de PIN (createPIN()) NO se encontro el mismo bug -- la logica de validacion ahi si resetea correctamente el estado en cada rechazo. No se pudo confirmar con datos reales (cedulas/logs) de los 2 socios afectados cual endpoint especifico tocaron, por lo que queda abierta la posibilidad de que su caso puntual haya sido distinto al bug de contraseña identificado.",
+  "solucion_aplicada": "Se respondio al solicitante la politica vigente de PIN y contraseña (detallada en causa raiz). Se identifico y reporto al equipo de desarrollo el bug de codigo en cambiarClaveCorresponsal() (falta respuestaMS.setEstado(-1) en la rama else, cuando repository.cambiarClave() devuelve error_msj no vacio), con el fix puntual propuesto. El fix no se aplico aun -- queda a cargo del equipo de desarrollo. Se cierra el ticket con la respuesta de politica entregada y el hallazgo de codigo reportado; si en el futuro se identifica a los socios afectados especificos, se recomienda abrir un caso puntual nuevo para validar si su situacion coincide con este bug u otro distinto en el flujo de PIN.",
+  "observaciones": "La pregunta de fondo del solicitante (\"que condiciones debe cumplir hoy el PIN y la contraseña\") se respondio leyendo la politica vigente real (JST_SEGURIDADES.politica_seguridad para contraseña, util.validarNumeros*PIN para PIN) -- la politica NO vive en CORRESPONSALES.PARAMETRO como se asumio inicialmente (ver correccion pendiente de PC5 en Biblioteca SQL). \"2008\" = 4 digitos numericos; \"*\" = 1 solo caracter especial. Registrado por Diego Uyaguari.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-08-28",
+    "descripcion": "Triage inicial del caso e hipotesis (sin logs ni codigo)",
+    "sql_utilizado": "-- Politica vigente de clave/PIN (lectura, ver PC5 en Biblioteca SQL):\nSELECT par_id, par_descripcion, par_valor\nFROM CORRESPONSALES.PARAMETRO\nWHERE UPPER(par_descripcion) LIKE '%CLAVE%'\n   OR UPPER(par_descripcion) LIKE '%PIN%'\n   OR UPPER(par_descripcion) LIKE '%PASSWORD%'\n   OR UPPER(par_descripcion) LIKE '%CONTRASE%'\nORDER BY par_id;\n\n-- Verificar si el cambio realmente se persistio (U6) -- reemplazar :usuario:\nSELECT * FROM CORRESPONSALES.USUARIO_CLAVE_HISTORIAL\nWHERE USR_USUARIO = :usuario AND USR_TIPO_CLAVE IN (1,2)\nORDER BY 1 DESC;\n\n-- Estado actual de clave/PIN del usuario (U2):\nSELECT usr_codigo, usr_cedula, usr_usuario, usr_pasword, usr_is_clave_temporal,\n       usr_clave_pin, usr_is_pin_temporal, usr_intentos, usr_intentos_pin, usr_estado\nFROM corresponsales.usuario WHERE usr_usuario IN (:usuario);",
+    "resultado": "No ejecutado — no se dispone de las cedulas/usuarios de los 2 socios afectados. Consultas propuestas para cuando el tecnico tenga esos datos.",
+    "evidencia": "",
+    "conclusion": "Hipotesis NO confirmada: rechazo silencioso por politica de clave/PIN en el backend. Proximos pasos: (a) correr la consulta de PARAMETRO (PC5) para listar la politica vigente y responder la pregunta del solicitante; (b) con un socio concreto, comparar el momento del \"guardado exitosamente\" contra USUARIO_CLAVE_HISTORIAL para ver si escribio; (c) pedir al equipo de desarrollo el validador de clave/PIN (regex/longitud/lista de valores prohibidos) y por que el mensaje de rechazo no llega a la pantalla del portal. Si la politica no esta en PARAMETRO, esta hardcodeada en el backend y la confirma desarrollo."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-08-28",
+    "descripcion": "Revision del codigo fuente del frontend movil (PasswordScreen.js, pantalla \"Configurar contraseña\", endpoint cambiarClaveCorresponsal)",
+    "sql_utilizado": "",
+    "resultado": "El frontend NO valida el formato del PIN/contraseña (solo chequea que los campos no esten vacios y que password===confirmPassword) — \"2008\" y \"*\" pasan esa validacion sin problema. El mensaje \"guardado exitosamente\" se muestra unicamente si data.estado es true, dato que viene 100% del backend (endpoint cambiarClaveCorresponsal); el frontend no tiene logica propia que pueda mostrar un falso exito. Se detecto ademas que el campo \"usuario\" de esta pantalla lo debe re-escribir el socio a mano (no viene precargado del contexto/sesion), lo que abre una hipotesis alternativa: un typo ahi podria explicar el fallo silencioso, no necesariamente el valor del PIN/clave.",
+    "evidencia": "Codigo fuente completo de PasswordScreen.js, aportado por el tecnico.",
+    "conclusion": "CONFIRMA la hipotesis de causa raiz: el bug esta en el backend (endpoint cambiarClaveCorresponsal), no en la app movil — el frontend solo reenvia el valor tal cual y confia ciegamente en el estado que responde el backend. Pendiente: (1) obtener el codigo Java de cambiarClaveCorresponsal para revisar su logica de validacion/persistencia (mismo patron que se hizo con authPIN()); (2) confirmar con los 2 socios afectados que escribieron correctamente su usuario en ese campo, para descartar/confirmar la hipotesis del typo."
+   },
+   {
+    "numero_paso": 3,
+    "fecha_hora": "2026-08-31",
+    "descripcion": "Revision del codigo fuente completo de UsuarioServiceImpl.cambiarClaveCorresponsal() (Java) y del procedimiento PL/SQL CORRESPONSALES.P_USR_CAMBIAR_CLAVE (via @NamedStoredProcedureQuery y consulta LG5 contra all_source)",
+    "sql_utilizado": "SELECT text FROM all_source WHERE owner='CORRESPONSALES' AND name='P_USR_CAMBIAR_CLAVE' AND type='PROCEDURE' ORDER BY line;",
+    "resultado": "El procedimiento P_USR_CAMBIAR_CLAVE no tiene ningun chequeo de longitud/formato de la clave nueva — solo valida: (1) que la clave actual coincida con la de base (si no, NO_DATA_FOUND -> error_msj + estado=-1), (2) que la clave nueva no sea igual a la actual, (3) lo que devuelva P_USUARIO_CLAVE_HISTORIAL(usuario, claveNueva, error_msj) (procedimiento aparte, aun no revisado, probable candidato a contener la regla de formato/historial que rechaza \"2008\" y \"*\"). En TODOS los casos de fallo el procedimiento SI devuelve estado=-1 correctamente junto con error_msj. El bug esta confirmado en UsuarioServiceImpl.cambiarClaveCorresponsal(): el metodo Java solo lee error_msj para decidir exito/fallo -- nunca lee ni reasigna el estado que devuelve el procedimiento. En la rama de error solo hace respuestaMS.setMensaje(error), sin resetear el estado, que queda con el valor que le dejo el validatePassword() anterior (previsiblemente estado=1/exito). El frontend recibe asi estado=1 (exito) sin importar la razon real del rechazo de Oracle.",
+    "evidencia": "Codigo fuente completo de P_USR_CAMBIAR_CLAVE (via all_source) y de UsuarioServiceImpl.cambiarClaveCorresponsal(), aportados por el tecnico.",
+    "conclusion": "CAUSA RAIZ CONFIRMADA (a nivel de mecanismo): bug de codigo en UsuarioServiceImpl.cambiarClaveCorresponsal() -- no resetea respuestaMS.setEstado(-1) en la rama else cuando repository.cambiarClave() devuelve un error_msj no vacio, dejando el estado=1 heredado de validatePassword(). Mismo patron de bug que el de authPIN() (variable de respuesta reusada sin resetear estado en la rama de fallo). Fix propuesto para el equipo de desarrollo: agregar respuestaMS.setEstado(-1) antes de respuestaMS.setMensaje(error) en esa rama. Pendiente (no bloqueante para el fix): revisar el codigo de P_USUARIO_CLAVE_HISTORIAL para confirmar la regla exacta de politica de PIN/clave que rechaza valores como \"2008\" y \"*\", y asi responder del todo la pregunta original del solicitante sobre la politica vigente."
+   },
+   {
+    "numero_paso": 4,
+    "fecha_hora": "2026-08-31",
+    "descripcion": "Revision del codigo fuente de UsuarioServiceImpl.validatePassword() (Java)",
+    "sql_utilizado": "",
+    "resultado": "validatePassword() recibe la clave nueva ya DESENCRIPTADA (en texto plano) y llama a repository.validaClave(clave, \"\", \"\", \"\") -- 3 de los 4 parametros van hardcodeados en blanco. Si esa validacion falla (error no vacio o pov_clave_valida <> \"OK\"), el metodo hace throw new JACRException(error) de inmediato, DENTRO de si mismo -- nunca retorna normalmente con estado=-1 a cambiarClaveCorresponsal(). Esto significa que un rechazo de formato en este punto SI deberia propagarse como un error visible al socio (asumiendo que el manejo de excepciones aguas arriba funciona bien) -- a diferencia del bug confirmado en el Paso 3, este camino NO parece producir el falso \"guardado exitosamente\".",
+    "evidencia": "Codigo fuente completo de UsuarioServiceImpl.validatePassword(), aportado por el tecnico.",
+    "conclusion": "Esto genera una contradiccion a resolver: si la politica de PIN/clave (ej. \"no dos numeros iguales\") se validara aca, el socio deberia haber visto un error claro, no el bug reportado -- por lo que o (a) validaClave() en realidad no aplica esa regla o es mas permisiva de lo asumido, o (b) los 3 parametros en blanco de la llamada (posiblemente tipo de auth / usuario) hacen que el procedimiento tome un camino menos estricto al no saber que esta validando especificamente un PIN. Pendiente: obtener el @NamedStoredProcedureQuery de \"validaClave\" (procedureName real + nombres de parametros) para saber que representan esos 3 blancos, y luego el codigo PL/SQL real de esa validacion."
+   },
+   {
+    "numero_paso": 5,
+    "fecha_hora": "2026-08-31",
+    "descripcion": "CIERRE: revision de P_VALIDA_CLAVE (politica real de contraseña, 8-15 caracteres/mayuscula/minuscula/digito/especial) y de PinCreate.js + createPIN() (flujo real de PIN, con validaciones de consecutivos/repetidos/cedula/fecha nacimiento que SI resetean el estado correctamente en cada rechazo)",
+    "sql_utilizado": "",
+    "resultado": "Se confirmo la politica vigente completa de contraseña (P_VALIDA_CLAVE, politica en JST_SEGURIDADES.politica_seguridad) y de PIN (createPIN(), reglas en clase util). Se confirmo que createPIN() NO tiene el bug de estado no reseteado -- solo cambiarClaveCorresponsal() (flujo de contraseña) lo tiene. No se logro conseguir cedula/usuario ni logs de los 2 socios afectados para determinar con certeza absoluta cual endpoint tocaron.",
+    "evidencia": "",
+    "conclusion": "TICKET CERRADO. Respuesta entregada al solicitante: politica vigente de PIN y contraseña documentada (ver causa raiz). Causa raiz de codigo confirmada y reportada al equipo de desarrollo para el flujo de CONTRASEÑA (bug en cambiarClaveCorresponsal, fix puntual propuesto, no aplicado aun por desarrollo). El flujo de PIN (createPIN) no presenta el mismo bug de codigo. Si se identifica a los socios puntuales afectados en el futuro, abrir un caso nuevo para confirmar cual fue exactamente su situacion."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026083744",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026083744",
+  "titulo": "Contabilización transacciones - Mall Alto (descuadre por sucursal desactualizada en fisja.clientes)",
+  "descripcion": "La socia MACHICELA ORDOÑEZ GLADYS MARLENE (corresponsal solidario) realizo el cambio de oficina de Yanuncay a Mall del Alto el 2026-08-14. En los reportes del admin de Corresponsales la socia ya consta con oficina Mall del Alto, pero en los reportes de JASIT la socia aun consta con oficina Yanuncay. Esta discrepancia provoca descuadres en las cuentas por cobrar y comisiones de corresponsales.",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Contabilización / Sucursal",
+  "categoria": "Saldos y cuentas",
+  "prioridad": "Alta",
+  "estado": "investigacion",
+  "fecha_creacion": "2026-08-14T00:00",
+  "fecha_inicio_analisis": "2026-09-02T00:00",
+  "fecha_resolucion": "",
+  "causa_raiz": "El proceso de creacion del movimiento (transaccion contable) en Corresponsales obtiene el campo de sucursal desde la tabla fisja.clientes, la cual ya NO se actualiza cuando un socio cambia de oficina. Por eso, aunque los reportes del admin de Corresponsales si muestran correctamente la oficina nueva (Mall del Alto, tomada de otra fuente que si esta actualizada), la transaccion contable real se sigue generando con la sucursal antigua (Yanuncay) porque toma el dato de esa tabla desactualizada -- generando el descuadre entre lo que se ve en Corresponsales y lo que llega a JASIT (cuentas por cobrar y comisiones). Diagnostico aportado por otro tecnico, quien escalo el caso.",
+  "solucion_aplicada": "Estimados,\n\nSe confirmo la causa raiz: el proceso de creacion de movimientos en Corresponsales obtiene la sucursal del socio desde la tabla fisja.clientes, la cual ya no se mantiene actualizada cuando un socio cambia de oficina -- por eso la sucursal quedaba desincronizada entre los reportes de Corresponsales y JASIT.\n\nSe desarrollo un procedimiento nuevo que obtiene la sucursal desde una fuente que si se mantiene actualizada, y se actualizo el paquete de transaccionalidad de Corresponsales para que la use. REABIERTO: al probar en ambiente de pruebas se detecto una regresion (ver Paso 4) que bloquea transacciones normales de socios que no son corresponsales. Pendiente aplicar fix de fallback y revalidar antes de continuar a despliegue.\n\nMientras tanto, el caso puntual de la socia Machicela Ordonez ya fue corregido manualmente por el tecnico que atendio primero.\n\nQuedamos atentos a cualquier novedad adicional.",
+  "observaciones": "Problema estructural, no exclusivo de esta socia: cualquier corresponsal solidario que cambie de oficina en el futuro iba a generar el mismo descuadre hasta aplicar este mantenimiento. REABIERTO 2026-09-15: se detecto en pruebas que el fix rompe transacciones de socios no-corresponsales (ver Paso 4). Rama de desarrollo: bugCorresponsalSucursalDesactualizada (repo bd_oracle).",
+  "resultado": "pendiente",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-09-02",
+    "descripcion": "Escalamiento recibido: otro tecnico ya diagnostico la causa y aplico un fix manual puntual",
+    "sql_utilizado": "",
+    "resultado": "El tecnico que atendio primero identifico que el proceso de creacion del movimiento toma la sucursal desde fisja.clientes (tabla que ya no se actualiza al cambiar de oficina un socio), y actualizo manualmente ese campo para esta socia para que sus transacciones futuras se contabilicen bien.",
+    "evidencia": "Respuesta textual del tecnico que escalo el caso (transcrita en causa raiz).",
+    "conclusion": "Falta lo mas importante: solicitar formalmente el mantenimiento al equipo de desarrollo/DBA para que Corresponsales deje de usar fisja.clientes como fuente de sucursal en la creacion de movimientos. Sin ese mantenimiento, el mismo problema se va a repetir con cualquier otro socio que cambie de oficina."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-09-02",
+    "descripcion": "Investigacion del codigo fuente: ubicado el procedimiento exacto que causa el problema (p_obtiene_ced_suc_socio, llamado desde prc_get_socio_data dentro del paquete corresponsales.pkf_transaccion) y creado + probado un procedimiento de reemplazo",
+    "sql_utilizado": "-- Procedimiento nuevo, creado en el esquema corresponsales (mismo esquema que pkf_transaccion, sin necesidad de grants cruzados):\nCREATE OR REPLACE PROCEDURE corresponsales.p_obtiene_ced_suc_corresponsal (\n    pin_codigo_socio    IN  NUMBER,\n    pov_cedula          OUT VARCHAR2,\n    pon_codigo_sucursal OUT NUMBER,\n    pov_error           OUT VARCHAR2\n) IS\nBEGIN\n    pov_error := NULL;\n    SELECT cr_identificacion, codigo_sucursal\n    INTO   pov_cedula, pon_codigo_sucursal\n    FROM   corresponsales.corresponsalRepresentante\n    WHERE  cr_cod_socio = pin_codigo_socio\n    AND    ROWNUM = 1;\nEXCEPTION\n    WHEN NO_DATA_FOUND THEN pov_error := 'No existio datos para el socio con codigo N: ' || pin_codigo_socio;\n    WHEN TOO_MANY_ROWS THEN pov_error := 'Se encontro mas de un registro para el socio con codigo N: ' || pin_codigo_socio;\n    WHEN OTHERS THEN pov_error := 'Error al obtener datos del corresponsal para el socio con codigo N: ' || pin_codigo_socio || ' - ' || SQLERRM;\nEND p_obtiene_ced_suc_corresponsal;\n\n-- Prueba realizada en ambiente de desarrollo con socio 382019 (nunca habia cambiado de oficina, por eso fisja.clientes y corresponsalRepresentante coincidian en 32):\n-- 1) Se forzo manualmente fisja.clientes.codigo_sucursal=4 para ese socio (solo en desarrollo) para simular una oficina desactualizada.\n-- 2) Se confirmo que el procedimiento VIEJO (contra fisja.clientes) devuelve el valor viejo/de prueba (4).\n-- 3) Se confirmo que el procedimiento NUEVO (contra corresponsalRepresentante) devuelve el valor correcto y vigente (32), reproduciendo y resolviendo la falla exacta del ticket.",
+    "resultado": "El procedimiento original p_obtiene_ced_suc_socio (esquema fisja) consulta fisja.clientes, la tabla desactualizada. Se localizo via @NamedStoredProcedureQuery-style analisis del codigo (mismo patron usado en el ticket 2026085232) y se confirmo el nombre real del procedimiento. Se creo un reemplazo, p_obtiene_ced_suc_corresponsal, en el esquema corresponsales, consultando corresponsales.corresponsalRepresentante (cr_cod_socio / cr_identificacion / codigo_sucursal) en su lugar -- tabla que SI se mantiene actualizada. Prueba en desarrollo con el socio 382019 confirmo que devuelve la sucursal correcta (32) incluso con fisja.clientes deliberadamente desactualizada (4) para la prueba.",
+    "evidencia": "Compilacion exitosa del procedimiento nuevo (corresponsales.p_obtiene_ced_suc_corresponsal) y ejecucion de prueba en ambiente de desarrollo: Cedula: 0105250229, Sucursal: 32, Error: (vacio).",
+    "conclusion": "Solucion tecnica validada en desarrollo. Falta el paso final para que entre en efecto: cambiar, dentro de prc_get_socio_data (paquete corresponsales.pkf_transaccion), la llamada a fisja.p_obtiene_ced_suc_socio(...) por p_obtiene_ced_suc_corresponsal(...) (mismo esquema, sin prefijo necesario). Como pkf_transaccion es el paquete que ejecuta TODA la transaccionalidad de corresponsales (prc_transaccionar, cierre diario, etc.), este cambio requiere recompilar el paquete completo -- se recomienda probarlo primero con una transaccion real de prueba (prc_transaccionar) en desarrollo con un socio que haya cambiado de oficina, y que pase por revision del equipo de desarrollo antes de llevarlo a produccion. No se ha modificado pkf_transaccion todavia ni se ha desplegado a produccion."
+   },
+   {
+    "numero_paso": 3,
+    "fecha_hora": "2026-09-02",
+    "descripcion": "CIERRE: cambio aplicado en pkf_transaccion.prc_get_socio_data (llamada actualizada al procedimiento nuevo) y compilado en desarrollo; creada rama de desarrollo para llevar el cambio a revision formal",
+    "sql_utilizado": "",
+    "resultado": "Se modifico prc_get_socio_data dentro del Body de corresponsales.pkf_transaccion, reemplazando la llamada a fisja.p_obtiene_ced_suc_socio(...) por p_obtiene_ced_suc_corresponsal(...), y se compilo el paquete completo en el ambiente de desarrollo sin errores. Se creo la rama de git bugCorresponsalSucursalDesactualizada (repo bd_oracle, basada en master) para llevar este cambio a revision y pruebas formales del equipo de desarrollo.",
+    "evidencia": "",
+    "conclusion": "TICKET CERRADO desde el lado de soporte/diagnostico. Causa raiz confirmada, solucion desarrollada y validada en desarrollo (procedimiento nuevo + cambio en pkf_transaccion), lista para pasar a pruebas formales y coordinar despliegue a produccion con el equipo de desarrollo. El caso puntual de la socia Machicela Ordonez ya esta resuelto (fix manual previo). Pendiente fuera del alcance de soporte: pruebas formales, revision de codigo y despliegue a produccion."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026090874",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026090874",
+  "titulo": "Corregir acta y solicitud de pago a corresponsal - Byron Quito Pizarro",
+  "descripcion": "Pago pendiente de varios meses al corresponsal del socio QUITO PIZARRO BYRON ALEJANDRO (CI 1105947947): Junio no se pago por cambio de Regimen del socio; Julio se genero el acta pero la factura no tiene la leyenda requerida; Agosto se debe pagar en conjunto con los otros dos meses. Se intento eliminar el acta 53656 (julio) desde la aplicacion pero no lo permite.",
+  "autor": "Diego Uyaguari",
+  "sistema": "Corresponsales",
+  "modulo": "Actas y pagos",
+  "categoria": "Actas y pagos",
+  "prioridad": "Media",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-09-04T00:00",
+  "fecha_inicio_analisis": "2026-09-04T00:00",
+  "fecha_resolucion": "2026-09-08T00:00",
+  "causa_raiz": "El acta 53656 (julio) ya tiene un pago asociado en estado Cerrado (pago_corresponsal.estado=C), por lo que la aplicacion bloquea su eliminacion/correccion desde la pantalla normal (regla de negocio de la app, no una restriccion de base). Como la factura de julio no tiene la leyenda requerida, hace falta corregir el acta y volver a generarla junto con agosto, pero el sistema no deja editarla en ese estado.",
+  "solucion_aplicada": "Se escalo al grupo de Administracion de Aplicaciones un script para ejecutar directo en base (fuera del alcance de la app): (1) eliminar el acta 53656 de actacomprobantes, verificando primero que tenga un pago Cerrado asociado a la cedula del socio (evita borrar la acta equivocada); (2) resetear a \"no pagado\" (trans_is_pagado=0) las transacciones del corresponsal (corresponsal_id=517888) entre el 01/06/2026 y el 31/07/2026, para que junio y julio queden disponibles de nuevo y puedan incluirse en una acta nueva junto con agosto, una vez corregida la factura. Administracion de Aplicaciones ejecuto el script.",
+  "observaciones": "Ticket gestionado por Diego Uyaguari, registrado con su nombre. Cerrado el 2026-09-08.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-09-04",
+    "descripcion": "Diagnostico del caso y armado del script de correccion (DELETE de acta + UPDATE de transacciones a no pagado), escalado a Administracion de Aplicaciones para su ejecucion",
+    "sql_utilizado": "--1.\n-- eliminar acta que ya estaba pagada\nSELECT pc.*\nFROM corresponsales.actacomprobantes ac\nINNER JOIN corresponsales.pago_corresponsal pc on pc.numero_acta=ac.aco_codigo\nWHERE ac.aco_numero=53656 and pc.identificacion='1105947947' and pc.estado='C';\n--eliminar acta si hay registros de la query anterior\nDELETE FROM corresponsales.actacomprobantes ac\nWHERE ac.aco_numero = 53656\n  AND EXISTS (\n      SELECT 1\n      FROM corresponsales.pago_corresponsal pc\n      WHERE pc.numero_acta = ac.aco_codigo\n        AND pc.identificacion = '1105947947'\n        AND pc.estado='C'\n  );\n--2.\n-- cambio de transacciones a pendiente\nSELECT trans_id\nFROM corresponsales.transacciones_view\nWHERE corresponsal_id = 517888\n  AND trans_is_pagado = 1\n  AND TRUNC(trans_fecha) BETWEEN TO_DATE('01/06/2026', 'dd/mm/yyyy') AND TO_DATE('31/07/2026', 'dd/mm/yyyy');\n-- si existen registros de la query anterior, ejecutar\nUPDATE corresponsales.transaccion\nSET trans_is_pagado = 0\nWHERE trans_id IN (\n    SELECT trans_id\n    FROM corresponsales.transacciones_view\n    WHERE corresponsal_id = 517888\n      AND trans_is_pagado = 1\n      AND TRUNC(trans_fecha) BETWEEN TO_DATE('01/06/2026', 'dd/mm/yyyy') AND TO_DATE('31/07/2026', 'dd/mm/yyyy')\n);",
+    "resultado": "Acta 53656 (julio) tiene un pago Cerrado asociado, por eso la app no permite borrarla/corregirla. El script primero confirma esa condicion (evita borrar la acta equivocada), luego la elimina, y despues libera (marca como no pagadas) las transacciones de junio y julio del corresponsal para que puedan reincluirse en una acta nueva junto con agosto.",
+    "evidencia": "Ticket SIR 2026090874, script aportado por Diego Uyaguari.",
+    "conclusion": "Escalado a Administracion de Aplicaciones para ejecutar el script (riesgo: escritura -- DELETE + UPDATE)."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-09-08",
+    "descripcion": "CIERRE: confirmado que Administracion de Aplicaciones ejecuto el script",
+    "sql_utilizado": "",
+    "resultado": "Ticket cerrado.",
+    "evidencia": "",
+    "conclusion": "TICKET RESUELTO Y CERRADO."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026091131",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026091131",
+  "titulo": "Error en recargas Claro",
+  "descripcion": "La socia Paola Beatriz Naula reporta inconvenientes al realizar recargas de Jardin Azuayo: las recargas presentan errores y se muestra el mensaje \"Error en el sistema\". El inconveniente tambien se presenta al realizar las recargas mediante el corresponsal.",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Recargas",
+  "categoria": "Transacciones",
+  "prioridad": "Media",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-09-07T00:00",
+  "fecha_inicio_analisis": "2026-09-07T00:00",
+  "fecha_resolucion": "2026-09-07T00:00",
+  "causa_raiz": "Caida temporal del servicio de recargas Claro, atribuible al proveedor externo Facilito y ajena a los sistemas de Jardin Azuayo. El propio proveedor confirmo la incidencia: \"RECARGAS CLARO - PAQUETE: producto presento caida por parte del proveedor, actualmente restablecido\". El mismo inconveniente fue reportado el dia anterior (2026-09-06) en las agencias de Santa Isabel, Gualaquiza y Catamayo, lo que confirma que se trato de una interrupcion generalizada del proveedor y no de un problema puntual de la socia ni del sistema.",
+  "solucion_aplicada": "No requirio intervencion de Sistemas. El proveedor Facilito restablecio el servicio de recargas Claro por su cuenta. Se confirmo con el area de Corresponsales, via WhatsApp, que el servicio ya se encontraba operando con normalidad.",
+  "observaciones": "Incidencia reportada por el area de Corresponsales via WhatsApp el 2026-09-07. El mismo error fue reportado el dia anterior (2026-09-06) en las agencias de Santa Isabel, Gualaquiza y Catamayo, lo que confirma que se trato de una caida generalizada del proveedor Facilito y no de un problema puntual de la socia ni del sistema de Jardin Azuayo.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-09-07",
+    "descripcion": "Consulta al area de Corresponsales sobre el estado de las recargas y respuesta del proveedor",
+    "sql_utilizado": "",
+    "resultado": "Se confirmo que el error se repitio el dia anterior en varias agencias (Santa Isabel, Gualaquiza, Catamayo). El proveedor respondio: \"RECARGAS CLARO - PAQUETE: producto presento caida por parte del proveedor actualmente restablecido\".",
+    "evidencia": "Chat de WhatsApp con Base Corresponsales, 7/9/2026 08:14-08:34.",
+    "conclusion": "Causa raiz confirmada: caida del proveedor externo de recargas Claro, ya restablecida. No requiere accion de Sistemas ni de desarrollo -- se cierra el ticket informando que ya esta operativo."
+   }
+  ]
+ },
+ {
+  "numero_ticket": "2026091974",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026091974",
+  "titulo": "Error en generar reporte",
+  "descripcion": "Se reporta un mensaje de error al momento de generar un reporte. Se envio un video por WhatsApp a Jefferson Sarango mostrando el error (no se detalla en el ticket cual reporte especifico ni el texto del mensaje).",
+  "autor": "Jefferson Sarango",
+  "sistema": "Corresponsales",
+  "modulo": "Reportes",
+  "categoria": "",
+  "prioridad": "",
+  "estado": "abierto",
+  "fecha_creacion": "2026-09-10T10:00",
+  "fecha_inicio_analisis": "",
+  "fecha_resolucion": "",
+  "causa_raiz": "",
+  "solucion_aplicada": "",
+  "observaciones": "Ticket recibido el 2026-09-10 a las 10:00. Falta revisar el video enviado por WhatsApp para identificar que reporte especifico falla y el mensaje de error exacto.",
+  "resultado": "pendiente",
+  "investigacion": []
+ },
+ {
+  "numero_ticket": "2026061400",
+  "url_sir": "https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=2026061400",
+  "titulo": "Incidente QR Pagos Coral",
+  "descripcion": "Se registran problemas de pagos con el QR (comercio/marca Coral). Se notifica al proveedor Etikos.",
+  "autor": "Jefferson Sarango",
+  "sistema": "Ja Movil",
+  "modulo": "Pagos QR",
+  "categoria": "Transacciones",
+  "prioridad": "",
+  "estado": "resuelto",
+  "fecha_creacion": "2026-09-16T00:00",
+  "fecha_inicio_analisis": "2026-09-16T00:00",
+  "fecha_resolucion": "2026-09-16T00:00",
+  "causa_raiz": "No aplica -- no corresponde investigacion tecnica de este lado.",
+  "solucion_aplicada": "Ticket cerrado por no aplicar.",
+  "observaciones": "Se notifico al proveedor Etikos sobre el problema de pagos con QR (Coral). Cerrado el 2026-09-16 por no aplicar.",
+  "resultado": "resuelto",
+  "investigacion": [
+   {
+    "numero_paso": 1,
+    "fecha_hora": "2026-09-16",
+    "descripcion": "Notificacion del incidente al proveedor Etikos",
+    "sql_utilizado": "",
+    "resultado": "Se reporto el problema de pagos con QR (Coral) a Etikos.",
+    "evidencia": "",
+    "conclusion": "Notificado al proveedor."
+   },
+   {
+    "numero_paso": 2,
+    "fecha_hora": "2026-09-16",
+    "descripcion": "CIERRE: no aplica",
+    "sql_utilizado": "",
+    "resultado": "Ticket cerrado por no aplicar.",
+    "evidencia": "",
+    "conclusion": "TICKET CERRADO -- NO APLICA."
+   }
+  ]
+ }
+]

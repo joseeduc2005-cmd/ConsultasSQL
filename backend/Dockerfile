@@ -1,3 +1,6 @@
+# Node 22 (>= 22.18) es obligatorio: el modulo src/soporte esta en TypeScript y se
+# ejecuta sin compilar gracias al type-stripping nativo. Ver SOPORTE.md.
+
 # ─── Stage 1: dependencies ───────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app

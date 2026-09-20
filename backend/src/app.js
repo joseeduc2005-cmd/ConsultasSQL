@@ -1,3 +1,7 @@
+// Debe ser el primer import: los módulos ESM se evalúan antes que el cuerpo de este
+// archivo, así que un dotenv.config() más abajo llegaría tarde para cualquier módulo
+// que lea process.env al importarse (por ejemplo ./soporte/config.ts).
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -53,6 +57,9 @@ import { createAdminRouter, createDbSchemaRouter } from './routes/adminRoute.js'
 import { createActionsRouter } from './routes/actionsRoute.js';
 import { createSqlRouter } from './routes/sqlRoute.js';
 import { createDistributedRouter } from './routes/distributedRoute.js';
+// Módulo de soporte (tickets, diagnósticos, vigilancia) absorbido desde ticket v2.0.
+// Está en TypeScript: Node >= 22.18 lo ejecuta sin compilar (ver SOPORTE.md).
+import { crearSoporteRouter, iniciarSoporte } from './soporte/index.ts';
 import logger from './infrastructure/logger/logger.js';
 import { correlationIdMiddleware } from './middleware/correlationId.js';
 
@@ -6548,6 +6555,11 @@ app.use('/api/db', createDbSchemaRouter({
   getUserFromRequest, ensureDynamicSchemaReady, schemaDetector, schemaCache,
 }));
 app.use('/api/actions', createActionsRouter({ BUSINESS_ACTION_CATALOG, getUserFromRequest }));
+
+// Soporte: /api/soporte/{estado,resumen,tickets,consultas,playbooks,diagnosticos,monitores,alertas}
+app.use('/api/soporte', crearSoporteRouter({
+  log: (datos, mensaje) => logger.info(mensaje, datos),
+}));
 // GET /api/query/suggestions - Deterministic suggestions based on schema and relations
 app.get('/api/query/suggestions', async (req, res) => {
   try {
@@ -7553,6 +7565,9 @@ async function startServer() {
     await ensureErrorLogsSchema();
     await ensureSemanticLearningSchema();
     await refreshSemanticLearningCache(true);
+    // El módulo de soporte comparte el pool del backend; `pool` se reasigna cuando
+    // cambia la configuración multi-DB, por eso se pasa un getter y no el valor.
+    await iniciarSoporte({ obtenerPool: () => pool, log: (m) => console.log(m) });
   }
 
   try {

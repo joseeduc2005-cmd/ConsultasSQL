@@ -663,17 +663,6 @@ body[data-theme='dark'] .dashboard-elevate:hover {
     font-feature-settings: 'cv11', 'ss01';
   }
 
-  /*
-    `.app-shell` pinta el body con un degradado translúcido y sin color de base, y
-    `html` no tiene fondo: el lienzo de la página queda sin pintar. En las pantallas
-    de ConsultasSQL no se nota porque el contenido llena la ventana, pero al hacer
-    scroll en soporte asomaba. Se pinta el body solo cuando hay una pantalla del
-    módulo montada, para no cambiar el resto de la aplicación.
-  */
-  body:has(.soporte-raiz) {
-    background: var(--background);
-  }
-
   /* Gana al `border-color: gray-200` que el codemod de Tailwind 4 puso en `*`. */
   .soporte-raiz *,
   .soporte-raiz ::before,
@@ -703,4 +692,19 @@ body[data-theme='dark'] .dashboard-elevate:hover {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
   }
+}
+
+/*
+  `.app-shell` pinta el body con un degradado translúcido y sin color de base, y `html`
+  no tiene fondo: el lienzo de la página queda sin pintar. En las pantallas de
+  ConsultasSQL no se nota porque su contenido llena la ventana; las de soporte son más
+  largas y al hacer scroll asomaba el vacío.
+
+  Va FUERA de @layer a propósito. `.app-shell` también está fuera, y en la cascada lo no
+  estratificado gana a lo estratificado: dentro de `@layer base` esta regla coincidía
+  pero nunca se aplicaba. Aquí gana por especificidad (0,1,1 contra 0,1,0) y solo cuando
+  hay una pantalla del módulo montada.
+*/
+body:has(.soporte-raiz) {
+  background: var(--background);
 }

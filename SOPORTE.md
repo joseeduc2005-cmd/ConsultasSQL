@@ -15,8 +15,8 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Backend: tickets, biblioteca SQL, diagnósticos, vigilancia | **Integrado y probado** |
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
-| Frontend: Panel, Vigilancia y Biblioteca SQL | **Integradas** |
-| Frontend: Tickets y Diagnósticos | **Pendientes** — siguen en `ticket_v2.0` |
+| Frontend: Panel, Vigilancia, Biblioteca, Tickets y Diagnósticos | **Integradas** — 5 de 6 |
+| Frontend: Interpretar mensaje | **Pendiente** — depende del modelo de lenguaje |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
@@ -176,9 +176,10 @@ Si los DBA entregan un usuario de solo lectura, basta con poner las tres variabl
 
 ## 8. Lo que falta
 
-1. **Frontend**: faltan Tickets y Diagnósticos. Son las que llevan parámetros de ruta y
-   formularios, por eso se dejaron para el final. Mientras tanto, una ruta comodín
-   (`app/soporte/[...pendiente]`) evita que el Panel tenga enlaces rotos.
+1. **Frontend**: solo falta Interpretar mensaje, que usa el modelo de lenguaje. La ruta
+   comodín `app/soporte/[...pendiente]` la cubre mientras tanto y hace de 404 del módulo.
+2. **Navegación**: las pantallas están en `/soporte/*` pero todavía no cuelgan de la barra
+   lateral de ConsultasSQL; hay que escribir la URL a mano.
 2. **Interpretar mensaje**: `interpreter/` no se movió porque usa el modelo de lenguaje.
 3. **`pnpm importar`**: `leerDashboardHtml()` ya está portado en `knowledge/semillas.ts`,
    falta el script de línea de comandos que lo invoque.
@@ -347,5 +348,46 @@ ConsultasSQL no se nota porque su contenido llena la ventana, pero las de soport
 largas y al hacer scroll asomaba una banda negra.
 
 Se arregla con `body:has(.soporte-raiz) { background: var(--background) }`, que pinta el
-body solo cuando hay una pantalla del módulo montada. Verificado que en `/login` la regla
-no aplica y el degradado de A sigue intacto.
+body solo cuando hay una pantalla del módulo montada.
+
+**La regla va fuera de `@layer` a propósito.** `.app-shell` también está fuera, y en la
+cascada de CSS lo no estratificado gana a lo estratificado: puesta dentro de `@layer base`
+el selector coincidía pero la declaración nunca se aplicaba —`getComputedStyle(body)`
+seguía devolviendo el degradado—. Fuera de la capa gana por especificidad (0,1,1 contra
+0,1,0). Verificado que en `/login` la regla no aplica y el degradado de A sigue intacto.
+
+---
+
+## 14. Tickets y Diagnósticos
+
+Las dos últimas pantallas, que son las que llevan parámetros de ruta:
+
+| Ruta | Pantalla |
+|---|---|
+| `/soporte/tickets` | Listado con filtros por estado y sistema, buscador y alta de tickets |
+| `/soporte/tickets/[numero]` | Detalle: secciones, línea de tiempo de la investigación y casos similares |
+| `/soporte/diagnostico` | Los 4 diagnósticos y el historial reciente |
+| `/soporte/diagnostico/[id]` | Formulario y ejecución |
+| `/soporte/diagnostico/historial/[id]` | Resultado guardado |
+
+`historial` es un segmento estático y convive sin ambigüedad con `[id]`: Next resuelve
+primero lo estático.
+
+La adaptación desde react-router añadió dos patrones a los ya vistos:
+
+- `useNavigate()` → `useRouter()` de `next/navigation`, con `navegar(x)` → `router.push(x)`.
+- El listado de tickets guarda sus filtros en la URL con `setParams(p, { replace: true })`,
+  que pasa a `router.replace(\`${rutaActual}?${p}\`, { scroll: false })`.
+- `useParams()` de Next tipa los segmentos como `string | string[]`, así que las
+  desestructuraciones llevan genérico: `useParams<{ numero: string }>()`.
+
+`ICONO_PLAYBOOK` quedó solo en `soporte/lib/iconos.tsx`; la copia que traía
+`diagnostico/paginas.tsx` se eliminó para que no puedan divergir.
+
+### Verificación
+
+Se recorrió el flujo completo con una sesión de admin: listar y filtrar tickets, abrir un
+detalle con su investigación, ejecutar el diagnóstico de MAC duplicada, y **registrarlo
+como paso del ticket 2026091974** — el paso aparece en la línea de tiempo con el SQL
+utilizado, la evidencia y la conclusión. El historial abre el resultado guardado. Los
+datos de prueba se borraron al terminar.

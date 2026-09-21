@@ -19,6 +19,7 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Integrado dentro del panel de administración | **Hecho** — ver sección 15 |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Puente Biblioteca → motor de consultas | **Hecho** — ver sección 16 |
+| Correcciones publicadas como artículos | **Hecho** — ver sección 20 |
 | Interpretar mensaje (pantalla y `/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -568,3 +569,71 @@ Es la regla de oro que venía del flujo anterior y que se conservó tal cual: *t
 de escritura se marca como riesgosa y la ejecuta una persona*. El tipo `AccionSugerida` lo
 dice en su comentario, y no existe ningún camino en el código que ejecute una acción de
 escritura sobre Oracle.
+
+---
+
+## 20. De un diagnóstico a un artículo ejecutable
+
+El diagnóstico redacta la corrección, pero antes eso moría en la pantalla del
+diagnóstico: había que copiar el SQL a mano y el conocimiento no se acumulaba en ningún
+sitio. Ahora las correcciones viven en el árbol de categorías del panel, donde el equipo
+ya busca.
+
+### Un catálogo, no un artículo por ticket
+
+`backend/src/soporte/correcciones.ts` declara **cada corrección una sola vez**, con su
+plantilla SQL y los campos que necesita. De esa única declaración salen dos cosas:
+
+1. La acción que muestra el diagnóstico, con los valores del caso ya resueltos.
+2. El artículo de `knowledge_base`, con `script_json` y `campos_formulario`.
+
+Antes las plantillas estaban sueltas dentro de cada playbook. Sacarlas al catálogo evita
+que el SQL del diagnóstico y el del artículo se separen con el tiempo.
+
+Son **cinco correcciones**, no una por ticket. Generar un artículo por cada caso llenaría
+el árbol de entradas de un solo uso, cada una con un `USR_CODIGO` distinto quemado dentro.
+En su lugar hay cinco artículos parametrizados y reutilizables:
+
+| Artículo | Categoría | Campos |
+|---|---|---|
+| Reactivar un usuario desactivado | Corresponsales / Acceso y usuarios | `usr_codigo` |
+| Resetear los intentos de PIN | Corresponsales / Acceso y usuarios | `usr_codigo` |
+| Resetear intentos y reactivar por nombre de usuario | Corresponsales / Acceso y usuarios | `usuario` |
+| Alinear la sucursal del usuario con la del corresponsal | Corresponsales / Sucursales | `codigo_sucursal`, `cedula` |
+| Corregir la sucursal en fisja.clientes | Corresponsales / Sucursales | `codigo_sucursal`, `codigo_socio` |
+
+La acción del diagnóstico ahora lleva `correccion` y `parametros` además del SQL resuelto:
+
+```json
+{ "descripcion": "Resetear los intentos de PIN.",
+  "correccion": "resetear-pin",
+  "parametros": { "usr_codigo": 3003 },
+  "sql": "UPDATE CORRESPONSALES.USUARIO SET USR_INTENTOS_PIN = 0 WHERE USR_CODIGO = 3003; COMMIT;" }
+```
+
+Con eso se puede enlazar al artículo llevando el formulario ya rellenado.
+
+### Publicados como documentación, todavía no ejecutables
+
+```
+GET  /api/soporte/correcciones            ← el catálogo
+POST /api/soporte/correcciones/publicar   ← los publica o actualiza
+```
+
+Idempotente: se reconocen por el título y se actualizan en vez de duplicarse.
+
+**Por defecto se publican con `tipo_solucion = 'lectura'`.** El `script_json` y los
+`campos_formulario` quedan guardados, pero el panel no muestra el botón de ejecutar. Para
+encenderlo basta `{"ejecutable": true}` en el POST — pero es una decisión que no es
+técnica y hay dos cosas que confirmar antes:
+
+1. Si el usuario de Oracle del motor (`u11` en `multidb.databases.json`) tiene permiso de
+   escritura sobre `CORRESPONSALES.USUARIO` y `fisja.clientes`.
+2. Si Administración de Aplicaciones acepta que la corrección se aplique desde el panel en
+   vez de desde su cliente. Seguiría ejecutándola una persona, pero cambia con qué usuario
+   corre y dónde queda el rastro: sería `u11`, y el registro iría a `article_executions`.
+
+La regla del módulo de soporte no cambia en ningún caso: **los diagnósticos no ejecutan
+escrituras**. Leen con su propio pool y su usuario restringido. Si algún día se enciende el
+botón, la ejecución iría por el camino de ConsultasSQL, con su usuario y su auditoría: son
+dos conexiones distintas, no una con permisos mezclados.

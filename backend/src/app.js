@@ -6573,6 +6573,8 @@ async function soloAdminSoporte(req, res, next) {
     if (normalizeRole(usuario.role) !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado: el módulo de soporte requiere rol admin.' });
     }
+    // Se adjunta para que el módulo pueda atribuir lo que publique sin volver a resolverlo.
+    req.usuarioSoporte = { id: usuario.id, username: usuario.username };
     return next();
   } catch (error) {
     return next(error);

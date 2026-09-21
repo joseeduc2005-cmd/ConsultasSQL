@@ -42,7 +42,12 @@ export interface AccionSugerida {
   riesgo: 'lectura' | 'escritura';
   responsable: string;
   biblioteca?: string;
+  /** SQL con los valores del caso ya resueltos, listo para revisar. */
   sql?: string;
+  /** Id en el catálogo de correcciones, para enlazar con su artículo ejecutable. */
+  correccion?: string;
+  /** Valores con los que rellenar el formulario de ese artículo. */
+  parametros?: Record<string, string | number | null>;
 }
 
 export interface Hallazgo {

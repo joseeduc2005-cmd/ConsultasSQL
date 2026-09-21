@@ -1,5 +1,6 @@
+import { CORRECCIONES, accionDe } from '../correcciones.ts';
 import { CAMPO_CEDULA } from './campos.ts';
-import { numero, sqlConValores, texto } from './motor.ts';
+import {numero, texto} from './motor.ts';
 import type { Playbook } from './tipos.ts';
 
 const FUENTE_CR = 'corresponsales.corresponsalrepresentante';
@@ -92,15 +93,10 @@ export const sucursalCorresponsal: Playbook = {
           detalle: `Corresponsales: ${nombre(actual)} · fisja.clientes: ${nombre(fisja)}. Mientras no se despliegue el fix del ticket 2026083744, las transacciones de este corresponsal se contabilizan en la oficina anterior y generan descuadre en JASIT.`,
           ticketsRelacionados: ['2026083744'],
           acciones: [
-            {
-              descripcion: 'Corrección puntual (la aplicó el técnico que atendió el caso Mall Alto). No corrige la causa estructural.',
-              riesgo: 'escritura',
-              responsable: 'Administración de Aplicaciones',
-              sql: sqlConValores('UPDATE fisja.clientes\nSET codigo_sucursal = :codigo_sucursal\nWHERE codigo_socio = :codigo_socio;\nCOMMIT;', {
+            accionDe(CORRECCIONES.sucursalFisja, {
                 codigo_sucursal: numero(actual.codigo_sucursal),
                 codigo_socio: Number(codigoSocio),
               }),
-            },
           ],
         });
       }
@@ -123,16 +119,10 @@ export const sucursalCorresponsal: Playbook = {
             titulo: 'Usuario con sucursal desactualizada',
             detalle: distintos.map((u) => `${texto(u.usr_usuario)}: sucursal ${texto(u.codigo_sucursal)}`).join('\n'),
             acciones: [
-              {
-                descripcion: 'Alinear la sucursal del usuario con la del corresponsal.',
-                riesgo: 'escritura',
-                responsable: 'Administración de Aplicaciones',
-                biblioteca: 'U14',
-                sql: sqlConValores('UPDATE CORRESPONSALES.USUARIO\nSET CODIGO_SUCURSAL = :codigo_sucursal\nWHERE USR_CEDULA = :cedula;\nCOMMIT;', {
-                  codigo_sucursal: numero(actual!.codigo_sucursal),
-                  cedula,
-                }),
-              },
+              accionDe(CORRECCIONES.alinearSucursalUsuario, {
+                codigo_sucursal: numero(actual.codigo_sucursal),
+                cedula: texto(cedula),
+              }),
             ],
           });
         } else {

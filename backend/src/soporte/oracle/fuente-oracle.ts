@@ -35,6 +35,11 @@ export class FuenteOracle implements FuenteDatos {
         poolMin: 0,
         poolMax: 4,
         poolIncrement: 1,
+        // Con la base inalcanzable el driver esperaría ~20 s por intento. Acotarlo
+        // evita que un Oracle caído bloquee /estado y los diagnósticos.
+        connectTimeout: config.oracle.conectarTimeoutS,
+        transportConnectTimeout: config.oracle.conectarTimeoutS,
+        queueTimeout: config.oracle.conectarTimeoutS * 1000,
       });
     }
     return this.#pool;

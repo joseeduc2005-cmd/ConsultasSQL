@@ -518,3 +518,53 @@ Oracle de Corresponsales, y antes no había dónde anotarlo.
   diagnósticos** y explica por qué: su SQL está escrito contra tablas concretas de
   Corresponsales y no funcionaría en otra base. En modo demostración no hay base asociada
   y se muestran todos.
+
+---
+
+## 18. Estado de Oracle: por qué no bloquea la interfaz
+
+La cabecera y la barra lateral consultan `/api/soporte/estado` cada minuto. Con Oracle
+inalcanzable, cada llamada esperaba a que el driver se rindiera —unos 20 segundos— y la
+interfaz se quedaba colgada. Se arregló por dos lados:
+
+1. **El pool deja de esperar indefinidamente.** `connectTimeout`, `transportConnectTimeout`
+   y `queueTimeout` se fijan desde `SOPORTE_ORACLE_CONECTAR_TIMEOUT_S` (6 s por defecto).
+   Esto también acota los diagnósticos, no solo el sondeo.
+2. **El sondeo se cachea 30 s y se refresca por detrás.** Si hay un valor anterior se
+   devuelve al instante aunque esté vencido, y el sondeo nuevo corre en segundo plano.
+   Solo la primerísima llamada llega a esperar, y como máximo 2,5 s.
+
+Además se lanza un sondeo al arrancar (`precalentarEstadoOracle`), así que en la práctica
+ni esa primera llamada espera.
+
+Medido con la Oracle de producción inalcanzable: **de 20 s por llamada a 7 ms**.
+
+---
+
+## 19. Qué hace y qué no hace un diagnóstico
+
+Un diagnóstico **no aplica la corrección**. Devuelve el veredicto, los hallazgos y la
+corrección **ya redactada con los valores reales**, marcada como escritura y con su
+responsable. La ejecuta una persona.
+
+Ejemplo real (`acceso-corresponsal` sobre un usuario bloqueado):
+
+```
+veredicto: problema — Bloqueado por intentos fallidos de PIN
+
+  [alta] Bloqueado por intentos fallidos de PIN
+         usr_intentos_pin = 3 (máximo configurado: 3).
+    → acción: Resetear los intentos de PIN.
+      riesgo: escritura · responsable: Administración de Aplicaciones · biblioteca: U10
+      sql:    UPDATE CORRESPONSALES.USUARIO SET USR_INTENTOS_PIN = 0
+              WHERE USR_CODIGO = 3003;
+              COMMIT;
+```
+
+El `USR_CODIGO = 3003` no es un hueco por rellenar: el diagnóstico ya resolvió de qué
+usuario se trata. Lo que falta es que alguien lo ejecute.
+
+Es la regla de oro que venía del flujo anterior y que se conservó tal cual: *toda sentencia
+de escritura se marca como riesgosa y la ejecuta una persona*. El tipo `AccionSugerida` lo
+dice en su comentario, y no existe ningún camino en el código que ejecute una acción de
+escritura sobre Oracle.

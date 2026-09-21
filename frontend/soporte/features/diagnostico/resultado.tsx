@@ -150,7 +150,7 @@ function HallazgoCard({ hallazgo: h }: { hallazgo: Hallazgo }) {
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           Casos relacionados:
           {h.ticketsRelacionados.map((t) => (
-            <Link key={t} href={`/admin/soporte/tickets/${t}`} className="rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-primary-soft hover:text-primary-soft-foreground">
+            <Link key={t} href={`/admin/tickets/${t}`} className="rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-primary-soft hover:text-primary-soft-foreground">
               {t}
             </Link>
           ))}
@@ -173,7 +173,7 @@ function HallazgoCard({ hallazgo: h }: { hallazgo: Hallazgo }) {
             )}
             <span className="text-xs text-muted-foreground">Responsable: {a.responsable}</span>
             {a.biblioteca && (
-              <Link href={`/admin/soporte/biblioteca?codigo=${a.biblioteca}`} className="ml-auto font-mono text-xs font-medium text-primary hover:underline">
+              <Link href={`/admin/biblioteca?codigo=${a.biblioteca}`} className="ml-auto font-mono text-xs font-medium text-primary hover:underline">
                 {a.biblioteca} en Biblioteca
               </Link>
             )}
@@ -223,7 +223,7 @@ function PasoFila({ paso, ultimo }: { paso: PasoDiagnostico; ultimo: boolean }) 
               <div className="flex flex-wrap items-center gap-2 text-[13px]">
                 <span className="font-medium">{c.descripcion}</span>
                 {c.biblioteca && (
-                  <Link href={`/admin/soporte/biblioteca?codigo=${c.biblioteca}`} className="font-mono text-xs text-primary hover:underline">
+                  <Link href={`/admin/biblioteca?codigo=${c.biblioteca}`} className="font-mono text-xs text-primary hover:underline">
                     {c.biblioteca}
                   </Link>
                 )}

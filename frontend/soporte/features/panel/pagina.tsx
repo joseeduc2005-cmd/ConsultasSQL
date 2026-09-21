@@ -37,7 +37,7 @@ export function PaginaPanel() {
           <p className="text-[13px] text-muted-foreground first-letter:uppercase">{fecha}</p>
           <h2 className="mt-0.5 text-2xl font-semibold tracking-tight">{saludo()}</h2>
         </div>
-        <Link href="/admin/soporte/interpretar" className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary-hover">
+        <Link href="/admin/interpretar" className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary-hover">
           <MessageSquareText className="size-4" />
           Interpretar un mensaje
         </Link>
@@ -50,11 +50,11 @@ export function PaginaPanel() {
           detalle={resumen ? `${resumen.alertas.criticas} de severidad alta o crítica` : undefined}
           acento={resumen?.alertas.criticas ? 'danger' : 'success'}
           icono={<Radar />}
-          a="/admin/soporte/vigilancia"
+          a="/admin/vigilancia"
         />
-        <Indicador etiqueta="Tickets en investigación" valor={resumen?.tickets.investigacion} detalle={resumen ? `${resumen.tickets.abiertos} abiertos sin investigar` : undefined} acento="warning" icono={<Ticket />} a="/admin/soporte/tickets?estado=investigacion" />
-        <Indicador etiqueta="Diagnósticos (7 días)" valor={resumen?.diagnosticos.ultimos7dias} detalle="Ejecutados por el equipo" acento="primary" icono={<ScanSearch />} a="/admin/soporte/diagnostico" />
-        <Indicador etiqueta="Tickets resueltos" valor={resumen?.tickets.resueltos} detalle={resumen ? `${resumen.consultas} consultas en la Biblioteca` : undefined} acento="success" icono={<CircleCheck />} a="/admin/soporte/tickets?estado=resuelto" />
+        <Indicador etiqueta="Tickets en investigación" valor={resumen?.tickets.investigacion} detalle={resumen ? `${resumen.tickets.abiertos} abiertos sin investigar` : undefined} acento="warning" icono={<Ticket />} a="/admin/tickets?estado=investigacion" />
+        <Indicador etiqueta="Diagnósticos (7 días)" valor={resumen?.diagnosticos.ultimos7dias} detalle="Ejecutados por el equipo" acento="primary" icono={<ScanSearch />} a="/admin/diagnostico" />
+        <Indicador etiqueta="Tickets resueltos" valor={resumen?.tickets.resueltos} detalle={resumen ? `${resumen.consultas} consultas en la Biblioteca` : undefined} acento="success" icono={<CircleCheck />} a="/admin/tickets?estado=resuelto" />
       </div>
 
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -65,7 +65,7 @@ export function PaginaPanel() {
               descripcion="Detectadas por la vigilancia automática."
               icono={<Radar />}
               acciones={
-                <Link href="/admin/soporte/vigilancia" className="text-[13px] font-medium text-primary hover:underline">
+                <Link href="/admin/vigilancia" className="text-[13px] font-medium text-primary hover:underline">
                   Ver todas
                 </Link>
               }
@@ -108,7 +108,7 @@ export function PaginaPanel() {
               titulo="Tickets en curso"
               icono={<Ticket />}
               acciones={
-                <Link href="/admin/soporte/tickets" className="text-[13px] font-medium text-primary hover:underline">
+                <Link href="/admin/tickets" className="text-[13px] font-medium text-primary hover:underline">
                   Ver tickets
                 </Link>
               }
@@ -119,7 +119,7 @@ export function PaginaPanel() {
               <ul className="divide-y">
                 {activos.slice(0, 6).map((t) => (
                   <li key={t.numero}>
-                    <Link href={`/admin/soporte/tickets/${t.numero}`} className="group flex items-center gap-4 px-5 py-3 hover:bg-surface-muted/50">
+                    <Link href={`/admin/tickets/${t.numero}`} className="group flex items-center gap-4 px-5 py-3 hover:bg-surface-muted/50">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13.5px] font-medium group-hover:text-primary">{t.titulo}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -142,7 +142,7 @@ export function PaginaPanel() {
             <CardHeader titulo="Diagnóstico rápido" descripcion="Ingrese directo al diagnóstico que necesita." icono={<ScanSearch />} />
             <div className="grid grid-cols-2 gap-2 p-3">
               {playbooks?.map((p) => (
-                <Link key={p.id} href={`/admin/soporte/diagnostico/${p.id}`} className="group flex flex-col gap-2 rounded-lg border p-3 transition-all hover:border-primary/40 hover:bg-primary-soft/30">
+                <Link key={p.id} href={`/admin/diagnostico/${p.id}`} className="group flex flex-col gap-2 rounded-lg border p-3 transition-all hover:border-primary/40 hover:bg-primary-soft/30">
                   <span className="grid size-8 place-items-center rounded-lg bg-primary-soft text-primary-soft-foreground [&_svg]:size-4">{ICONO_PLAYBOOK[p.id]}</span>
                   <span className="text-[13px] leading-tight font-medium">{p.nombre}</span>
                 </Link>
@@ -155,7 +155,7 @@ export function PaginaPanel() {
               titulo="Actividad reciente"
               icono={<History />}
               acciones={
-                <Link href="/admin/soporte/diagnostico" className="text-[13px] font-medium text-primary hover:underline">
+                <Link href="/admin/diagnostico" className="text-[13px] font-medium text-primary hover:underline">
                   Historial
                 </Link>
               }
@@ -166,7 +166,7 @@ export function PaginaPanel() {
               <ul className="divide-y">
                 {diagnosticos.slice(0, 6).map((d) => (
                   <li key={d.id}>
-                    <Link href={`/admin/soporte/diagnostico/historial/${d.id}`} className="block px-5 py-3 hover:bg-surface-muted/50">
+                    <Link href={`/admin/diagnostico/historial/${d.id}`} className="block px-5 py-3 hover:bg-surface-muted/50">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[13px] font-medium">{playbooks?.find((p) => p.id === d.playbook)?.nombre ?? d.playbook}</span>
                         <Badge tono={VEREDICTO[d.veredicto].tono} className="h-5 px-1.5 text-[11px]">

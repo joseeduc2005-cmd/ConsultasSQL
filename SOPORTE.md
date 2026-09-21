@@ -398,25 +398,34 @@ datos de prueba se borraron al terminar.
 ## 15. Dentro del panel de administración
 
 El Centro de Soporte **es una sección del panel de administración**, no una aplicación
-aparte. Vive en `/admin/soporte/*` y comparte el marco: la misma cabecera, la misma barra
-lateral en la misma posición y la misma área de contenido. Al cambiar de sección no cambia
-el entorno.
+aparte. Todo cuelga de `/admin`: `/admin/resumen`, `/admin/tickets`, `/admin/biblioteca`,
+`/admin/diagnostico`, `/admin/vigilancia`. Un grupo de rutas de Next —la carpeta
+`app/admin/(soporte)/`— les da un layout propio sin aparecer en la URL.
+
+**La barra lateral es una sola y no cambia nunca.** Tiene arriba los accesos del Centro de
+Soporte y debajo el árbol de categorías de artículos, en las dos secciones. Al pulsar una
+sección solo se reemplaza el contenido de la derecha.
 
 | Pieza | Dónde |
 |---|---|
 | `app/components/CabeceraPanel.tsx` | La barra superior, extraída de `admin/page.tsx` para que ambas secciones usen una sola |
 | `app/components/NavegacionSoporte.tsx` | Los accesos del módulo, con el lenguaje visual del panel |
+| `app/components/BarraLateralPanel.tsx` | La barra completa: accesos de soporte + categorías. La usan las dos secciones |
 | `app/admin/soporte/layout.tsx` | Arma el marco para las pantallas del módulo |
 
-En `/admin` la barra lateral muestra **Centro de Soporte** arriba y **Categorías** debajo.
-En `/admin/soporte/*` muestra los accesos del módulo más un enlace de vuelta a artículos.
+En `/admin` la barra recibe los artículos que la página ya tiene cargados; en las pantallas
+de soporte no hay quien se los pase, así que los pide ella misma. Al abrir un artículo desde
+una pantalla de soporte se vuelve a `/admin?articulo=<id>`, que lo selecciona y limpia la URL.
 
 `.soporte-raiz` se aplica **solo al área de contenido**, no al marco: así los tokens del
 módulo no repintan la cabecera ni la barra, que son del panel.
 
-Un primer intento montó el módulo como destino separado, en `/soporte`, con cabecera y
-barra propias y un enlace desde el panel. Era la lectura equivocada de "unir los dos
-proyectos": se veía como dos aplicaciones distintas compartiendo un enlace.
+Hubo dos intentos previos fallidos, y el motivo es el mismo en los dos. El primero montó el
+módulo en `/soporte`, con cabecera y barra propias: dos aplicaciones compartiendo un enlace.
+El segundo compartió la cabecera pero no la barra, así que al entrar al módulo las
+categorías desaparecían y seguía sintiéndose como salir del panel. Lo que hace que se sienta
+una sola herramienta no es compartir las rutas ni la cabecera: es que **no desaparezca nada
+de la barra al navegar**.
 
 `Interpretar mensaje` no aparece en la navegación porque todavía no existe; la ruta
 comodín la cubre si alguien llega por un enlace.

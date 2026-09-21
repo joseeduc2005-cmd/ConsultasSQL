@@ -11,11 +11,11 @@ import { useTheme } from './ThemeProvider';
  * porque es la misma barra: arriba el soporte, debajo las categorías de artículos.
  */
 const SECCIONES = [
-  { ruta: '/admin/soporte', etiqueta: 'Panel', exacta: true },
-  { ruta: '/admin/soporte/diagnostico', etiqueta: 'Diagnósticos' },
-  { ruta: '/admin/soporte/tickets', etiqueta: 'Tickets' },
-  { ruta: '/admin/soporte/biblioteca', etiqueta: 'Biblioteca SQL' },
-  { ruta: '/admin/soporte/vigilancia', etiqueta: 'Vigilancia' },
+  { ruta: '/admin/resumen', etiqueta: 'Resumen', exacta: true },
+  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos' },
+  { ruta: '/admin/tickets', etiqueta: 'Tickets' },
+  { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL' },
+  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia' },
 ];
 
 export default function NavegacionSoporte({

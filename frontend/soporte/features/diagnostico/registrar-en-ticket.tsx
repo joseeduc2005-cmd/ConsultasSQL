@@ -40,7 +40,7 @@ export function RegistrarEnTicket({ diagnosticoId, ticketActual }: { diagnostico
 
   if (registrado) {
     return (
-      <Link href={`/admin/soporte/tickets/${registrado}`} className="text-[13px] font-medium text-primary hover:underline">
+      <Link href={`/admin/tickets/${registrado}`} className="text-[13px] font-medium text-primary hover:underline">
         Ver en ticket {registrado}
       </Link>
     );

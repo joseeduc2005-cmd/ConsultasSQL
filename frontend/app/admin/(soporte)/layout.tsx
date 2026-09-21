@@ -4,15 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import CabeceraPanel from '@/app/components/CabeceraPanel';
-import NavegacionSoporte from '@/app/components/NavegacionSoporte';
+import BarraLateralPanel from '@/app/components/BarraLateralPanel';
 import { withAuth } from '@/app/components/ProtectedRoute';
 import { useTheme } from '@/app/components/ThemeProvider';
 import { AvisosProvider } from '@/soporte/components/ui/toast';
 
 /**
  * El Centro de Soporte es una sección del panel de administración, no una
- * aplicación aparte: reutiliza su cabecera (`CabeceraPanel`) y su misma disposición
- * de barra lateral y contenido, para que al cambiar de sección no cambie el marco.
+ * aplicación aparte: reutiliza su cabecera (`CabeceraPanel`) y **su misma barra
+ * lateral** (`BarraLateralPanel`), con los accesos de soporte y el árbol de
+ * categorías. Al cambiar de sección solo se reemplaza el contenido de la derecha.
  *
  * `.soporte-raiz` se aplica solo al área de contenido. Es lo que activa los tokens
  * de diseño del módulo, y acotarlo aquí evita que repinte la cabecera o la barra.
@@ -78,16 +79,10 @@ function LayoutSoporte({ children }: { children: ReactNode }) {
 
           <div className="flex-1 min-h-0 w-full py-4">
             <div className="flex gap-3 h-full min-w-0">
+              {/* La misma barra que en /admin: los accesos de soporte y el árbol de
+                  categorías conviven, así que nada desaparece al cambiar de sección. */}
               <aside className="glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-y-auto shrink-0 w-[240px] xl:w-[280px]">
-                <NavegacionSoporte />
-                <div className="px-2 pt-1">
-                  <a
-                    href="/admin"
-                    className="block w-full rounded-lg px-3 py-2 text-sm text-(--ink-700) transition-colors hover:bg-white/75 hover:text-(--ink-900)"
-                  >
-                    ← Artículos y workflows
-                  </a>
-                </div>
+                <BarraLateralPanel />
               </aside>
 
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl h-full min-h-0 overflow-hidden">

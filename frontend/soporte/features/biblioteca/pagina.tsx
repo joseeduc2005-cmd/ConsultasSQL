@@ -176,7 +176,7 @@ function DetalleConsulta({ consulta: c }: { consulta: ConsultaBiblioteca }) {
             <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Tickets relacionados</dt>
             <dd className="mt-1.5 flex flex-wrap gap-1.5">
               {tickets.map((t) => (
-                <Link key={t} href={`/admin/soporte/tickets/${t}`} className="rounded-md bg-surface-muted px-2 py-0.5 font-mono text-xs hover:bg-primary-soft hover:text-primary-soft-foreground">
+                <Link key={t} href={`/admin/tickets/${t}`} className="rounded-md bg-surface-muted px-2 py-0.5 font-mono text-xs hover:bg-primary-soft hover:text-primary-soft-foreground">
                   {t}
                 </Link>
               ))}

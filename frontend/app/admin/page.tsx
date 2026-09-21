@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { withAuth } from '../components/ProtectedRoute';
 import { useTheme } from '../components/ThemeProvider';
 import CabeceraPanel from '../components/CabeceraPanel';
-import NavegacionSoporte from '../components/NavegacionSoporte';
-import Sidebar from '../components/Sidebar';
+import BarraLateralPanel from '../components/BarraLateralPanel';
 import ContentPanel from '../components/ContentPanel';
 import CommentsSection from '../components/CommentsSection';
 import WorkflowBuilder from '@/components/WorkflowBuilder/WorkflowBuilder';
@@ -331,6 +330,21 @@ function AdminPage() {
     });
     setShowEditModal(true);
   };
+
+  // Al pinchar un artículo desde una pantalla de soporte se vuelve aquí con
+  // ?articulo=<id>; en cuanto la lista está cargada se abre ese artículo.
+  useEffect(() => {
+    if (typeof window === 'undefined' || articles.length === 0) return;
+    const pedido = new URLSearchParams(window.location.search).get('articulo');
+    if (!pedido) return;
+    const encontrado = articles.find((a) => String(a.id) === pedido);
+    if (encontrado) {
+      setSelectedArticle(encontrado);
+      setSelectedCategory(encontrado.categoria || '');
+      setSelectedSubcategory(encontrado.subcategoria || '');
+    }
+    window.history.replaceState(null, '', '/admin');
+  }, [articles]);
 
   const handleArticleSelect = (article: KnowledgeArticle) => {
     setSelectedArticle(article);
@@ -845,10 +859,8 @@ function AdminPage() {
       <div className="flex-1 min-h-0 w-full py-4">
         <div className="flex gap-3 h-full min-w-0">
           <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-y-auto shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
-            {currentUser?.role === 'admin' && (
-              <NavegacionSoporte colapsado={sidebarCollapsed} />
-            )}
-            <Sidebar
+            <BarraLateralPanel
+              mostrarSoporte={currentUser?.role === 'admin'}
               categories={categories}
               articles={visibleArticles}
               onSelectCategory={handleCategorySelect}

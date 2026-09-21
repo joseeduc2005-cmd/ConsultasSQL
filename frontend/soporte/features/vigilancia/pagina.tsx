@@ -123,8 +123,8 @@ function TarjetaMonitor({ monitor: m }: { monitor: MonitorInfo }) {
 export function enlaceInvestigar(alerta: Alerta, monitor?: MonitorInfo): string | null {
   if (!monitor?.playbook) return null;
   const datos = Object.fromEntries(Object.entries(alerta.datos ?? {}).filter(([k]) => ['mac', 'usuario', 'cedula', 'codigo_socio'].includes(k)));
-  if (Object.keys(datos).length === 0) return `/admin/soporte/diagnostico/${monitor.playbook}`;
-  return `/admin/soporte/diagnostico/${monitor.playbook}?${new URLSearchParams({ ...datos, auto: '1' })}`;
+  if (Object.keys(datos).length === 0) return `/admin/diagnostico/${monitor.playbook}`;
+  return `/admin/diagnostico/${monitor.playbook}?${new URLSearchParams({ ...datos, auto: '1' })}`;
 }
 
 function FilaAlerta({ alerta: a, monitor }: { alerta: Alerta; monitor?: MonitorInfo }) {

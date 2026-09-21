@@ -1,5 +1,6 @@
 'use client';
 
+import { BookOpen, LayoutDashboard, Radar, ScanSearch, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
@@ -7,15 +8,15 @@ import { useTheme } from './ThemeProvider';
 /**
  * Accesos del Centro de Soporte dentro de la barra lateral del panel.
  *
- * Va con el lenguaje visual del panel de administración —no con el del módulo—
+ * Comparte el lenguaje visual del panel —vidrio, tipografía y tokens `--ink-*`—
  * porque es la misma barra: arriba el soporte, debajo las categorías de artículos.
  */
 const SECCIONES = [
-  { ruta: '/admin/resumen', etiqueta: 'Resumen', exacta: true },
-  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos' },
-  { ruta: '/admin/tickets', etiqueta: 'Tickets' },
-  { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL' },
-  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia' },
+  { ruta: '/admin/resumen', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
+  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch },
+  { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket },
+  { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL', icono: BookOpen },
+  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar },
 ];
 
 export default function NavegacionSoporte({
@@ -29,35 +30,48 @@ export default function NavegacionSoporte({
   const { theme } = useTheme();
   const claro = theme === 'light';
 
-  if (colapsado) return null;
-
   return (
-    <div className="px-2 pt-3">
-      <h2 className="px-1 pb-2 text-sm font-bold uppercase tracking-wide text-(--ink-900)">Centro de Soporte</h2>
-      <div className="space-y-1">
-        {SECCIONES.map(({ ruta: destino, etiqueta, exacta }) => {
-          const activa = exacta ? ruta === destino : ruta.startsWith(destino);
-          return (
-            <Link
-              key={destino}
-              href={destino}
-              onClick={onNavegar}
-              className={`block w-full rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
-                activa
-                  ? claro
-                    ? 'bg-linear-to-r from-[#2363eb] to-[#1aa0c8] font-semibold text-white shadow-md ring-2 ring-[#b9d2ff]'
-                    : 'bg-linear-to-r from-[#2363eb] to-[#0ea5e9] font-semibold text-white shadow-md ring-1 ring-cyan-400/50'
-                  : claro
-                    ? 'text-(--ink-700) hover:bg-white/75 hover:text-(--ink-900)'
-                    : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100'
+    <nav className={colapsado ? 'flex flex-col items-center gap-1' : 'space-y-0.5'}>
+      {!colapsado && (
+        <p className="px-3 pt-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
+          Centro de Soporte
+        </p>
+      )}
+
+      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta }) => {
+        const activa = exacta ? ruta === destino : ruta.startsWith(destino);
+        return (
+          <Link
+            key={destino}
+            href={destino}
+            onClick={onNavegar}
+            title={colapsado ? etiqueta : undefined}
+            aria-current={activa ? 'page' : undefined}
+            className={`group relative flex items-center rounded-lg text-sm transition-colors duration-150 ${
+              colapsado ? 'size-9 justify-center' : 'h-9 gap-2.5 px-3'
+            } ${
+              activa
+                ? claro
+                  ? 'bg-white font-semibold text-(--accent) shadow-xs ring-1 ring-(--line)'
+                  : 'bg-[rgba(56,189,248,0.14)] font-semibold text-cyan-100 ring-1 ring-[rgba(56,189,248,0.3)]'
+                : claro
+                  ? 'text-(--ink-700) hover:bg-white/70 hover:text-(--ink-900)'
+                  : 'text-slate-300 hover:bg-[rgba(56,189,248,0.07)] hover:text-slate-100'
+            }`}
+          >
+            {/* Marca de activo: una barra fina en vez de teñir el elemento entero. */}
+            {activa && !colapsado && (
+              <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-(--accent)" />
+            )}
+            <Icono
+              className={`size-[17px] shrink-0 ${
+                activa ? 'text-(--accent)' : claro ? 'text-(--ink-500)' : 'text-slate-400'
               }`}
-            >
-              {etiqueta}
-            </Link>
-          );
-        })}
-      </div>
-      <div className="mx-1 mt-3 border-t border-(--line)" />
-    </div>
+            />
+            {!colapsado && <span className="truncate">{etiqueta}</span>}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

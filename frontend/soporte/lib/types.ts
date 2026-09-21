@@ -8,7 +8,10 @@ export type Fila = Record<string, unknown>;
 export interface EstadoSistema {
   version: string;
   oracle: { modo: 'demo' | 'oracle'; conectado: boolean; detalle: string };
-  modelo: { configurado: boolean; conectado: boolean; detalle: string };
+  /** Base registrada contra la que corren los diagnósticos, o null en modo demostración. */
+  baseDiagnosticos: string | null;
+  /** Solo si se configura un modelo de lenguaje; hoy el backend no lo expone. */
+  modelo?: { configurado: boolean; conectado: boolean; detalle: string };
   vigilancia: boolean;
   reglas: { maxIntentosPin: number; maxIntentosClave: number; limiteReporte: number };
 }
@@ -43,7 +46,18 @@ export interface Ticket {
   observaciones: string | null;
   creado_en: string | null;
   resuelto_en: string | null;
+  /** Id de la base registrada contra la que se investiga el caso. */
+  base_datos: string | null;
   actualizado_en: string;
+}
+
+/** Una base registrada en multidb.databases.json, tal como la expone el motor. */
+export interface BaseRegistrada {
+  id: string;
+  label?: string;
+  type: string;
+  primary?: boolean;
+  connected?: boolean;
 }
 
 export interface TicketListado extends Ticket {

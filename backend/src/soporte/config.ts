@@ -55,22 +55,26 @@ function buscarEnMultiDb(id: string): EntradaMultiDb | null {
  *
  * Con SOPORTE_MODO=demo se fuerza el modo demostración sin tocar nada más.
  */
-function resolverOracle(): { modo: ModoOracle; usuario: string; clave: string; conexion: string } {
-  const vacio = { modo: 'demo' as const, usuario: '', clave: '', conexion: '' };
+function resolverOracle(): { modo: ModoOracle; usuario: string; clave: string; conexion: string; dbId: string | null } {
+  const vacio = { modo: 'demo' as const, usuario: '', clave: '', conexion: '', dbId: null };
   if (texto(process.env.SOPORTE_MODO).toLowerCase() === 'demo') return vacio;
 
   const usuario = texto(process.env.SOPORTE_ORACLE_USUARIO);
   const clave = texto(process.env.SOPORTE_ORACLE_CLAVE);
   const conexion = texto(process.env.SOPORTE_ORACLE_CONEXION);
-  if (usuario && clave && conexion) return { modo: 'oracle', usuario, clave, conexion };
+  if (usuario && clave && conexion) return { modo: 'oracle', usuario, clave, conexion, dbId: null };
 
-  const entrada = buscarEnMultiDb(texto(process.env.SOPORTE_ORACLE_DB_ID) || 'oracle');
+  const idBuscado = texto(process.env.SOPORTE_ORACLE_DB_ID) || 'oracle';
+  const entrada = buscarEnMultiDb(idBuscado);
   if (entrada?.type === 'oracle' && entrada.user && entrada.password && entrada.host && entrada.database) {
     return {
       modo: 'oracle',
       usuario: entrada.user,
       clave: entrada.password,
       conexion: `${entrada.host}:${entrada.port ?? 1521}/${entrada.database}`,
+      // Se conserva para que el frontend sepa contra qué base registrada corren
+      // los diagnósticos y pueda ocultarlos en tickets de otra base.
+      dbId: idBuscado,
     };
   }
   return vacio;

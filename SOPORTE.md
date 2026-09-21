@@ -496,3 +496,25 @@ aprendió por su cuenta **no se tocan** — se distinguen por la columna `origen
 añade de forma aditiva con el mismo patrón `ADD COLUMN IF NOT EXISTS` que ya usa `app.js`.
 
 Con `SOPORTE_VOCABULARIO=off` la siembra automática se desactiva.
+
+---
+
+## 17. Base de datos del ticket
+
+Los tickets siempre se guardan en PostgreSQL, en el esquema `soporte`. Oracle no almacena
+nada: solo se lee, desde los diagnósticos y los monitores. El campo **Base de datos** del
+ticket no cambia eso — dice **contra qué base se investiga el caso**, que es otra cosa.
+
+Hace falta porque el motor tiene seis bases registradas y los tickets vienen de cuatro
+sistemas distintos: un caso de Botón de Pago se investiga contra `boton`, no contra la
+Oracle de Corresponsales, y antes no había dónde anotarlo.
+
+- La columna `soporte.tickets.base_datos` guarda el id de `multidb.databases.json`.
+- El formulario lo ofrece desde `/api/distributed/databases?showAll=true`. El `showAll` es
+  necesario: por defecto ese endpoint devuelve solo las conectadas y no primarias, y un
+  ticket se registra igual aunque la base esté caída.
+- `/api/soporte/estado` expone `baseDiagnosticos`, la base contra la que corren los cuatro
+  diagnósticos. Si no coincide con la del ticket, el detalle **oculta la lista de
+  diagnósticos** y explica por qué: su SQL está escrito contra tablas concretas de
+  Corresponsales y no funcionaría en otra base. En modo demostración no hay base asociada
+  y se muestran todos.

@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { withAuth } from '../components/ProtectedRoute';
-import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../components/ThemeProvider';
-import UserIdentityBadge from '../components/UserIdentityBadge';
-import Link from 'next/link';
+import CabeceraPanel from '../components/CabeceraPanel';
+import NavegacionSoporte from '../components/NavegacionSoporte';
 import Sidebar from '../components/Sidebar';
 import ContentPanel from '../components/ContentPanel';
 import CommentsSection from '../components/CommentsSection';
@@ -816,38 +815,15 @@ function AdminPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden px-2 py-2">
-      <div className="glass-panel-strong sticky top-0 z-40 overflow-visible rounded-2xl border px-4 sm:px-6">
-        <div className="w-full py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-linear-to-br from-[#2363eb] to-[#1aa0c8] flex items-center justify-center text-white font-bold shadow-md">S</div>
-            <div>
-              <h1 className="text-xl font-bold text-(--ink-900)">Panel de Administracion - Soluciones MD</h1>
-              <p className="text-xs text-(--ink-700)">Gestiona articulos, workflows y ejecuciones desde una sola vista.</p>
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            {currentUser?.role === 'admin' && (
-              <Link
-                href="/soporte"
-                className="glass-pill rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap text-(--ink-800) transition-colors hover:bg-white/85 hover:text-(--ink-900)"
-                title="Tickets, diagnósticos automáticos y vigilancia"
-              >
-                Centro de Soporte
-              </Link>
-            )}
-            <ThemeToggle className="glass-pill" />
-            <span className="glass-pill rounded-full px-3 py-1 text-sm text-(--ink-700)">Articulos: {articleCount}</span>
-            <UserIdentityBadge
-              username={currentUser?.username || 'usuario'}
-              role={currentUser?.role || 'user'}
-              isLightTheme={isLightTheme}
-              primaryActionLabel="Ir a Panel SQL Automático"
-              onPrimaryAction={() => router.push('/dashboard')}
-              onLogout={handleLogout}
-            />
-          </div>
-        </div>
-        <div className="w-full py-3 border-t border-(--line)">
+      <CabeceraPanel
+        subtitulo="Gestiona articulos, workflows y ejecuciones desde una sola vista."
+        currentUser={currentUser}
+        isLightTheme={isLightTheme}
+        onLogout={handleLogout}
+        primaryActionLabel="Ir a Panel SQL Automático"
+        onPrimaryAction={() => router.push('/dashboard')}
+        derecha={<span className="glass-pill rounded-full px-3 py-1 text-sm text-(--ink-700)">Articulos: {articleCount}</span>}
+      >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <input value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Buscar..." className="input-glass flex-1 min-w-[220px] p-2 rounded-xl" />
             {currentUser?.role === 'admin' ? (
@@ -864,12 +840,14 @@ function AdminPage() {
               <button className="hidden" />
             )}
           </div>
-        </div>
-      </div>
+      </CabeceraPanel>
 
       <div className="flex-1 min-h-0 w-full py-4">
         <div className="flex gap-3 h-full min-w-0">
-          <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
+          <aside className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-y-auto shrink-0 transition-[width] duration-300 ease-in-out ${sidebarCollapsed ? 'w-[52px]' : 'w-[240px] xl:w-[280px]'}`}>
+            {currentUser?.role === 'admin' && (
+              <NavegacionSoporte colapsado={sidebarCollapsed} />
+            )}
             <Sidebar
               categories={categories}
               articles={visibleArticles}

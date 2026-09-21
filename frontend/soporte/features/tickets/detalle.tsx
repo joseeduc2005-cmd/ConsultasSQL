@@ -28,7 +28,7 @@ export function PaginaTicket() {
 
   return (
     <>
-      <Link href="/soporte/tickets" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+      <Link href="/admin/soporte/tickets" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-3.5" />
         Tickets
       </Link>
@@ -98,7 +98,7 @@ export function PaginaTicket() {
               <ul className="divide-y">
                 {t.similares.map((s) => (
                   <li key={s.numero}>
-                    <Link href={`/soporte/tickets/${s.numero}`} className="group block px-5 py-3 hover:bg-surface-muted/60">
+                    <Link href={`/admin/soporte/tickets/${s.numero}`} className="group block px-5 py-3 hover:bg-surface-muted/60">
                       <p className="line-clamp-2 text-[13px] font-medium group-hover:text-primary">{s.titulo}</p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">{s.numero}</p>
                     </Link>
@@ -166,7 +166,7 @@ function DiagnosticarDesdeTicket({ numero }: { numero: string }) {
       <ul className="divide-y">
         {playbooks?.map((p) => (
           <li key={p.id}>
-            <Link href={`/soporte/diagnostico/${p.id}?ticket=${encodeURIComponent(numero)}`} className="group flex items-center justify-between gap-2 px-5 py-2.5 text-[13px] hover:bg-surface-muted/60">
+            <Link href={`/admin/soporte/diagnostico/${p.id}?ticket=${encodeURIComponent(numero)}`} className="group flex items-center justify-between gap-2 px-5 py-2.5 text-[13px] hover:bg-surface-muted/60">
               {p.nombre}
               <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
             </Link>
@@ -233,7 +233,7 @@ function PasoItem({ paso, ultimo }: { paso: PasoTicket; ultimo: boolean }) {
                 {ORIGEN[paso.origen].etiqueta}
               </Badge>
               {paso.diagnostico_id && (
-                <Link href={`/soporte/diagnostico/historial/${paso.diagnostico_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                <Link href={`/admin/soporte/diagnostico/historial/${paso.diagnostico_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
                   Ver diagnóstico
                 </Link>
               )}

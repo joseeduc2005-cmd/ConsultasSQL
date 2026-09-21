@@ -125,7 +125,7 @@ export function PaginaTickets() {
               </thead>
               <tbody className="divide-y">
                 {lista.map((t) => (
-                  <tr key={t.numero} onClick={() => router.push(`/soporte/tickets/${t.numero}`)} className="group cursor-pointer transition-colors hover:bg-surface-muted/50">
+                  <tr key={t.numero} onClick={() => router.push(`/admin/soporte/tickets/${t.numero}`)} className="group cursor-pointer transition-colors hover:bg-surface-muted/50">
                     <td className="max-w-xl px-5 py-3">
                       <p className="truncate font-medium group-hover:text-primary">{t.titulo}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
       avisar('exito', 'Ticket creado', t.numero);
       setDatos(vacio);
       onCerrar();
-      router.push(`/soporte/tickets/${t.numero}`);
+      router.push(`/admin/soporte/tickets/${t.numero}`);
     },
     onError: (e) => avisar('error', 'No se pudo crear el ticket', (e as Error).message),
   });

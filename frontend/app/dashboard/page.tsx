@@ -517,7 +517,7 @@ function DashboardPage() {
             <div className="ml-auto flex items-center gap-3">
               {currentUser?.role === 'admin' && (
                 <Link
-                  href="/soporte"
+                  href="/admin/soporte"
                   className="glass-pill rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap text-(--ink-800) transition-colors hover:bg-white/85 hover:text-(--ink-900)"
                   title="Tickets, diagnósticos automáticos y vigilancia"
                 >

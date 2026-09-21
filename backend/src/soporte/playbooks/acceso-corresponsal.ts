@@ -1,7 +1,8 @@
 import { config } from '../config.ts';
+import { CORRECCIONES, accionDe } from '../correcciones.ts';
 import type { Fila } from '../oracle/fuente.ts';
 import { CAMPO_CEDULA, CAMPO_MAC, CAMPO_USUARIO } from './campos.ts';
-import { numero, sqlConValores, texto } from './motor.ts';
+import {numero, texto} from './motor.ts';
 import type { Contexto, Playbook } from './tipos.ts';
 
 const RESPONSABLE_DB = 'Administración de Aplicaciones';
@@ -87,15 +88,7 @@ export const accesoCorresponsal: Playbook = {
             titulo: 'Usuario inactivo',
             detalle: `El usuario ${texto(u.usr_usuario)} tiene usr_estado = ${texto(u.usr_estado)}. No podrá ingresar hasta reactivarlo.`,
             acciones: [
-              {
-                descripcion: 'Reactivar el usuario (confirmar antes que la desactivación no fue intencional).',
-                riesgo: 'escritura',
-                responsable: RESPONSABLE_DB,
-                biblioteca: 'U11',
-                sql: sqlConValores('UPDATE CORRESPONSALES.USUARIO SET USR_ESTADO = 1 WHERE USR_CODIGO = :usr_codigo;\nCOMMIT;', {
-                  usr_codigo: numero(u.usr_codigo),
-                }),
-              },
+              accionDe(CORRECCIONES.reactivarUsuario, { usr_codigo: numero(u.usr_codigo) }),
             ],
           });
         }
@@ -106,15 +99,7 @@ export const accesoCorresponsal: Playbook = {
             titulo: 'Bloqueado por intentos fallidos de PIN',
             detalle: `usr_intentos_pin = ${texto(u.usr_intentos_pin)} (máximo configurado: ${config.reglas.maxIntentosPin}).`,
             acciones: [
-              {
-                descripcion: 'Resetear los intentos de PIN.',
-                riesgo: 'escritura',
-                responsable: RESPONSABLE_DB,
-                biblioteca: 'U10',
-                sql: sqlConValores('UPDATE CORRESPONSALES.USUARIO SET USR_INTENTOS_PIN = 0 WHERE USR_CODIGO = :usr_codigo;\nCOMMIT;', {
-                  usr_codigo: numero(u.usr_codigo),
-                }),
-              },
+              accionDe(CORRECCIONES.resetearPin, { usr_codigo: numero(u.usr_codigo) }),
             ],
           });
         }
@@ -125,16 +110,7 @@ export const accesoCorresponsal: Playbook = {
             titulo: 'Bloqueado por intentos fallidos de contraseña',
             detalle: `usr_intentos = ${texto(u.usr_intentos)} (máximo configurado: ${config.reglas.maxIntentosClave}).`,
             acciones: [
-              {
-                descripcion: 'Resetear intentos fallidos y reactivar por usuario.',
-                riesgo: 'escritura',
-                responsable: RESPONSABLE_DB,
-                biblioteca: 'U8',
-                sql: sqlConValores(
-                  'UPDATE CORRESPONSALES.USUARIO\nSET USR_INTENTOS = 0, USR_ESTADO = 1, USR_INTENTOS_PIN = 0\nWHERE USR_USUARIO = :usuario;\nCOMMIT;',
-                  { usuario: texto(u.usr_usuario) },
-                ),
-              },
+              accionDe(CORRECCIONES.resetearYReactivar, { usuario: texto(u.usr_usuario) }),
             ],
           });
         }
@@ -231,16 +207,10 @@ export const accesoCorresponsal: Playbook = {
             detalle: `usuario.codigo_sucursal = ${texto(u.codigo_sucursal)} y corresponsalrepresentante.codigo_sucursal = ${texto(sucursalCorresponsal)}. En 2026083700 corregir este campo fue parte de la solución.`,
             ticketsRelacionados: ['2026083700'],
             acciones: [
-              {
-                descripcion: 'Alinear la sucursal del usuario con la del corresponsal.',
-                riesgo: 'escritura',
-                responsable: RESPONSABLE_DB,
-                biblioteca: 'U14',
-                sql: sqlConValores('UPDATE CORRESPONSALES.USUARIO\nSET CODIGO_SUCURSAL = :codigo_sucursal\nWHERE USR_CEDULA = :cedula;\nCOMMIT;', {
-                  codigo_sucursal: numero(sucursalCorresponsal),
-                  cedula: texto(u.usr_cedula),
-                }),
-              },
+              accionDe(CORRECCIONES.alinearSucursalUsuario, {
+                codigo_sucursal: numero(sucursalCorresponsal),
+                cedula: texto(u.usr_cedula),
+              }),
             ],
           });
         }

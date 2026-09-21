@@ -27,6 +27,7 @@ import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
 import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
+import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
@@ -376,6 +377,43 @@ export function crearSoporteRouter(
       });
       await motor.refrescar();
       registrar(resultado, 'vocabulario de la Biblioteca sembrado en el motor');
+      return resultado;
+    }),
+  );
+
+  // ─── Correcciones publicadas como artículos ───────────────────────────────
+
+  router.get(
+    '/correcciones',
+    h(async () =>
+      Object.values(CORRECCIONES).map((c) => ({
+        id: c.id,
+        titulo: c.titulo,
+        descripcion: c.descripcion,
+        categoria: c.categoria,
+        subcategoria: c.subcategoria,
+        biblioteca: c.biblioteca ?? null,
+        responsable: c.responsable,
+        plantilla: c.plantilla,
+        campos: c.campos,
+        advertencia: c.advertencia ?? null,
+      })),
+    ),
+  );
+
+  router.post(
+    '/correcciones/publicar',
+    h(async (req) => {
+      const cuerpo = (req.body ?? {}) as { databaseId?: string; ejecutable?: boolean };
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
+      const resultado = await publicarCorrecciones({
+        databaseId: texto(cuerpo.databaseId) ?? config.oracle.dbId,
+        autorId: usuario.id,
+        autorNombre: usuario.username,
+        ejecutable: cuerpo.ejecutable === true,
+      });
+      registrar(resultado, 'correcciones publicadas como artículos');
       return resultado;
     }),
   );

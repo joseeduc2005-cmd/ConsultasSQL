@@ -26,6 +26,7 @@ import {
 import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
 import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
+import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
 import type { ResultadoDiagnostico } from './playbooks/tipos.ts';
@@ -81,7 +82,17 @@ function pasoDesdeDiagnostico(r: ResultadoDiagnostico) {
   };
 }
 
-export function crearSoporteRouter({ log }: { log?: (datos: object, mensaje: string) => void } = {}): Router {
+/** Lo que el módulo necesita del motor de consultas para sembrar vocabulario. */
+export interface PuenteMotor {
+  /** La misma huella con la que el motor lee semantic_learning. */
+  obtenerHuella: () => string;
+  /** Recarga la caché del motor tras escribir. */
+  refrescar: () => Promise<unknown>;
+}
+
+export function crearSoporteRouter(
+  { log, motor }: { log?: (datos: object, mensaje: string) => void; motor?: PuenteMotor } = {},
+): Router {
   const router = Router();
   const registrar = log ?? (() => undefined);
 
@@ -271,6 +282,36 @@ export function crearSoporteRouter({ log }: { log?: (datos: object, mensaje: str
       await vincularDiagnostico(resultado.id!, ticket);
       res.status(201);
       return paso;
+    }),
+  );
+
+  // ─── Puente con el motor de consultas ─────────────────────────────────────
+  // La Biblioteca SQL es un corpus curado que mapea lenguaje de negocio a las
+  // tablas reales. Esto lo deriva y lo deja donde el motor ya sabe buscarlo.
+
+  router.get(
+    '/vocabulario',
+    h(async (req) => {
+      const derivado = await construirVocabulario({
+        minApariciones: Number(req.query.minApariciones) || undefined,
+        minExclusividad: Number(req.query.minExclusividad) || undefined,
+      });
+      return { ...derivado, huella: motor?.obtenerHuella() ?? null };
+    }),
+  );
+
+  router.post(
+    '/vocabulario',
+    h(async (req) => {
+      if (!motor) throw solicitudInvalida('El puente con el motor de consultas no está configurado.');
+      const cuerpo = (req.body ?? {}) as { minApariciones?: number; minExclusividad?: number };
+      const resultado = await sembrarVocabulario(motor.obtenerHuella(), {
+        minApariciones: Number(cuerpo.minApariciones) || undefined,
+        minExclusividad: Number(cuerpo.minExclusividad) || undefined,
+      });
+      await motor.refrescar();
+      registrar(resultado, 'vocabulario de la Biblioteca sembrado en el motor');
+      return resultado;
     }),
   );
 

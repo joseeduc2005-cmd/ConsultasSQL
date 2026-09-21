@@ -18,6 +18,7 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Frontend: Panel, Vigilancia, Biblioteca, Tickets y Diagnósticos | **Integradas** — 5 de 6 |
 | Navegación propia y entrada desde ConsultasSQL | **Hecho** — ver sección 15 |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
+| Puente Biblioteca → motor de consultas | **Hecho** — ver sección 16 |
 | Interpretar mensaje (pantalla y `/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -419,3 +420,70 @@ administración y del panel SQL, visible solo con rol admin.
 `Interpretar mensaje` aparece en la barra marcada como *pendiente*: lleva al marcador que
 explica que depende del modelo de lenguaje. La entrada desaparece cuando esa pantalla
 exista.
+
+---
+
+## 16. El puente con el motor de consultas
+
+Las 111 consultas de la Biblioteca son un corpus curado a mano que mapea **lenguaje de
+negocio en español** a las tablas reales de producción. El motor guarda justo ese tipo de
+conocimiento en `semantic_learning`, y antes de esto tenía 10 filas que había inferido
+solo, de mala calidad (`"sistema" → users` con 0.85 de confianza).
+
+`backend/src/soporte/vocabulario.ts` deriva el vocabulario de la Biblioteca y lo escribe
+ahí. **No interviene ningún modelo de lenguaje**: es conteo, normalización y análisis del
+SQL.
+
+### Cómo puntúa
+
+Para cada consulta toma los términos del nombre y la categoría, y las tablas y columnas
+del SQL. Después mide, para cada pareja término→objetivo, cuán exclusiva es. Tres
+correcciones hicieron la diferencia entre un vocabulario útil y uno equivocado:
+
+1. **Peso por columnas tocadas, no por aparición.** Estar en un `JOIN` vale 1; cada
+   columna que la consulta realmente lee sobre esa tabla suma 2. El alias del SQL dice a
+   qué tabla pertenece cada columna.
+2. **Penalización a las tablas omnipresentes** (IDF). `usuario` sale en casi todas las
+   consultas por arrastre de JOINs y no distingue nada.
+3. **JOINs con coma.** El corpus usa la sintaxis antigua de Oracle (`FROM a u, b p`). El
+   primer extractor solo leía la tabla que seguía a `FROM` y perdía el resto.
+
+Sin las tres, `"mac"` terminaba apuntando a `usuario`. Con ellas apunta a `pos_view`, que
+es donde vive `pos_mac`. Como el motor se queda con el mapeo de **mayor confianza** por
+término, acertar el ganador es todo lo que importa.
+
+Resultado sobre las 111 consultas: **45 términos → tabla y 24 → columna**. Algunos:
+
+| término | tabla | apoyado por |
+|---|---|---|
+| `parametro` | `parametro` | 7 consultas |
+| `acta` | `actacomprobantes` | 4 |
+| `representante` | `corresponsalrepresentante` | 2 |
+| `mac` | `pos_view` | 6 |
+| `transaccion` | `transacciones_view` | 2 |
+
+### Por qué no ensucia las consultas a PostgreSQL
+
+Era la duda principal. **No la hay**: `QueryIntelligenceEngine` comprueba que la tabla
+exista en el esquema que está consultando antes de usar un mapeo aprendido. Un término
+que apunta a una tabla de Oracle simplemente se descarta cuando la consulta va a
+PostgreSQL.
+
+Por eso todo se escribe bajo la **misma huella** que usa el motor al leer
+(`schemaDetector.getConnectionFingerprint()`): el cargador filtra por ella, y sembrar bajo
+otra habría dejado las filas escritas pero nunca leídas.
+
+### Operación
+
+Se siembra solo en el primer arranque. Para regenerarlo tras ampliar la Biblioteca:
+
+```
+GET  /api/soporte/vocabulario   ← previsualiza sin escribir nada
+POST /api/soporte/vocabulario   ← regenera y recarga la caché del motor
+```
+
+Es idempotente: borra lo que sembró antes y vuelve a escribir. Las filas que el motor
+aprendió por su cuenta **no se tocan** — se distinguen por la columna `origen`, que se
+añade de forma aditiva con el mismo patrón `ADD COLUMN IF NOT EXISTS` que ya usa `app.js`.
+
+Con `SOPORTE_VOCABULARIO=off` la siembra automática se desactiva.

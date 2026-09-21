@@ -17,9 +17,8 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
 | Frontend: Panel, Vigilancia, Biblioteca, Tickets y Diagnósticos | **Integradas** — 5 de 6 |
 | Navegación propia y entrada desde ConsultasSQL | **Hecho** — ver sección 15 |
-| Frontend: Interpretar mensaje | **Pendiente** — depende del modelo de lenguaje |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
-| Interpretar mensaje (`/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
+| Interpretar mensaje (pantalla y `/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
 

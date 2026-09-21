@@ -270,19 +270,6 @@ export function detectQueryComplexity(sql) {
 }
 
 /**
- * Maps query complexity to the recommended Claude model ID.
- *
- * simple  → Haiku  (single-table SELECTs, fast + cheap)
- * complex → Sonnet (JOINs, GROUP BY, aggregations)
- * plsql   → Opus   (PL/SQL, multi-base distributed logic)
- */
-export function pickModelForComplexity(complexity) {
-  if (complexity === 'plsql') return 'claude-opus-4-7';
-  if (complexity === 'complex') return 'claude-sonnet-4-6';
-  return 'claude-haiku-4-5-20251001';
-}
-
-/**
  * Produces a structured log object for engine routing decisions.
  * All routing points should call this for consistent observability.
  *

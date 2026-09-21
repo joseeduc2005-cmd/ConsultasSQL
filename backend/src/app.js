@@ -6582,6 +6582,12 @@ async function soloAdminSoporte(req, res, next) {
 // Soporte: /api/soporte/{estado,resumen,tickets,consultas,playbooks,diagnosticos,monitores,alertas}
 app.use('/api/soporte', soloAdminSoporte, crearSoporteRouter({
   log: (datos, mensaje) => logger.info(mensaje, datos),
+  // Puente con el motor: la Biblioteca SQL puede sembrar su vocabulario en
+  // semantic_learning, que es de donde el motor resuelve término → tabla.
+  motor: {
+    obtenerHuella: () => schemaDetector.getConnectionFingerprint(),
+    refrescar: () => refreshSemanticLearningCache(true),
+  },
 }));
 // GET /api/query/suggestions - Deterministic suggestions based on schema and relations
 app.get('/api/query/suggestions', async (req, res) => {
@@ -7590,7 +7596,14 @@ async function startServer() {
     await refreshSemanticLearningCache(true);
     // El módulo de soporte comparte el pool del backend; `pool` se reasigna cuando
     // cambia la configuración multi-DB, por eso se pasa un getter y no el valor.
-    await iniciarSoporte({ obtenerPool: () => pool, log: (m) => console.log(m) });
+    await iniciarSoporte({
+      obtenerPool: () => pool,
+      log: (m) => console.log(m),
+      motor: {
+        obtenerHuella: () => schemaDetector.getConnectionFingerprint(),
+        refrescar: () => refreshSemanticLearningCache(true),
+      },
+    });
   }
 
   try {

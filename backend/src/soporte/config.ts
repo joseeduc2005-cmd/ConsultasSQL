@@ -95,6 +95,11 @@ export const config = {
     maxIntentosClave: numero(process.env.MAX_INTENTOS_CLAVE, 3),
     limiteReporte: numero(process.env.LIMITE_REPORTE_TRANSACCIONES, 300),
   },
+  vocabulario: {
+    // Siembra automática del vocabulario de la Biblioteca en el motor de consultas
+    // la primera vez. Con "off" solo se hace bajo demanda desde /api/soporte/vocabulario.
+    automatico: texto(process.env.SOPORTE_VOCABULARIO).toLowerCase() !== 'off',
+  },
   vigilancia: {
     // A diferencia de ticket v2.0, aquí la vigilancia arranca apagada:
     // hay que encenderla a propósito con VIGILANCIA=on.

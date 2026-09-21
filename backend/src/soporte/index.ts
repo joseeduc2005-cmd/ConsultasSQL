@@ -13,6 +13,7 @@ import { aplicarEsquema, configurarPool, type Pool } from './knowledge/db.ts';
 import { sembrarSiVacio } from './knowledge/semillas.ts';
 import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
+import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
 
 export { crearSoporteRouter } from './rutas.ts';
 export { config as configSoporte } from './config.ts';
@@ -21,6 +22,8 @@ export interface OpcionesSoporte {
   /** Getter del pool de PostgreSQL del backend (se relee en cada consulta). */
   obtenerPool: () => Pool;
   log?: (mensaje: string) => void;
+  /** Puente con el motor de consultas, para sembrar el vocabulario de la Biblioteca. */
+  motor?: { obtenerHuella: () => string; refrescar: () => Promise<unknown> };
 }
 
 /**
@@ -30,7 +33,7 @@ export interface OpcionesSoporte {
  * No lanza: un fallo aquí deja el módulo de soporte inutilizable pero no impide que
  * el resto del backend arranque.
  */
-export async function iniciarSoporte({ obtenerPool, log }: OpcionesSoporte): Promise<boolean> {
+export async function iniciarSoporte({ obtenerPool, log, motor }: OpcionesSoporte): Promise<boolean> {
   const registrar = log ?? ((m: string) => console.log(m));
   configurarPool(obtenerPool);
 
@@ -48,6 +51,21 @@ export async function iniciarSoporte({ obtenerPool, log }: OpcionesSoporte): Pro
     }
   } catch (error) {
     registrar(`⚠ [soporte] No se pudieron cargar las semillas: ${(error as Error).message}`);
+  }
+
+  // La Biblioteca SQL enseña al motor qué palabra de negocio apunta a qué tabla.
+  // Solo la primera vez: después se regenera a propósito desde /api/soporte/vocabulario.
+  if (motor && config.vocabulario.automatico) {
+    try {
+      const huella = motor.obtenerHuella();
+      if ((await vocabularioSembrado(huella)) === 0) {
+        const r = await sembrarVocabulario(huella);
+        await motor.refrescar();
+        registrar(`✓ [soporte] Vocabulario de la Biblioteca sembrado en el motor: ${r.tablas} tablas, ${r.columnas} columnas`);
+      }
+    } catch (error) {
+      registrar(`⚠ [soporte] No se pudo sembrar el vocabulario: ${(error as Error).message}`);
+    }
   }
 
   registrar(

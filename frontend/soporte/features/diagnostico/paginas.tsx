@@ -33,7 +33,7 @@ export function PaginaDiagnosticos() {
       {isLoading && <Cargando />}
       <div className="grid gap-4 md:grid-cols-2">
         {playbooks?.map((p) => (
-          <Link key={p.id} href={`/soporte/diagnostico/${p.id}`} className="group">
+          <Link key={p.id} href={`/admin/soporte/diagnostico/${p.id}`} className="group">
             <Card className="h-full p-5 transition-all group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-pop">
               <div className="flex items-start gap-4">
                 <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground [&_svg]:size-5">
@@ -88,7 +88,7 @@ export function TablaHistorial({ filas, nombre }: { filas: DiagnosticoResumen[];
         </thead>
         <tbody className="divide-y">
           {filas.map((d) => (
-            <tr key={d.id} onClick={() => router.push(`/soporte/diagnostico/historial/${d.id}`)} className="cursor-pointer transition-colors hover:bg-surface-muted/60">
+            <tr key={d.id} onClick={() => router.push(`/admin/soporte/diagnostico/historial/${d.id}`)} className="cursor-pointer transition-colors hover:bg-surface-muted/60">
               <td className="px-5 py-3 font-medium whitespace-nowrap">{nombre(d.playbook)}</td>
               <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                 {Object.values(d.entrada).join(' · ')}
@@ -118,7 +118,7 @@ export function PaginaEjecutarDiagnostico() {
   const playbook = playbooks?.find((p) => p.id === id);
 
   if (isLoading) return <Cargando />;
-  if (!playbook) return <Vacio titulo="Diagnóstico no encontrado" accion={<Link href="/soporte/diagnostico" className="text-sm text-primary hover:underline">Volver a diagnósticos</Link>} />;
+  if (!playbook) return <Vacio titulo="Diagnóstico no encontrado" accion={<Link href="/admin/soporte/diagnostico" className="text-sm text-primary hover:underline">Volver a diagnósticos</Link>} />;
 
   const inicial = Object.fromEntries(playbook.campos.map((c) => [c.clave, params.get(c.clave) ?? '']).filter(([, v]) => v));
   return <EjecutarDiagnostico key={`${id}-${params.toString()}`} playbook={playbook} inicial={inicial} automatico={params.get('auto') === '1'} ticket={params.get('ticket') ?? undefined} />;
@@ -146,7 +146,7 @@ function EjecutarDiagnostico({ playbook, inicial, automatico, ticket }: { playbo
 
   return (
     <>
-      <Link href="/soporte/diagnostico" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+      <Link href="/admin/soporte/diagnostico" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-3.5" />
         Diagnósticos
       </Link>
@@ -161,7 +161,7 @@ function EjecutarDiagnostico({ playbook, inicial, automatico, ticket }: { playbo
                 <p className="text-xs font-medium text-muted-foreground">Construido a partir de</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {playbook.ticketsReferencia.map((t) => (
-                    <Link key={t} href={`/soporte/tickets/${t}`} className="rounded-md bg-surface-muted px-2 py-0.5 font-mono text-xs hover:bg-primary-soft hover:text-primary-soft-foreground">
+                    <Link key={t} href={`/admin/soporte/tickets/${t}`} className="rounded-md bg-surface-muted px-2 py-0.5 font-mono text-xs hover:bg-primary-soft hover:text-primary-soft-foreground">
                       {t}
                     </Link>
                   ))}
@@ -199,7 +199,7 @@ export function PaginaResultadoGuardado() {
   const { data, isLoading, error } = useQuery({ queryKey: claves.diagnostico(Number(id)), queryFn: () => api.diagnostico(Number(id)) });
   return (
     <>
-      <Link href="/soporte/diagnostico" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+      <Link href="/admin/soporte/diagnostico" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-3.5" />
         Diagnósticos
       </Link>
@@ -211,7 +211,7 @@ export function PaginaResultadoGuardado() {
             titulo={data.nombrePlaybook}
             descripcion={`Diagnóstico #${data.id} · ${Object.entries(data.entrada).map(([k, v]) => `${ETIQUETA_CAMPO[k] ?? k} ${v}`).join(' · ')}`}
             acciones={
-              <Link href={`/soporte/diagnostico/${data.playbook}?${new URLSearchParams(data.entrada)}`} className="text-[13px] font-medium text-primary hover:underline">
+              <Link href={`/admin/soporte/diagnostico/${data.playbook}?${new URLSearchParams(data.entrada)}`} className="text-[13px] font-medium text-primary hover:underline">
                 Volver a ejecutar
               </Link>
             }

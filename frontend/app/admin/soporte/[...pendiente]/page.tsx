@@ -32,7 +32,7 @@ export default function Pendiente() {
             : undefined
         }
         accion={
-          <Link href="/soporte" className="text-sm font-medium text-primary hover:underline">
+          <Link href="/admin/soporte" className="text-sm font-medium text-primary hover:underline">
             Volver al panel
           </Link>
         }

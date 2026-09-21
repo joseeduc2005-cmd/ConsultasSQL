@@ -16,7 +16,7 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Base de conocimiento migrada de SQLite a PostgreSQL | **Integrada** — esquema `soporte` |
 | Frontend de A migrado a Tailwind 4 + React 19 | **Hecho** — prerrequisito para traer las pantallas |
 | Frontend: Panel, Vigilancia, Biblioteca, Tickets y Diagnósticos | **Integradas** — 5 de 6 |
-| Navegación propia y entrada desde ConsultasSQL | **Hecho** — ver sección 15 |
+| Integrado dentro del panel de administración | **Hecho** — ver sección 15 |
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Puente Biblioteca → motor de consultas | **Hecho** — ver sección 16 |
 | Interpretar mensaje (pantalla y `/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
@@ -395,31 +395,31 @@ datos de prueba se borraron al terminar.
 
 ---
 
-## 15. Navegación
+## 15. Dentro del panel de administración
 
-ConsultasSQL **no tenía navegación global**: `Sidebar.tsx` es el árbol de categorías y
-artículos del panel de administración —se alimenta de props, no de rutas— y `Header.tsx`
-ni siquiera está en uso. Las pantallas se enlazaban entre sí con `router.push` sueltos.
+El Centro de Soporte **es una sección del panel de administración**, no una aplicación
+aparte. Vive en `/admin/soporte/*` y comparte el marco: la misma cabecera, la misma barra
+lateral en la misma posición y la misma área de contenido. Al cambiar de sección no cambia
+el entorno.
 
-Así que "engancharlo a la barra lateral" se resolvió en dos piezas:
+| Pieza | Dónde |
+|---|---|
+| `app/components/CabeceraPanel.tsx` | La barra superior, extraída de `admin/page.tsx` para que ambas secciones usen una sola |
+| `app/components/NavegacionSoporte.tsx` | Los accesos del módulo, con el lenguaje visual del panel |
+| `app/admin/soporte/layout.tsx` | Arma el marco para las pantallas del módulo |
 
-**Dentro del módulo**, se trajo la barra de navegación de ticket v2.0
-(`soporte/components/layout/barra-lateral.tsx`), con el `NavLink` de react-router
-cambiado por `next/link` más `usePathname` para la pestaña activa. Incluye las insignias
-de alertas abiertas y tickets en curso, el estado de Oracle y de la vigilancia, y un
-enlace de vuelta. En pantallas pequeñas se convierte en menú desplegable que se cierra
-solo al navegar.
+En `/admin` la barra lateral muestra **Centro de Soporte** arriba y **Categorías** debajo.
+En `/admin/soporte/*` muestra los accesos del módulo más un enlace de vuelta a artículos.
 
-La cabecera (`cabecera.tsx`) viene del Shell original con dos cambios: el título se deduce
-de la ruta en vez de los `handle` de react-router, y **el tema usa el `ThemeProvider` de
-ConsultasSQL**, de modo que el interruptor del módulo y el de la aplicación son el mismo.
+`.soporte-raiz` se aplica **solo al área de contenido**, no al marco: así los tokens del
+módulo no repintan la cabecera ni la barra, que son del panel.
 
-**Desde ConsultasSQL**, un enlace "Centro de Soporte" en las cabeceras del panel de
-administración y del panel SQL, visible solo con rol admin.
+Un primer intento montó el módulo como destino separado, en `/soporte`, con cabecera y
+barra propias y un enlace desde el panel. Era la lectura equivocada de "unir los dos
+proyectos": se veía como dos aplicaciones distintas compartiendo un enlace.
 
-`Interpretar mensaje` aparece en la barra marcada como *pendiente*: lleva al marcador que
-explica que depende del modelo de lenguaje. La entrada desaparece cuando esa pantalla
-exista.
+`Interpretar mensaje` no aparece en la navegación porque todavía no existe; la ruta
+comodín la cubre si alguien llega por un enlace.
 
 ---
 

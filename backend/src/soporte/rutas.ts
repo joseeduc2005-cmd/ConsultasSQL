@@ -26,6 +26,7 @@ import {
 import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
 import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
+import type { EstadoFuente } from './oracle/fuente.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
@@ -59,6 +60,67 @@ const CAMPOS_TICKET = [
 const ESTADOS_ALERTA: EstadoAlerta[] = ['abierta', 'atendida', 'resuelta'];
 
 const ETIQUETA_ESTADO = { ok: 'OK', alerta: 'ALERTA', falla: 'FALLA', omitido: 'OMITIDO', error: 'ERROR' } as const;
+
+/**
+ * Sondeo de Oracle con caché y espera acotada.
+ *
+ * `/estado` lo consultan la cabecera y la barra lateral cada minuto. Sin esto, con
+ * Oracle inalcanzable cada llamada esperaba a que el driver se rindiera y la interfaz
+ * se quedaba colgada. Ahora: se responde en 2,5 s como mucho, el sondeo real termina
+ * en segundo plano y su resultado queda cacheado para las siguientes llamadas.
+ */
+const ESTADO_TTL_MS = 30_000;
+const ESTADO_ESPERA_MS = 2_500;
+let estadoCacheado: { valor: EstadoFuente; expira: number } | null = null;
+let sondeoEnCurso: Promise<void> | null = null;
+
+/**
+ * Sondea Oracle al arrancar, sin bloquear: así la primera pantalla que pida el
+ * estado ya lo encuentra en caché en vez de esperar.
+ */
+export function precalentarEstadoOracle(): void {
+  void lanzarSondeo();
+}
+
+function lanzarSondeo(): Promise<void> {
+  if (sondeoEnCurso) return sondeoEnCurso;
+  sondeoEnCurso = fuente
+    .estado()
+    .then((valor) => {
+      estadoCacheado = { valor, expira: Date.now() + ESTADO_TTL_MS };
+    })
+    .catch((error: unknown) => {
+      estadoCacheado = {
+        valor: { modo: fuente.modo, conectado: false, detalle: (error as Error).message },
+        expira: Date.now() + ESTADO_TTL_MS,
+      };
+    })
+    .finally(() => {
+      sondeoEnCurso = null;
+    });
+  return sondeoEnCurso;
+}
+
+async function estadoOracle(): Promise<EstadoFuente & { comprobando?: boolean }> {
+  const fresco = estadoCacheado && estadoCacheado.expira > Date.now();
+  if (fresco) return estadoCacheado!.valor;
+
+  const sondeo = lanzarSondeo();
+
+  // Con un valor anterior a mano se devuelve al instante y el sondeo se refresca
+  // por detrás: solo la primera llamada de todas llega a esperar.
+  if (estadoCacheado) return estadoCacheado.valor;
+
+  await Promise.race([sondeo, new Promise((listo) => setTimeout(listo, ESTADO_ESPERA_MS))]);
+  return (
+    estadoCacheado?.valor ?? {
+      modo: fuente.modo,
+      conectado: false,
+      detalle: 'Comprobando la conexión…',
+      comprobando: true,
+    }
+  );
+}
 
 function validarEstadoTicket(estado: unknown): void {
   if (estado !== undefined && !(ESTADOS_TICKET as readonly unknown[]).includes(estado)) {
@@ -102,7 +164,7 @@ export function crearSoporteRouter(
     '/estado',
     h(async () => ({
       version: config.version,
-      oracle: await fuente.estado(),
+      oracle: await estadoOracle(),
       // Base registrada contra la que corren los diagnósticos, o null en modo demo.
       baseDiagnosticos: config.oracle.dbId,
       vigilancia: config.vigilancia.habilitada,

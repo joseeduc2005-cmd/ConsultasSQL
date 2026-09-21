@@ -13,6 +13,7 @@ import { aplicarEsquema, configurarPool, type Pool } from './knowledge/db.ts';
 import { sembrarSiVacio } from './knowledge/semillas.ts';
 import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
+import { precalentarEstadoOracle } from './rutas.ts';
 import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
 
 export { crearSoporteRouter } from './rutas.ts';
@@ -71,6 +72,9 @@ export async function iniciarSoporte({ obtenerPool, log, motor }: OpcionesSoport
   registrar(
     `✓ [soporte] Listo · fuente de diagnósticos: ${config.oracle.modo === 'demo' ? 'DEMOSTRACIÓN (datos ficticios)' : `Oracle ${config.oracle.conexion}`}`,
   );
+
+  // El sondeo de Oracle se adelanta al arranque para que la interfaz no espere.
+  precalentarEstadoOracle();
 
   if (config.vigilancia.habilitada) {
     iniciarVigilancia(fuente, (m) => registrar(`  ${m}`));

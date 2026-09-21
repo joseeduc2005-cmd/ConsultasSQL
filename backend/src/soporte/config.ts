@@ -93,6 +93,9 @@ export const config = {
     ...oracle,
     maxFilas: numero(process.env.SOPORTE_ORACLE_MAX_FILAS, 500),
     timeoutMs: numero(process.env.SOPORTE_ORACLE_TIMEOUT_MS, 20_000),
+    // Segundos para dar por perdido el intento de conexión. Sin esto, con Oracle
+    // inalcanzable el driver se queda esperando ~20 s y arrastra a /estado con él.
+    conectarTimeoutS: numero(process.env.SOPORTE_ORACLE_CONECTAR_TIMEOUT_S, 6),
   },
   reglas: {
     maxIntentosPin: numero(process.env.MAX_INTENTOS_PIN, 3),

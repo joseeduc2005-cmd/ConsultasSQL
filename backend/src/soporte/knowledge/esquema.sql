@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS soporte.tickets (
   ) STORED
 );
 
+-- Base de datos registrada contra la que se investiga el caso (id de
+-- multidb.databases.json). Es contexto de investigación: el ticket siempre se
+-- guarda aquí, en PostgreSQL; esto dice de qué base habla.
+-- Se añade aparte porque la tabla ya existe en instalaciones en marcha.
+ALTER TABLE soporte.tickets ADD COLUMN IF NOT EXISTS base_datos text;
+
 CREATE TABLE IF NOT EXISTS soporte.ticket_pasos (
   id             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ticket         text NOT NULL REFERENCES soporte.tickets (numero) ON DELETE CASCADE,

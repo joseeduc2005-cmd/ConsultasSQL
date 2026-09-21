@@ -1,5 +1,6 @@
 import type {
   Alerta,
+  BaseRegistrada,
   ConsultaBiblioteca,
   DiagnosticoResumen,
   EjecucionMonitor,
@@ -99,4 +100,19 @@ export const api = {
     solicitar<Alerta>(`/alertas/${id}`, { method: 'PATCH', body: json({ estado }) }),
 
   interpretar: (texto: string) => solicitar<Interpretacion>('/interpretar', { method: 'POST', body: json({ texto }) }),
+
+  /**
+   * Bases registradas en el motor de consultas. No cuelga de /api/soporte: es un
+   * endpoint de ConsultasSQL, y el módulo solo lo lee para ofrecerlas como contexto
+   * de investigación del ticket.
+   *
+   * `showAll` es necesario: por defecto el endpoint devuelve solo las conectadas y
+   * no primarias, y un ticket se registra igual aunque la base esté caída.
+   */
+  basesDatos: async (): Promise<BaseRegistrada[]> => {
+    const r = await fetch('/api/distributed/databases?showAll=true', { headers: cabecerasAuth() });
+    if (!r.ok) return [];
+    const cuerpo = await r.json().catch(() => null);
+    return Array.isArray(cuerpo?.databases) ? cuerpo.databases : [];
+  },
 };

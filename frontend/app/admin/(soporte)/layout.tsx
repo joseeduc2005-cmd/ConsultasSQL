@@ -7,6 +7,7 @@ import CabeceraPanel from '@/app/components/CabeceraPanel';
 import BarraLateralPanel from '@/app/components/BarraLateralPanel';
 import { withAuth } from '@/app/components/ProtectedRoute';
 import { useTheme } from '@/app/components/ThemeProvider';
+import { getPanelPreferenceKey } from '@/app/lib/admin/workflowUtils';
 import { AvisosProvider } from '@/soporte/components/ui/toast';
 
 /**
@@ -39,6 +40,35 @@ function LayoutSoporte({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { theme } = useTheme();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  // La barra se contrae también aquí, y comparte la preferencia con /admin:
+  // misma clave, para que el estado no cambie al moverse entre secciones.
+  const [barraContraida, setBarraContraida] = useState(false);
+  const clavePrefs = usuario ? getPanelPreferenceKey(usuario.username, usuario.role) : null;
+
+  useEffect(() => {
+    if (!clavePrefs) return;
+    try {
+      const guardado = localStorage.getItem(clavePrefs);
+      if (guardado) setBarraContraida(Boolean(JSON.parse(guardado)?.sidebarCollapsed));
+    } catch {
+      /* sin preferencias guardadas */
+    }
+  }, [clavePrefs]);
+
+  const alternarBarra = () => {
+    setBarraContraida((previo) => {
+      const siguiente = !previo;
+      if (clavePrefs) {
+        try {
+          const prefs = JSON.parse(localStorage.getItem(clavePrefs) || '{}');
+          localStorage.setItem(clavePrefs, JSON.stringify({ ...prefs, sidebarCollapsed: siguiente }));
+        } catch {
+          /* almacenamiento no disponible */
+        }
+      }
+      return siguiente;
+    });
+  };
 
   useEffect(() => {
     try {
@@ -81,8 +111,12 @@ function LayoutSoporte({ children }: { children: ReactNode }) {
             <div className="flex gap-3 h-full min-w-0">
               {/* La misma barra que en /admin: los accesos de soporte y el árbol de
                   categorías conviven, así que nada desaparece al cambiar de sección. */}
-              <aside className="glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-y-auto shrink-0 w-[240px] xl:w-[280px]">
-                <BarraLateralPanel />
+              <aside
+                className={`glass-panel glass-panel-hover rounded-2xl p-2 h-full min-h-0 overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out ${
+                  barraContraida ? 'w-[60px]' : 'w-[240px] xl:w-[280px]'
+                }`}
+              >
+                <BarraLateralPanel collapsed={barraContraida} onToggleCollapse={alternarBarra} />
               </aside>
 
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl h-full min-h-0 overflow-hidden">

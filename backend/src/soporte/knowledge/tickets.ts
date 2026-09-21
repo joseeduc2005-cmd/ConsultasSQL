@@ -20,6 +20,8 @@ export interface Ticket {
   observaciones: string | null;
   creado_en: string | null;
   resuelto_en: string | null;
+  /** Id de la base registrada contra la que se investiga (multidb.databases.json). */
+  base_datos: string | null;
   actualizado_en: string;
 }
 
@@ -46,12 +48,14 @@ export type PasoNuevo = Pick<PasoTicket, 'titulo'> &
 const CAMPOS_EDITABLES = [
   'titulo', 'descripcion', 'autor', 'sistema', 'modulo', 'categoria', 'prioridad', 'estado',
   'resultado', 'url_sir', 'causa_raiz', 'solucion', 'observaciones', 'creado_en', 'resuelto_en',
+  'base_datos',
 ] as const;
 
 /** Columnas del ticket sin el tsvector generado, que no se devuelve al cliente. */
 const COLUMNAS_TICKET = [
   'numero', 'titulo', 'descripcion', 'autor', 'sistema', 'modulo', 'categoria', 'prioridad', 'estado',
-  'resultado', 'url_sir', 'causa_raiz', 'solucion', 'observaciones', 'creado_en', 'resuelto_en', 'actualizado_en',
+  'resultado', 'url_sir', 'causa_raiz', 'solucion', 'observaciones', 'creado_en', 'resuelto_en',
+  'base_datos', 'actualizado_en',
 ] as const;
 
 const COLUMNAS = COLUMNAS_TICKET.join(', ');

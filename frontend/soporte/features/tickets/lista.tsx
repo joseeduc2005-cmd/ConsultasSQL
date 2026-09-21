@@ -158,8 +158,10 @@ export function PaginaTickets() {
 }
 
 function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => void }) {
-  const vacio = { numero: '', titulo: '', descripcion: '', sistema: 'Corresponsales', modulo: '', prioridad: '', autor: '', url_sir: '' };
+  const vacio = { numero: '', titulo: '', descripcion: '', sistema: 'Corresponsales', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
   const [datos, setDatos] = useState(vacio);
+  // Las bases registradas en el motor: sirven de contexto de investigación del caso.
+  const { data: bases } = useQuery({ queryKey: ['bases-datos'], queryFn: api.basesDatos, staleTime: 5 * 60_000 });
   const avisar = useAvisos();
   const qc = useQueryClient();
   const router = useRouter();
@@ -232,6 +234,23 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
             <option>Baja</option>
           </Select>
         </Campo>
+        <div className="sm:col-span-2">
+          <Campo
+            etiqueta="Base de datos a investigar"
+            htmlFor="nt-base"
+            ayuda="Contra qué base se consultará este caso. El ticket siempre se guarda en la base de conocimiento; esto solo indica de dónde se leen los datos."
+          >
+            <Select id="nt-base" value={datos.base_datos} onChange={set('base_datos')}>
+              <option value="">Sin definir</option>
+              {bases?.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label || b.id} · {b.type}
+                  {b.connected === false ? ' (sin conexión)' : ''}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+        </div>
         <Campo etiqueta="Autor" htmlFor="nt-autor">
           <Input id="nt-autor" value={datos.autor} onChange={set('autor')} placeholder="Nombre de quien registra" />
         </Campo>

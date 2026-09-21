@@ -14,7 +14,7 @@ import { Cargando, ErrorCarga, Vacio } from '@/soporte/components/ui/estados';
 import { Campo, Input, Select, Textarea } from '@/soporte/components/ui/form';
 import { useAvisos } from '@/soporte/components/ui/toast';
 import { api } from '@/soporte/lib/api';
-import { claves, usePlaybooks } from '@/soporte/lib/consultas';
+import { claves, useEstado, usePlaybooks } from '@/soporte/lib/consultas';
 import { ESTADO_TICKET, fechaCorta } from '@/soporte/lib/formato';
 import type { EstadoTicket, PasoTicket, TicketDetalle } from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
@@ -76,6 +76,9 @@ export function PaginaTicket() {
                 </Badge>
               </Dato>
               <Dato etiqueta="Prioridad">{t.prioridad ?? '—'}</Dato>
+              <Dato etiqueta="Base de datos">
+                {t.base_datos ? <span className="font-mono text-[12.5px]">{t.base_datos}</span> : '—'}
+              </Dato>
               <Dato etiqueta="Categoría">{t.categoria ?? '—'}</Dato>
               <Dato etiqueta="Autor">
                 <span className="inline-flex items-center gap-1.5">
@@ -88,7 +91,7 @@ export function PaginaTicket() {
             </CardContent>
           </Card>
 
-          <DiagnosticarDesdeTicket numero={t.numero} />
+          <DiagnosticarDesdeTicket numero={t.numero} base={t.base_datos} />
 
           <Card>
             <CardHeader titulo="Casos similares" />
@@ -158,8 +161,28 @@ function CambiarEstado({ ticket }: { ticket: TicketDetalle }) {
   );
 }
 
-function DiagnosticarDesdeTicket({ numero }: { numero: string }) {
+function DiagnosticarDesdeTicket({ numero, base }: { numero: string; base: string | null }) {
   const { data: playbooks } = usePlaybooks();
+  const { data: estado } = useEstado();
+
+  // Los cuatro diagnósticos tienen SQL escrito contra el esquema de Corresponsales:
+  // ofrecerlos en un ticket de otra base sería prometer algo que no funciona.
+  const baseDiagnosticos = estado?.baseDiagnosticos ?? null;
+  const otraBase = Boolean(base && baseDiagnosticos && base !== baseDiagnosticos);
+
+  if (otraBase) {
+    return (
+      <Card>
+        <CardHeader titulo="Diagnosticar" icono={<ScanSearch />} />
+        <p className="px-5 py-4 text-[13px] text-muted-foreground">
+          Este caso se investiga contra <span className="font-mono">{base}</span>, y los diagnósticos
+          automáticos están escritos contra <span className="font-mono">{baseDiagnosticos}</span>. Use la
+          Biblioteca SQL o el panel de consultas para esta base.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader titulo="Diagnosticar" descripcion="El resultado se puede registrar como paso de este ticket." icono={<ScanSearch />} />

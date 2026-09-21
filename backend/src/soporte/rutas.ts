@@ -53,6 +53,7 @@ const texto = (v: unknown): string | null => textoOpcional(v);
 const CAMPOS_TICKET = [
   'titulo', 'descripcion', 'autor', 'sistema', 'modulo', 'categoria', 'prioridad', 'estado',
   'resultado', 'url_sir', 'causa_raiz', 'solucion', 'observaciones', 'creado_en', 'resuelto_en',
+  'base_datos',
 ] as const;
 
 const ESTADOS_ALERTA: EstadoAlerta[] = ['abierta', 'atendida', 'resuelta'];
@@ -102,6 +103,8 @@ export function crearSoporteRouter(
     h(async () => ({
       version: config.version,
       oracle: await fuente.estado(),
+      // Base registrada contra la que corren los diagnósticos, o null en modo demo.
+      baseDiagnosticos: config.oracle.dbId,
       vigilancia: config.vigilancia.habilitada,
       reglas: config.reglas,
     })),

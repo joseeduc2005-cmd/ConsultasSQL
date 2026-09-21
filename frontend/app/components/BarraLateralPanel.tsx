@@ -1,5 +1,6 @@
 'use client';
 
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import NavegacionSoporte from './NavegacionSoporte';
@@ -48,6 +49,7 @@ export default function BarraLateralPanel({
   collapsed,
   onToggleCollapse,
   mostrarSoporte = true,
+  onNavegar,
 }: {
   articles?: KnowledgeArticle[];
   categories?: Categoria[];
@@ -59,6 +61,7 @@ export default function BarraLateralPanel({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   mostrarSoporte?: boolean;
+  onNavegar?: () => void;
 }) {
   const router = useRouter();
   const autonoma = articles === undefined;
@@ -90,23 +93,40 @@ export default function BarraLateralPanel({
   const grupos = categories ?? agruparCategorias(lista ?? []);
 
   return (
-    <>
-      {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} />}
-      <Sidebar
-        categories={grupos}
-        articles={lista}
-        onSelectArticle={
-          onSelectArticle ??
-          // Desde una pantalla de soporte, abrir un artículo devuelve al panel con él seleccionado.
-          ((a) => router.push(`/admin?articulo=${encodeURIComponent(a.id)}`))
-        }
-        onSelectCategory={onSelectCategory}
-        selectedArticle={selectedArticle}
-        selectedCategory={selectedCategory}
-        selectedSubcategory={selectedSubcategory}
-        collapsed={collapsed}
-        onToggleCollapse={onToggleCollapse}
-      />
-    </>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* La flecha de contraer manda sobre toda la barra, así que va en su propia
+          cabecera y no pegada a "Categorías", donde parecía contraer solo ese bloque. */}
+      <div className={`flex items-center px-1 pb-2 ${collapsed ? 'justify-center' : 'justify-end'}`}>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          title={collapsed ? 'Expandir panel' : 'Contraer panel'}
+          aria-label={collapsed ? 'Expandir panel' : 'Contraer panel'}
+          aria-expanded={!collapsed}
+          className="grid size-8 place-items-center rounded-lg text-(--ink-600) transition-colors hover:bg-white/70 hover:text-(--ink-900)"
+        >
+          {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}
+        {mostrarSoporte && !collapsed && <div className="mx-3 my-3 border-t border-(--line)" />}
+        <Sidebar
+          categories={grupos}
+          articles={lista}
+          onSelectArticle={
+            onSelectArticle ??
+            // Desde una pantalla de soporte, abrir un artículo devuelve al panel con él seleccionado.
+            ((a) => router.push(`/admin?articulo=${encodeURIComponent(a.id)}`))
+          }
+          onSelectCategory={onSelectCategory}
+          selectedArticle={selectedArticle}
+          selectedCategory={selectedCategory}
+          selectedSubcategory={selectedSubcategory}
+          collapsed={collapsed}
+        />
+      </div>
+    </div>
   );
 }

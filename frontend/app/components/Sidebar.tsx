@@ -50,22 +50,13 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export default function Sidebar({ categories, articles, onSelectCategory, onSelectArticle, selectedCategory, selectedSubcategory, selectedArticle, collapsed, onToggleCollapse }: SidebarProps) {
+export default function Sidebar({ categories, articles, onSelectCategory, onSelectArticle, selectedCategory, selectedSubcategory, selectedArticle, collapsed }: SidebarProps) {
   const { theme } = useTheme();
   const isLightTheme = theme === 'light';
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [localActiveCategory, setLocalActiveCategory] = useState(selectedCategory || '');
   const [localActiveSubcategory, setLocalActiveSubcategory] = useState(selectedSubcategory || '');
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const isCollapsed = collapsed ?? internalCollapsed;
-
-  const handleToggleCollapse = () => {
-    if (onToggleCollapse) {
-      onToggleCollapse();
-      return;
-    }
-    setInternalCollapsed((prev) => !prev);
-  };
+  const isCollapsed = collapsed ?? false;
 
   useEffect(() => {
     // Mostrar todas las categorías desplegadas por defecto para mayor visibilidad.
@@ -128,41 +119,30 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
   }));
 
   return (
-    <div className="w-full h-full overflow-hidden flex flex-col transition-all duration-200">
-      {/* Header */}
-      <div className={`p-4 border-b border-(--line) flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-        {!isCollapsed && <h2 className="text-sm font-bold text-(--ink-900) uppercase tracking-wide">Categorías</h2>}
-        <button
-          onClick={handleToggleCollapse}
-          className={`p-1 rounded-lg text-(--ink-700) transition-colors ${isLightTheme ? 'hover:bg-white/70 hover:text-(--ink-900)' : 'hover:bg-slate-800/70 hover:text-white'}`}
-          title={isCollapsed ? 'Expandir' : 'Contraer'}
-        >
-          {isCollapsed ? (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          )}
-        </button>
-      </div>
+    <div className="w-full flex flex-col transition-all duration-200">
+      {/* La flecha de contraer vive en la cabecera de la barra (BarraLateralPanel):
+          aquí solo va la etiqueta de sección, para que no parezca que contrae
+          únicamente las categorías. */}
+      {!isCollapsed && (
+        <p className="px-3 pt-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
+          Categorías
+        </p>
+      )}
 
       {/* Categorías */}
       {!isCollapsed && (
-        <div className="flex-1 min-h-0 px-2 py-3 space-y-1 overflow-y-scroll pr-1">
+        <div className="space-y-0.5 pb-2">
           {categories.map((category) => (
             <div key={category.categoria}>
               <button
                 onClick={() => toggleCategory(category.categoria)}
-                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between font-medium transition-all duration-150 text-sm ${
+                className={`w-full text-left px-3 h-9 rounded-lg flex items-center justify-between font-medium transition-colors duration-150 text-sm ${
                   localActiveCategory === category.categoria
                     ? (isLightTheme
                       ? 'bg-white text-(--ink-900) shadow-xs ring-1 ring-(--line)'
-                      : 'bg-[rgba(6,182,212,0.14)] text-cyan-100 shadow-xs ring-1 ring-[rgba(6,182,212,0.35)]')
+                      : 'bg-[rgba(6,182,212,0.14)] text-cyan-100 ring-1 ring-[rgba(6,182,212,0.3)]')
                     : (isLightTheme
-                      ? 'text-(--ink-800) hover:bg-white/75'
+                      ? 'text-(--ink-800) hover:bg-white/70'
                       : 'text-slate-300 hover:bg-[rgba(56,189,248,0.07)] hover:text-cyan-100')
                 }`}
               >
@@ -179,7 +159,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                 </svg>
               </button>
               {expandedCategories.has(category.categoria) && (
-                <div className="ml-2 mt-1 space-y-1 border-l-2 border-(--line) pl-2">
+                <div className="ml-3 mt-0.5 mb-1 space-y-0.5 border-l border-(--line) pl-2">
                   {articleMap
                     .find((c) => c.categoria === category.categoria)
                     ?.subcategorias.map((subgroup) => {
@@ -208,10 +188,10 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                               selectedArticle?.id === singleArticle.id
                                 ? (isLightTheme
-                                  ? 'bg-linear-to-r from-[#2363eb] to-[#1aa0c8] text-white font-semibold shadow-md ring-2 ring-[#b9d2ff]'
-                                  : 'bg-linear-to-r from-[#2363eb] to-[#0ea5e9] text-white font-semibold shadow-md ring-1 ring-cyan-400/50 shadow-cyan-500/20')
+                                  ? 'bg-white text-(--accent) font-semibold shadow-xs ring-1 ring-(--line)'
+                                  : 'bg-[rgba(56,189,248,0.14)] text-cyan-100 font-semibold ring-1 ring-[rgba(56,189,248,0.3)]')
                                 : (isLightTheme
-                                  ? 'text-(--ink-700) hover:bg-white/75 hover:text-(--ink-900)'
+                                  ? 'text-(--ink-700) hover:bg-white/70 hover:text-(--ink-900)'
                                   : 'text-slate-300 hover:bg-[rgba(56,189,248,0.08)] hover:text-slate-100')
                             }`}
                           >

@@ -28,7 +28,7 @@ import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
-import { diagnosticarTicket, publicarSolucion } from './solucion.ts';
+import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
@@ -449,15 +449,29 @@ export function crearSoporteRouter(
       const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
       if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
 
+      // Sin lista se publican todas: el selector de la pantalla siempre manda una,
+      // pero la API sigue sirviendo para publicar el diagnóstico entero de un tirón.
+      const cuerpo = (req.body ?? {}) as { correcciones?: unknown };
+      let elegidas: string[] | null = null;
+      if (Array.isArray(cuerpo.correcciones)) {
+        const disponibles = new Set(correccionesDelDiagnostico(resultado).map((c) => c.id));
+        elegidas = cuerpo.correcciones.map(String);
+        const ajenas = elegidas.filter((id) => !disponibles.has(id));
+        if (ajenas.length > 0) {
+          throw solicitudInvalida(`Este diagnóstico no propone la corrección «${ajenas[0]}».`);
+        }
+      }
+
       const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
       const publicado = await publicarSolucion(resultado, {
         sistema: ticket?.sistema ?? null,
         baseDatos: ticket?.base_datos ?? config.oracle.dbId,
         autorId: usuario.id,
         autorNombre: usuario.username,
+        correcciones: elegidas,
       });
-      registrar(publicado, 'solución publicada como artículo');
-      res.status(publicado.creado ? 201 : 200);
+      registrar(publicado, 'solución publicada como artículos');
+      res.status(publicado.articulo.creado ? 201 : 200);
       return publicado;
     }),
   );

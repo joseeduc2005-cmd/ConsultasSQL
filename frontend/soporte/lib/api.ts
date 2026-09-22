@@ -12,6 +12,7 @@ import type {
   PlaybookInfo,
   ResultadoDiagnostico,
   Resumen,
+  SolucionPublicada,
   Ticket,
   TicketDetalle,
   TicketListado,
@@ -96,8 +97,12 @@ export const api = {
     solicitar<ResultadoDiagnostico>(`/playbooks/${id}/ejecutar`, { method: 'POST', body: json({ entrada, ticket }) }),
   diagnosticos: (limite = 20) => solicitar<DiagnosticoResumen[]>(`/diagnosticos?limite=${limite}`),
   diagnostico: (id: number) => solicitar<ResultadoDiagnostico>(`/diagnosticos/${id}`),
-  publicarSolucion: (id: number) =>
-    solicitar<{ id: string; titulo: string; creado: boolean }>(`/diagnosticos/${id}/publicar`, { method: 'POST' }),
+  /** Sin `correcciones` se publican todas las que proponga el diagnóstico. */
+  publicarSolucion: (id: number, correcciones?: string[]) =>
+    solicitar<SolucionPublicada>(`/diagnosticos/${id}/publicar`, {
+      method: 'POST',
+      body: json({ correcciones }),
+    }),
   registrarDiagnostico: (id: number, ticket: string) =>
     solicitar<PasoTicket>(`/diagnosticos/${id}/registrar`, { method: 'POST', body: json({ ticket }) }),
 

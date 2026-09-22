@@ -151,6 +151,14 @@ export interface AccionSugerida {
   responsable: string;
   biblioteca?: string;
   sql?: string;
+  /** Id en el catalogo de correcciones: lo que el selector de publicacion ofrece marcar. */
+  correccion?: string;
+  parametros?: Record<string, string | number | null>;
+}
+
+export interface SolucionPublicada {
+  articulo: { id: string; titulo: string; creado: boolean };
+  scripts: { id: string; titulo: string; correccion: string; creado: boolean }[];
 }
 
 export interface Hallazgo {

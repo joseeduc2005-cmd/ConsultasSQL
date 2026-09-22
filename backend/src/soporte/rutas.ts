@@ -28,6 +28,7 @@ import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
+import { diagnosticarTicket, publicarSolucion } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
@@ -243,8 +244,11 @@ export function crearSoporteRouter(
         estado: (datos.estado as never) ?? 'abierto',
         creado_en: datos.creado_en ?? new Date().toISOString().slice(0, 10),
       });
+      // Se diagnostica al vuelo si el texto trae MAC, usuario o cédula. Nunca falla
+      // la creación por esto: `diagnosticarTicket` captura sus propios errores.
+      const autodiagnostico = await diagnosticarTicket(ticket);
       res.status(201);
-      return ticket;
+      return { ...ticket, autodiagnostico };
     }),
   );
 
@@ -415,6 +419,29 @@ export function crearSoporteRouter(
       });
       registrar(resultado, 'correcciones publicadas como artículos');
       return resultado;
+    }),
+  );
+
+  router.post(
+    '/diagnosticos/:id/publicar',
+    h(async (req, res) => {
+      const resultado = await obtenerDiagnostico(Number(req.params.id));
+      if (!resultado) throw noEncontrado('Diagnóstico no encontrado.');
+      if (resultado.hallazgos.length === 0) {
+        throw solicitudInvalida('Este diagnóstico no encontró nada que documentar como solución.');
+      }
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
+
+      const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
+      const publicado = await publicarSolucion(resultado, {
+        sistema: ticket?.sistema ?? null,
+        autorId: usuario.id,
+        autorNombre: usuario.username,
+      });
+      registrar(publicado, 'solución publicada como artículo');
+      res.status(publicado.creado ? 201 : 200);
+      return publicado;
     }),
   );
 

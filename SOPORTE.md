@@ -20,6 +20,8 @@ Esto documenta **qué se movió, qué cambió y qué falta**.
 | Acceso restringido a rol admin | **Hecho** — dos barreras, ver sección 12 |
 | Puente Biblioteca → motor de consultas | **Hecho** — ver sección 16 |
 | Correcciones publicadas como artículos | **Hecho** — ver sección 20 |
+| Diagnóstico al crear el ticket y publicación de la solución | **Hecho** — ver sección 21 |
+| Oracle de pruebas en Docker | **Hecho** — ver sección 22 |
 | Interpretar mensaje (pantalla y `/api/interpretar`) | **Pendiente** — depende del modelo de lenguaje |
 
 ---
@@ -637,3 +639,64 @@ La regla del módulo de soporte no cambia en ningún caso: **los diagnósticos n
 escrituras**. Leen con su propio pool y su usuario restringido. Si algún día se enciende el
 botón, la ejecución iría por el camino de ConsultasSQL, con su usuario y su auditoría: son
 dos conexiones distintas, no una con permisos mezclados.
+
+---
+
+## 21. Del ticket a la solución publicada
+
+Al crear un ticket, el backend saca MAC, usuario o cédula de su título y descripción
+—con reglas, **sin modelo de lenguaje**—, elige el diagnóstico que corresponde y lo
+ejecuta, dejando el resultado como primer paso de investigación.
+
+`soporte/interpreter/` es la parte del intérprete de ticket v2.0 que no depende de IA:
+`extraer.ts` (identificadores) y `reglas.ts` (clasificación). El modelo sigue fuera.
+
+La respuesta de `POST /tickets` incluye qué pasó:
+
+```json
+{ "ejecutado": true, "playbook": "acceso-corresponsal", "diagnosticoId": 8, "veredicto": "problema" }
+{ "ejecutado": false, "motivo": "El ticket no trae MAC, usuario ni cédula con los que investigar." }
+```
+
+**El backend no inventa SQL.** Reconoce el problema entre los que los diagnósticos saben
+comprobar y produce la corrección de su catálogo con los valores del caso. Ante un caso
+nuevo devuelve «sin hallazgos» y sigue haciendo falta una persona.
+
+### Publicar la solución
+
+`POST /diagnosticos/:id/publicar` convierte el diagnóstico en un artículo bajo
+`<sistema> / Soluciones`: qué se revisó paso a paso, qué se encontró con su severidad, y
+el SQL ya resuelto con el enlace a la plantilla reutilizable. En la pantalla del
+diagnóstico es el botón **Publicar como solución**.
+
+Es a petición y no automático: un diagnóstico sin hallazgos no merece artículo, y
+publicarlos todos llenaría el árbol. Rechaza publicar si no hubo hallazgos, y republicar
+el mismo caso lo actualiza en vez de duplicarlo.
+
+---
+
+## 22. Oracle de pruebas
+
+`backend/src/soporte/oracle/pruebas.sql` levanta el esquema de Corresponsales en una
+Oracle local, con los mismos escenarios del modo demostración: MAC duplicada, usuario
+bloqueado por PIN, sucursal desincronizada y transacciones sin movimiento de tendero.
+
+```bash
+docker run -d --name oracle-pruebas -p 1521:1521   -e ORACLE_PASSWORD=admin123 -e APP_USER=testuser -e APP_USER_PASSWORD=testpass123   gvenzl/oracle-free:23-slim
+# ~3-5 min hasta "DATABASE IS READY TO USE"
+docker cp backend/src/soporte/oracle/pruebas.sql oracle-pruebas:/tmp/
+docker exec oracle-pruebas sqlplus -S sys/admin123@localhost/FREEPDB1 as sysdba @/tmp/pruebas.sql
+```
+
+Luego se apunta el módulo ahí:
+
+```bash
+cd backend && SOPORTE_ORACLE_DB_ID=oracle_local node src/app.js
+```
+
+En Oracle un esquema es un usuario, así que el script crea `CORRESPONSALES`, `FISJA` y
+`JST_PERSONAS` y concede `SELECT` a `TESTUSER`, que es con el que se conecta el módulo.
+Es idempotente.
+
+Verificado contra él: los **cuatro diagnósticos** devuelven veredicto correcto y los
+**cinco monitores** detectan su hallazgo.

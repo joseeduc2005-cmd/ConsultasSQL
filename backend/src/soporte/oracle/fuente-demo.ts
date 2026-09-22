@@ -115,6 +115,13 @@ const enRango = (t: (typeof TRANSACCIONES)[number], p: Parametros) =>
 
 const RESOLVEDORES: Record<NombreConsulta, (p: Parametros) => Fila[]> = {
   ping: () => [{ ok: 1 }],
+  // El perfil de la poblacion sana necesita volumen real: con cinco usuarios
+  // ficticios cualquier moda seria ruido. En demostracion no se explora.
+  perfilUsrEstado: () => [],
+  perfilUsrIntentos: () => [],
+  perfilUsrIntentosPin: () => [],
+  perfilUsrIsClaveTemporal: () => [],
+  perfilUsrIsPinTemporal: () => [],
   usuarioPorUsuario: (p) => USUARIOS.filter((u) => u.usr_usuario === p.usuario),
   usuarioPorCedula: (p) => USUARIOS.filter((u) => u.usr_cedula === p.cedula),
   usuariosPorMac: (p) =>

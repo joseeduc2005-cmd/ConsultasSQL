@@ -17,6 +17,33 @@ export interface ConsultaCatalogo {
 const COLUMNAS_USUARIO = `u.usr_codigo, u.usr_usuario, u.usr_cedula, u.usr_estado, u.usr_intentos, u.usr_intentos_pin,
        u.usr_is_clave_temporal, u.usr_is_pin_temporal, u.codigo_sucursal`;
 
+/**
+ * Consulta que resume con que valor opera una columna entre los usuarios SANOS:
+ * los que hicieron al menos una transaccion en los ultimos `:dias` dias.
+ *
+ * El nombre de la columna lo pone el codigo (nunca la entrada de una persona), asi
+ * el conjunto de sentencias sigue siendo finito y revisable como el resto del
+ * catalogo. Devuelve los valores mas frecuentes con su peso sobre el total.
+ */
+function perfilSano(columna: string, etiqueta: string): ConsultaCatalogo {
+  return {
+    descripcion: `Con que ${etiqueta} operan los usuarios activos`,
+    sql: `SELECT valor, veces, total FROM (
+  SELECT u.${columna} AS valor, COUNT(*) AS veces, SUM(COUNT(*)) OVER () AS total
+  FROM corresponsales.usuario u
+  WHERE EXISTS (
+    SELECT 1
+    FROM corresponsales.usuario_pos up
+    JOIN corresponsales.transaccion t ON t.trans_pos = up.up_pos
+    WHERE up.up_usuario = u.usr_codigo
+      AND t.trans_fecha >= SYSDATE - :dias
+  )
+  GROUP BY u.${columna}
+  ORDER BY COUNT(*) DESC
+) WHERE ROWNUM <= 5`,
+  };
+}
+
 export const CATALOGO = {
   ping: {
     descripcion: 'Verificar la conexión',
@@ -180,6 +207,15 @@ ORDER BY total DESC`,
        (SELECT COUNT(*) FROM corresponsales.reverso WHERE rev_transaccion IS NULL) AS reverso_nulos
 FROM dual`,
   },
+
+  // --- Perfil de la poblacion sana ------------------------------------------
+  // Con que valor operan los usuarios que SI estan funcionando. Es lo que permite
+  // senalar un dato raro sin que nadie haya escrito una regla para esa columna.
+  perfilUsrEstado: perfilSano('usr_estado', 'estado del usuario'),
+  perfilUsrIntentos: perfilSano('usr_intentos', 'intentos fallidos de clave'),
+  perfilUsrIntentosPin: perfilSano('usr_intentos_pin', 'intentos fallidos de PIN'),
+  perfilUsrIsClaveTemporal: perfilSano('usr_is_clave_temporal', 'marca de clave temporal'),
+  perfilUsrIsPinTemporal: perfilSano('usr_is_pin_temporal', 'marca de PIN temporal'),
 } satisfies Record<string, ConsultaCatalogo>;
 
 export type NombreConsulta = keyof typeof CATALOGO;

@@ -16,6 +16,7 @@
  * Ante un caso nuevo devuelve «sin hallazgos» y sigue haciendo falta una persona.
  */
 import { CORRECCIONES, type Correccion } from './correcciones.ts';
+import { explorarDesdeEntrada, type PropuestaExploracion, type ResultadoExploracion } from './exploracion.ts';
 import { extraerIdentificadores } from './interpreter/extraer.ts';
 import { clasificarConReglas } from './interpreter/reglas.ts';
 import { ejecutar, fila } from './knowledge/db.ts';
@@ -54,29 +55,63 @@ export interface ResultadoAutodiagnostico {
   veredicto?: string;
   /** El diagnóstico completo, para mostrarlo en pantalla sin pedirlo otra vez. */
   resultado?: ResultadoDiagnostico;
+  /**
+   * Lo que sale de comparar al usuario con los que sí están operando. Corre siempre,
+   * también —sobre todo— cuando ningún playbook reconoce el caso.
+   */
+  exploracion?: ResultadoExploracion;
+}
+
+/** Identificadores del texto, sin filtrar por los campos de ningún playbook. */
+function identificadoresDelTexto(texto: string): Record<string, string> {
+  const ids = extraerIdentificadores(texto);
+  return {
+    ...(ids.usuarios[0] ? { usuario: ids.usuarios[0] } : {}),
+    ...(ids.cedulas[0] ? { cedula: ids.cedulas[0] } : {}),
+    ...(ids.macs[0] ? { mac: ids.macs[0] } : {}),
+  };
 }
 
 /**
  * Diagnostica un ticket a partir de su título y descripción.
  *
- * Nunca lanza: el ticket sigue existiendo igual aunque el diagnóstico falle o no aplique.
+ * Dos capas: primero los playbooks, que reconocen los problemas que alguien escribió
+ * como reglas; después la exploración, que compara contra la población sana y sirve
+ * justo para lo que las reglas no cubren. La segunda corre aunque la primera no
+ * aplique, que es el caso de un problema nuevo.
+ *
+ * Nunca lanza: el ticket sigue existiendo igual aunque el diagnóstico falle.
  */
 export async function diagnosticarTicket(ticket: {
   numero: string;
   titulo: string;
   descripcion?: string | null;
 }): Promise<ResultadoAutodiagnostico> {
+  const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;
+  const identificadores = identificadoresDelTexto(texto);
+  const tieneDatos = Object.keys(identificadores).length > 0;
+  const exploracion = tieneDatos
+    ? await explorarDesdeEntrada(fuente, identificadores)
+    : { explorado: false, motivo: 'El ticket no trae MAC, usuario ni cédula con los que investigar.' };
+
   try {
-    const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;
+    // Cuando la vía de los playbooks no llega a ninguna parte pero la exploración sí
+    // encontró algo, eso se guarda como diagnóstico: es el escenario del problema
+    // nuevo, y sin número no habría a qué colgar la publicación.
+    const sinPlaybook = async (motivo: string): Promise<ResultadoAutodiagnostico> =>
+      exploracion.propuesta
+        ? await registrarExploracion(ticket, identificadores, exploracion)
+        : { ejecutado: false, motivo, exploracion };
+
     const clasificacion = clasificarConReglas(texto);
-    if (!clasificacion.playbook) return { ejecutado: false, motivo: 'El texto no apunta a ningún diagnóstico conocido.' };
+    if (!clasificacion.playbook) return await sinPlaybook('El texto no apunta a ningún diagnóstico conocido.');
 
     const playbook = obtenerPlaybook(clasificacion.playbook.id);
-    if (!playbook) return { ejecutado: false, motivo: 'Diagnóstico no encontrado.' };
+    if (!playbook) return await sinPlaybook('Diagnóstico no encontrado.');
 
     const entrada = entradaDesdeTexto(playbook.id, texto);
     if (!entrada) {
-      return { ejecutado: false, motivo: 'El ticket no trae MAC, usuario ni cédula con los que investigar.' };
+      return await sinPlaybook('El ticket no trae MAC, usuario ni cédula con los que investigar.');
     }
 
     const validada = validarEntrada(playbook, entrada);
@@ -98,10 +133,69 @@ export async function diagnosticarTicket(ticket: {
       diagnosticoId: id,
       veredicto: resultado.veredicto,
       resultado: { ...resultado, id, ticket: ticket.numero },
+      exploracion,
     };
   } catch (error) {
-    return { ejecutado: false, motivo: (error as Error).message };
+    return { ejecutado: false, motivo: (error as Error).message, exploracion };
   }
+}
+
+/**
+ * Guarda como diagnóstico lo que encontró la exploración cuando ningún playbook
+ * reconoció el caso.
+ *
+ * Sin esto el problema nuevo se quedaba en pantalla y sin número: no había
+ * diagnóstico al que colgar la publicación, que es justo lo que hace falta para que
+ * la corrección termine siendo un artículo de categorías.
+ */
+async function registrarExploracion(
+  ticket: { numero: string },
+  entrada: Record<string, string>,
+  exploracion: ResultadoExploracion,
+): Promise<ResultadoAutodiagnostico> {
+  const p = exploracion.propuesta!;
+  const inicio = new Date().toISOString();
+  const detalle = p.anomalias
+    .map((a) => `${a.columna}: tiene ${a.valorActual}, y el ${Math.round(a.cuota * 100)} % de los que operan tiene ${a.valorSano}.`)
+    .join(SALTO);
+
+  const resultado: ResultadoDiagnostico = {
+    playbook: 'exploracion',
+    nombrePlaybook: 'Exploración de datos',
+    entrada,
+    veredicto: 'problema',
+    resumen: p.resumen,
+    pasos: [],
+    hallazgos: [
+      {
+        severidad: 'media',
+        titulo: 'Diferencias con los usuarios que están operando',
+        detalle: `${detalle}${SALTO}${SALTO}Comparado contra ${p.poblacion} usuarios con transacciones en los últimos ${p.dias} días. Ningún diagnóstico del catálogo reconoció este caso.`,
+      },
+    ],
+    origenDatos: fuente.modo,
+    inicio,
+    duracionMs: 0,
+  };
+
+  const id = await guardarDiagnostico(resultado, ticket.numero);
+  await agregarPaso(ticket.numero, {
+    titulo: 'Exploración: diferencias con los usuarios que operan',
+    resultado: detalle,
+    conclusion: p.resumen,
+    evidencia: `Sin diagnóstico conocido para este caso. Comparado contra ${p.poblacion} usuarios activos.`,
+    origen: 'diagnostico',
+    diagnostico_id: id,
+  });
+
+  return {
+    ejecutado: true,
+    playbook: 'exploracion',
+    diagnosticoId: id,
+    veredicto: 'problema',
+    resultado: { ...resultado, id, ticket: ticket.numero },
+    exploracion,
+  };
 }
 
 // ─── Correcciones que propone un diagnóstico ─────────────────────────────────
@@ -234,6 +328,47 @@ function contenidoDeCorreccion(c: Correccion, d: CorreccionDisponible, numeroTic
     .join(SALTO);
 }
 
+/**
+ * Artículo de una corrección que salió de la exploración, no del catálogo aprobado.
+ *
+ * Se marca como tal a propósito: nadie revisó esta sentencia antes de que el sistema
+ * la redactara, y quien la vaya a ejecutar tiene que saberlo.
+ */
+function contenidoDeExploracion(p: PropuestaExploracion, numeroTicket: string | null): string {
+  const filas = p.anomalias.map(
+    (a) => `| ${a.columna} | ${a.valorActual} | ${a.valorSano} | ${Math.round(a.cuota * 100)} % |`,
+  );
+
+  return [
+    '# Corrección propuesta por exploración',
+    '',
+    numeroTicket ? `Caso del ticket **${numeroTicket}**.` : '',
+    '',
+    `> **Esta sentencia no viene del catálogo de correcciones aprobadas.** La redactó el sistema comparando ` +
+      `este usuario contra los ${p.poblacion} que sí operaron en los últimos ${p.dias} días. Confírmela antes de aplicarla.`,
+    '',
+    p.resumen,
+    '',
+    '## En qué se diferencia de los que operan',
+    '',
+    '| Columna | Tiene | Lo normal | Cuota de la población |',
+    '| --- | --- | --- | --- |',
+    ...filas,
+    '',
+    `Confianza: **${Math.round(p.confianza * 100)} %** — es la cuota más floja de las columnas incluidas.`,
+    '',
+    '## Sentencia',
+    '',
+    'Una sola, porque todas las columnas viven en la misma fila. Afecta a un único registro, por clave primaria.',
+    '',
+    '```sql',
+    p.plantilla,
+    '```',
+  ]
+    .filter((l) => l !== '')
+    .join(SALTO);
+}
+
 /** Artículo que cuenta el caso: qué se revisó, qué se encontró y qué correcciones salieron. */
 function contenidoDeSolucion(
   r: ResultadoDiagnostico,
@@ -313,6 +448,8 @@ export async function publicarSolucion(
     autorNombre: string;
     /** Ids de las correcciones elegidas. Sin indicar, se publican todas. */
     correcciones?: string[] | null;
+    /** Propuesta de la exploración, si quien revisó decidió publicarla también. */
+    exploracion?: PropuestaExploracion | null;
   },
 ): Promise<SolucionPublicada> {
   const numeroTicket = r.ticket ?? null;
@@ -349,6 +486,34 @@ export async function publicarSolucion(
       etiquetas: ['solucion', 'correccion', 'soporte', r.playbook, numeroTicket ?? 'sin-ticket'].filter(Boolean),
     });
     scripts.push({ id: guardado.id, titulo, correccion: c.id, creado: guardado.creado });
+  }
+
+  if (opciones.exploracion) {
+    const p = opciones.exploracion;
+    const titulo = numeroTicket
+      ? `Solución ${numeroTicket} · Corrección propuesta por exploración`
+      : 'Corrección propuesta por exploración';
+    const guardado = await guardarArticulo({
+      ...autor,
+      titulo,
+      contenido: contenidoDeExploracion(p, numeroTicket),
+      descripcion: p.resumen,
+      categoria,
+      subcategoria: 'Soluciones',
+      tipo: 'script',
+      script: { sql: p.plantilla, databaseId: baseDatos },
+      campos: [
+        {
+          tipo: 'number',
+          nombre: p.clave.campo,
+          etiqueta: p.clave.etiqueta,
+          requerido: true,
+          placeholder: String(p.clave.valor),
+        },
+      ],
+      etiquetas: ['solucion', 'exploracion', 'soporte', r.playbook, numeroTicket ?? 'sin-ticket'].filter(Boolean),
+    });
+    scripts.push({ id: guardado.id, titulo, correccion: 'exploracion', creado: guardado.creado });
   }
 
   const tituloCaso = numeroTicket

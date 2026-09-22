@@ -17,7 +17,13 @@ import { useAvisos } from '@/soporte/components/ui/toast';
 import { api } from '@/soporte/lib/api';
 import { claves, useEstado, usePlaybooks } from '@/soporte/lib/consultas';
 import { ESTADO_TICKET, fechaCorta } from '@/soporte/lib/formato';
-import type { EstadoTicket, PasoTicket, ResultadoDiagnostico, TicketDetalle } from '@/soporte/lib/types';
+import type {
+  EstadoTicket,
+  PasoTicket,
+  ResultadoDiagnostico,
+  ResultadoExploracion,
+  TicketDetalle,
+} from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
 
 export function PaginaTicket() {
@@ -205,7 +211,12 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
   const [nuevo, setNuevo] = useState(false);
   const qc = useQueryClient();
   const avisar = useAvisos();
-  const [revision, setRevision] = useState<{ ejecutado: boolean; motivo?: string; resultado?: ResultadoDiagnostico } | null>(null);
+  const [revision, setRevision] = useState<{
+    ejecutado: boolean;
+    motivo?: string;
+    resultado?: ResultadoDiagnostico;
+    exploracion?: ResultadoExploracion;
+  } | null>(null);
 
   // Un solo botón: el backend deduce qué comprobar del texto del ticket, lo ejecuta
   // y deja el paso registrado. El resultado se muestra aquí mismo.
@@ -248,7 +259,7 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
       )}
       {revision?.resultado && (
         <div className="border-b px-5 pb-5">
-          <ResultadoDiagnosticoVista resultado={revision.resultado} />
+          <ResultadoDiagnosticoVista resultado={revision.resultado} exploracion={revision.exploracion} />
         </div>
       )}
 

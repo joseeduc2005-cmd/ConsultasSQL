@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   TriangleAlert,
   BookPlus,
+  Sparkle,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -30,6 +31,8 @@ import type {
   Hallazgo,
   PasoDiagnostico,
   ResultadoDiagnostico,
+  PropuestaExploracion,
+  ResultadoExploracion,
   Severidad,
   SolucionPublicada,
 } from '@/soporte/lib/types';
@@ -66,7 +69,13 @@ function textoResumen(r: ResultadoDiagnostico): string {
   return lineas.join('\n');
 }
 
-export function ResultadoDiagnosticoVista({ resultado }: { resultado: ResultadoDiagnostico }) {
+export function ResultadoDiagnosticoVista({
+  resultado,
+  exploracion,
+}: {
+  resultado: ResultadoDiagnostico;
+  exploracion?: ResultadoExploracion;
+}) {
   const { copiado, copiar } = useCopiar();
   const v = VEREDICTO[resultado.veredicto];
   const Icono = resultado.veredicto === 'problema' ? CircleAlert : resultado.veredicto === 'incompleto' ? TriangleAlert : CircleCheck;
@@ -102,7 +111,7 @@ export function ResultadoDiagnosticoVista({ resultado }: { resultado: ResultadoD
               {copiado ? 'Copiado' : 'Copiar resumen'}
             </Button>
             {resultado.id !== undefined && resultado.hallazgos.length > 0 && (
-              <PublicarSolucion resultado={resultado} />
+              <PublicarSolucion resultado={resultado} exploracion={exploracion?.propuesta} />
             )}
             {resultado.id !== undefined && <RegistrarEnTicket diagnosticoId={resultado.id} ticketActual={resultado.ticket} />}
           </div>
@@ -125,6 +134,8 @@ export function ResultadoDiagnosticoVista({ resultado }: { resultado: ResultadoD
           </span>
         </div>
       </Card>
+
+      {exploracion?.propuesta && <PropuestaExploracionVista propuesta={exploracion.propuesta} />}
 
       {resultado.hallazgos.length > 0 && (
         <section className="space-y-3">
@@ -263,6 +274,81 @@ function PasoFila({ paso, ultimo }: { paso: PasoDiagnostico; ultimo: boolean }) 
   );
 }
 
+/**
+ * La propuesta que sale de comparar al usuario contra los que si estan operando.
+ *
+ * Va arriba de los hallazgos a proposito: cuando existe, es lo primero que hay que
+ * mirar, y cuando ningun playbook reconocio el caso es lo unico que hay.
+ *
+ * Es una sola sentencia aunque las diferencias sean varias, porque todas las columnas
+ * viven en la misma fila. Eso es lo que evita entregar cinco SQL para probar de uno
+ * en uno.
+ */
+export function PropuestaExploracionVista({ propuesta: p }: { propuesta: PropuestaExploracion }) {
+  const { copiado, copiar } = useCopiar();
+  const porcentaje = Math.round(p.confianza * 100);
+  const tono = porcentaje >= 90 ? 'success' : porcentaje >= 75 ? 'warning' : 'danger';
+
+  return (
+    <Card className="overflow-hidden border-primary/30">
+      <div className="flex flex-wrap items-start gap-4 bg-primary-soft/40 px-5 py-4">
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-white [&_svg]:size-5">
+          <Sparkle />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tono="primary">Propuesta del sistema</Badge>
+            <Badge tono={tono} punto>
+              {porcentaje} % de confianza
+            </Badge>
+          </div>
+          <p className="mt-1.5 text-[15px] font-semibold">{p.resumen}</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+            Comparado contra {p.poblacion} usuarios que operaron en los ultimos {p.dias} dias.
+          </p>
+        </div>
+        <Button variante="fantasma" tamano="sm" onClick={() => copiar(p.sql)}>
+          <Copy />
+          {copiado ? 'Copiado' : 'Copiar SQL'}
+        </Button>
+      </div>
+
+      <div className="space-y-4 px-5 py-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="text-[11.5px] tracking-wide text-muted-foreground uppercase">
+                <th className="pb-1.5 font-medium">Columna</th>
+                <th className="pb-1.5 font-medium">Tiene</th>
+                <th className="pb-1.5 font-medium">Lo normal</th>
+                <th className="pb-1.5 font-medium">Cuota</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {p.anomalias.map((a) => (
+                <tr key={a.columna}>
+                  <td className="py-1.5 font-mono text-[12.5px]">{a.columna}</td>
+                  <td className="py-1.5 font-mono text-danger">{a.valorActual}</td>
+                  <td className="py-1.5 font-mono text-success">{a.valorSano}</td>
+                  <td className="tabular py-1.5 text-muted-foreground">{Math.round(a.cuota * 100)} %</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <CodeBlock codigo={p.sql} etiqueta="Correccion propuesta" tono="peligro" />
+
+        <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+          Esta sentencia no viene del catalogo de correcciones aprobadas: la redacto el sistema comparando este caso
+          con la poblacion. Afecta a una sola fila, por clave primaria. Confirmela antes de aplicarla; publicarla la
+          deja lista en categorias, no la ejecuta.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 interface CorreccionElegible {
   id: string;
   descripcion: string;
@@ -298,33 +384,45 @@ function correccionesElegibles(r: ResultadoDiagnostico): CorreccionElegible[] {
 }
 
 /**
- * Publica el diagnóstico en el árbol de categorías: un artículo con el caso y uno
- * ejecutable por cada corrección que se marque.
+ * Publica el diagnostico en el arbol de categorias: un articulo con el caso y uno
+ * ejecutable por cada correccion que se marque.
  *
- * El selector existe porque un diagnóstico puede proponer varias correcciones y no
- * todas valen para el caso — quien atiende decide cuáles se publican. Marcarlas
- * todas no las ejecuta: solo las deja listas con su formulario.
+ * El selector existe porque un diagnostico puede proponer varias correcciones y no
+ * todas valen para el caso. La propuesta de la exploracion va aparte y marcada,
+ * porque nadie la reviso antes de que el sistema la redactara.
+ *
+ * Marcar no ejecuta nada: solo deja los articulos listos con su formulario.
  */
-function PublicarSolucion({ resultado }: { resultado: ResultadoDiagnostico }) {
+function PublicarSolucion({
+  resultado,
+  exploracion,
+}: {
+  resultado: ResultadoDiagnostico;
+  exploracion?: PropuestaExploracion;
+}) {
   const avisar = useAvisos();
   const diagnosticoId = resultado.id!;
   const elegibles = useMemo(() => correccionesElegibles(resultado), [resultado]);
   const [abierto, setAbierto] = useState(false);
   const [marcadas, setMarcadas] = useState<string[]>(() => elegibles.map((c) => c.id));
+  // Si el catalogo cubre el caso, sus correcciones mandan y la explorada queda
+  // desmarcada. Si no cubre nada, la explorada es lo unico que hay.
+  const [conExploracion, setConExploracion] = useState(() => elegibles.length === 0);
   const [publicado, setPublicado] = useState<SolucionPublicada | null>(null);
 
   const publicar = useMutation({
-    mutationFn: (ids: string[] | undefined) => api.publicarSolucion(diagnosticoId, ids),
+    mutationFn: (v: { ids?: string[]; exploracion?: boolean }) =>
+      api.publicarSolucion(diagnosticoId, v.ids, v.exploracion),
     onSuccess: (r) => {
       setPublicado(r);
       setAbierto(false);
       const n = r.scripts.length;
       avisar(
         'exito',
-        r.articulo.creado ? 'Solución publicada' : 'Solución actualizada',
+        r.articulo.creado ? 'Solucion publicada' : 'Solucion actualizada',
         n === 0
           ? r.articulo.titulo
-          : `${r.articulo.titulo} · ${n} corrección${n === 1 ? '' : 'es'} lista${n === 1 ? '' : 's'} para ejecutar`,
+          : `${r.articulo.titulo} · ${n} correccion${n === 1 ? '' : 'es'} lista${n === 1 ? '' : 's'} para ejecutar`,
       );
     },
     onError: (e) => avisar('error', 'No se pudo publicar', (e as Error).message),
@@ -336,53 +434,90 @@ function PublicarSolucion({ resultado }: { resultado: ResultadoDiagnostico }) {
         href={`/admin?articulo=${encodeURIComponent(publicado.articulo.id)}`}
         className="text-[13px] font-medium text-primary hover:underline"
       >
-        Ver en categorías
+        Ver en categorias
       </Link>
     );
   }
 
-  // Sin correcciones de escritura no hay nada que elegir: se publica el caso y ya.
-  if (elegibles.length === 0) {
+  // Sin nada que elegir se publica el caso y ya.
+  if (elegibles.length === 0 && !exploracion) {
     return (
-      <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate(undefined)} cargando={publicar.isPending}>
+      <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate({})} cargando={publicar.isPending}>
         <BookPlus />
-        Publicar como solución
+        Publicar como solucion
       </Button>
     );
   }
 
   const alternar = (id: string) =>
     setMarcadas((previas) => (previas.includes(id) ? previas.filter((x) => x !== id) : [...previas, id]));
+  const total = marcadas.length + (conExploracion ? 1 : 0);
 
   return (
     <>
       <Button variante="fantasma" tamano="sm" onClick={() => setAbierto(true)}>
         <BookPlus />
-        Publicar como solución
+        Publicar como solucion
       </Button>
 
       <Dialog
         abierto={abierto}
         onCerrar={() => setAbierto(false)}
-        titulo="Publicar la solución"
-        descripcion={`El diagnóstico propone ${elegibles.length} corrección${elegibles.length === 1 ? '' : 'es'}. Marque las que valen para este caso: cada una queda como artículo ejecutable en categorías.`}
+        titulo="Publicar la solucion"
+        descripcion="Marque las correcciones que valen para este caso: cada una queda como articulo ejecutable en categorias."
         ancho="max-w-2xl"
         pie={
           <>
             <Button variante="fantasma" tamano="sm" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
-            <Button tamano="sm" onClick={() => publicar.mutate(marcadas)} cargando={publicar.isPending}>
+            <Button
+              tamano="sm"
+              onClick={() => publicar.mutate({ ids: marcadas, exploracion: conExploracion })}
+              cargando={publicar.isPending}
+            >
               <BookPlus />
-              Publicar {marcadas.length > 0 && `(${marcadas.length})`}
+              Publicar {total > 0 && `(${total})`}
             </Button>
           </>
         }
       >
         <ul className="space-y-2">
+          {exploracion && (
+            <li>
+              <label
+                className={cn(
+                  'flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors',
+                  conExploracion ? 'border-primary/40 bg-primary-soft/30' : 'hover:bg-surface-muted/50',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={conExploracion}
+                  onChange={() => setConExploracion((v) => !v)}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13.5px] font-medium">{exploracion.resumen}</span>
+                    <Badge tono="primary">
+                      <Sparkle className="size-3.5" />
+                      Propuesta del sistema
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">
+                    {Math.round(exploracion.confianza * 100)} % de confianza · corrige{' '}
+                    {exploracion.anomalias.length} columna{exploracion.anomalias.length === 1 ? '' : 's'} en una sola
+                    sentencia. No viene del catalogo aprobado.
+                  </p>
+                </div>
+              </label>
+            </li>
+          )}
+
           {elegibles.map((c) => {
             const marcada = marcadas.includes(c.id);
-            const s = SEVERIDAD[c.severidad];
+            const sev = SEVERIDAD[c.severidad];
             return (
               <li key={c.id}>
                 <label
@@ -400,8 +535,8 @@ function PublicarSolucion({ resultado }: { resultado: ResultadoDiagnostico }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[13.5px] font-medium">{c.descripcion}</span>
-                      <Badge tono={s.tono} punto>
-                        {s.etiqueta}
+                      <Badge tono={sev.tono} punto>
+                        {sev.etiqueta}
                       </Badge>
                     </div>
                     <p className="mt-1 text-[12.5px] text-muted-foreground">
@@ -421,8 +556,8 @@ function PublicarSolucion({ resultado }: { resultado: ResultadoDiagnostico }) {
           })}
         </ul>
         <p className="mt-3 text-[12px] text-muted-foreground">
-          El artículo guarda la plantilla con sus marcadores, no el SQL ya resuelto: los valores del caso quedan como
-          sugerencia del formulario y la corrección sirve para el próximo. Publicar no ejecuta nada.
+          El articulo guarda la plantilla con sus marcadores, no el SQL ya resuelto: los valores del caso quedan como
+          sugerencia del formulario y la correccion sirve para el proximo. Publicar no ejecuta nada.
         </p>
       </Dialog>
     </>

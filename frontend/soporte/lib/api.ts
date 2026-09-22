@@ -11,6 +11,7 @@ import type {
   PasoTicket,
   PlaybookInfo,
   ResultadoDiagnostico,
+  ResultadoExploracion,
   Resumen,
   SolucionPublicada,
   Ticket,
@@ -84,10 +85,13 @@ export const api = {
     solicitar<PasoTicket>(`/tickets/${encodeURIComponent(numero)}/pasos`, { method: 'POST', body: json(paso) }),
 
   revisarTicket: (numero: string) =>
-    solicitar<{ ejecutado: boolean; motivo?: string; diagnosticoId?: number; resultado?: ResultadoDiagnostico }>(
-      `/tickets/${encodeURIComponent(numero)}/revisar`,
-      { method: 'POST' },
-    ),
+    solicitar<{
+      ejecutado: boolean;
+      motivo?: string;
+      diagnosticoId?: number;
+      resultado?: ResultadoDiagnostico;
+      exploracion?: ResultadoExploracion;
+    }>(`/tickets/${encodeURIComponent(numero)}/revisar`, { method: 'POST' }),
 
   consultas: (f: { q?: string; categoria?: string; riesgo?: string } = {}) =>
     solicitar<{ consultas: ConsultaBiblioteca[]; categorias: { categoria: string; total: number }[] }>(`/consultas${consulta(f)}`),
@@ -97,11 +101,16 @@ export const api = {
     solicitar<ResultadoDiagnostico>(`/playbooks/${id}/ejecutar`, { method: 'POST', body: json({ entrada, ticket }) }),
   diagnosticos: (limite = 20) => solicitar<DiagnosticoResumen[]>(`/diagnosticos?limite=${limite}`),
   diagnostico: (id: number) => solicitar<ResultadoDiagnostico>(`/diagnosticos/${id}`),
-  /** Sin `correcciones` se publican todas las que proponga el diagnóstico. */
-  publicarSolucion: (id: number, correcciones?: string[]) =>
+  /**
+   * Sin `correcciones` se publican todas las que proponga el diagnóstico.
+   *
+   * `exploracion` es un sí/no: la propuesta se vuelve a derivar en el backend, no se
+   * manda desde aquí, para que el SQL publicado salga siempre de la base.
+   */
+  publicarSolucion: (id: number, correcciones?: string[], exploracion?: boolean) =>
     solicitar<SolucionPublicada>(`/diagnosticos/${id}/publicar`, {
       method: 'POST',
-      body: json({ correcciones }),
+      body: json({ correcciones, exploracion }),
     }),
   registrarDiagnostico: (id: number, ticket: string) =>
     solicitar<PasoTicket>(`/diagnosticos/${id}/registrar`, { method: 'POST', body: json({ ticket }) }),

@@ -156,6 +156,32 @@ export interface AccionSugerida {
   parametros?: Record<string, string | number | null>;
 }
 
+export interface Anomalia {
+  columna: string;
+  etiqueta: string;
+  valorActual: number;
+  valorSano: number;
+  cuota: number;
+}
+
+export interface PropuestaExploracion {
+  plantilla: string;
+  sql: string;
+  tabla: string;
+  clave: { campo: string; etiqueta: string; valor: number };
+  anomalias: Anomalia[];
+  confianza: number;
+  resumen: string;
+  poblacion: number;
+  dias: number;
+}
+
+export interface ResultadoExploracion {
+  explorado: boolean;
+  motivo?: string;
+  propuesta?: PropuestaExploracion;
+}
+
 export interface SolucionPublicada {
   articulo: { id: string; titulo: string; creado: boolean };
   scripts: { id: string; titulo: string; correccion: string; creado: boolean }[];

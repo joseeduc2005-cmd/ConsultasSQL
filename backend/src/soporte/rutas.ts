@@ -28,6 +28,7 @@ import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
+import { explorarDesdeEntrada } from './exploracion.ts';
 import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
@@ -451,7 +452,7 @@ export function crearSoporteRouter(
 
       // Sin lista se publican todas: el selector de la pantalla siempre manda una,
       // pero la API sigue sirviendo para publicar el diagnóstico entero de un tirón.
-      const cuerpo = (req.body ?? {}) as { correcciones?: unknown };
+      const cuerpo = (req.body ?? {}) as { correcciones?: unknown; exploracion?: unknown };
       let elegidas: string[] | null = null;
       if (Array.isArray(cuerpo.correcciones)) {
         const disponibles = new Set(correccionesDelDiagnostico(resultado).map((c) => c.id));
@@ -462,6 +463,18 @@ export function crearSoporteRouter(
         }
       }
 
+      // La propuesta de exploración se vuelve a derivar aquí en vez de aceptarla del
+      // navegador: así el SQL que se publica sale siempre de lo que Oracle dice ahora,
+      // y no de un cuerpo que alguien pudo cambiar por el camino.
+      let exploracion = null;
+      if (cuerpo.exploracion === true) {
+        const r = await explorarDesdeEntrada(fuente, resultado.entrada);
+        if (!r.propuesta) {
+          throw solicitudInvalida(r.motivo ?? 'La exploración ya no propone ninguna corrección para este caso.');
+        }
+        exploracion = r.propuesta;
+      }
+
       const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
       const publicado = await publicarSolucion(resultado, {
         sistema: ticket?.sistema ?? null,
@@ -469,6 +482,7 @@ export function crearSoporteRouter(
         autorId: usuario.id,
         autorNombre: usuario.username,
         correcciones: elegidas,
+        exploracion,
       });
       registrar(publicado, 'solución publicada como artículos');
       res.status(publicado.articulo.creado ? 201 : 200);

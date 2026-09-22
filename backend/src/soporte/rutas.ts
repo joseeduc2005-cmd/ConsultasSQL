@@ -284,6 +284,22 @@ export function crearSoporteRouter(
     }),
   );
 
+  /**
+   * Revisa el error del ticket: deduce qué comprobar de su texto, ejecuta el
+   * diagnóstico y devuelve el resultado completo para mostrarlo en pantalla.
+   * El paso queda registrado en la investigación del ticket.
+   */
+  router.post(
+    '/tickets/:numero/revisar',
+    h(async (req) => {
+      const ticket = await obtenerTicket(req.params.numero);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      const revision = await diagnosticarTicket(ticket);
+      registrar({ ticket: ticket.numero, ...revision, resultado: undefined }, 'ticket revisado');
+      return revision;
+    }),
+  );
+
   // ─── Biblioteca SQL ───────────────────────────────────────────────────────
   router.get(
     '/consultas',

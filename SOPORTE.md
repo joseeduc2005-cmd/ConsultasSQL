@@ -662,6 +662,18 @@ La respuesta de `POST /tickets` incluye qué pasó:
 comprobar y produce la corrección de su catálogo con los valores del caso. Ante un caso
 nuevo devuelve «sin hallazgos» y sigue haciendo falta una persona.
 
+### El botón «Revisar error»
+
+En el detalle del ticket, la tarjeta **Investigación** lleva un botón **Revisar error**:
+el backend deduce del texto qué comprobar, ejecuta el diagnóstico, **muestra el resultado
+ahí mismo** y lo deja registrado como paso.
+
+Se dejó dentro de Investigación en vez de reemplazarla: los pasos son el historial del
+caso, que es lo que hace útil el ticket después. Lo que sí desaparece es su estado vacío,
+que antes solo decía «sin pasos».
+
+`POST /tickets/:numero/revisar` devuelve el diagnóstico completo, no solo el resumen.
+
 ### Publicar la solución
 
 `POST /diagnosticos/:id/publicar` convierte el diagnóstico en un artículo bajo

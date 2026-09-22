@@ -12,11 +12,12 @@ import { CodeBlock } from '@/soporte/components/ui/code-block';
 import { Dialog } from '@/soporte/components/ui/dialog';
 import { Cargando, ErrorCarga, Vacio } from '@/soporte/components/ui/estados';
 import { Campo, Input, Select, Textarea } from '@/soporte/components/ui/form';
+import { ResultadoDiagnosticoVista } from '../diagnostico/resultado';
 import { useAvisos } from '@/soporte/components/ui/toast';
 import { api } from '@/soporte/lib/api';
 import { claves, useEstado, usePlaybooks } from '@/soporte/lib/consultas';
 import { ESTADO_TICKET, fechaCorta } from '@/soporte/lib/formato';
-import type { EstadoTicket, PasoTicket, TicketDetalle } from '@/soporte/lib/types';
+import type { EstadoTicket, PasoTicket, ResultadoDiagnostico, TicketDetalle } from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
 
 export function PaginaTicket() {
@@ -202,6 +203,24 @@ function DiagnosticarDesdeTicket({ numero, base }: { numero: string; base: strin
 
 function Investigacion({ ticket }: { ticket: TicketDetalle }) {
   const [nuevo, setNuevo] = useState(false);
+  const qc = useQueryClient();
+  const avisar = useAvisos();
+  const [revision, setRevision] = useState<{ ejecutado: boolean; motivo?: string; resultado?: ResultadoDiagnostico } | null>(null);
+
+  // Un solo botón: el backend deduce qué comprobar del texto del ticket, lo ejecuta
+  // y deja el paso registrado. El resultado se muestra aquí mismo.
+  const revisar = useMutation({
+    mutationFn: () => api.revisarTicket(ticket.numero),
+    onSuccess: (r) => {
+      setRevision(r);
+      qc.invalidateQueries({ queryKey: claves.ticket(ticket.numero) });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      if (r.ejecutado) avisar('exito', 'Revisión terminada', r.resultado?.resumen ?? '');
+      else avisar('error', 'No se pudo revisar', r.motivo ?? '');
+    },
+    onError: (e) => avisar('error', 'No se pudo revisar', (e as Error).message),
+  });
+
   return (
     <Card>
       <CardHeader
@@ -209,15 +228,37 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
         descripcion={`${ticket.pasos.length} paso${ticket.pasos.length === 1 ? '' : 's'} registrados, en orden cronológico.`}
         icono={<FileText />}
         acciones={
-          <Button variante="borde" tamano="sm" onClick={() => setNuevo(true)}>
-            <ListPlus />
-            Agregar paso
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button tamano="sm" onClick={() => revisar.mutate()} cargando={revisar.isPending}>
+              {!revisar.isPending && <ScanSearch />}
+              Revisar error
+            </Button>
+            <Button variante="borde" tamano="sm" onClick={() => setNuevo(true)}>
+              <ListPlus />
+              Agregar paso
+            </Button>
+          </div>
         }
       />
-      {ticket.pasos.length === 0 ? (
-        <Vacio titulo="Sin pasos de investigación" descripcion="Ejecute un diagnóstico o agregue un paso manual con lo que se revisó." />
-      ) : (
+
+      {revision && !revision.ejecutado && (
+        <p className="mx-5 mb-4 rounded-lg border border-warning/25 bg-warning-soft/60 px-4 py-3 text-[13px]">
+          {revision.motivo} Puede ejecutar un diagnóstico a mano o agregar el paso usted.
+        </p>
+      )}
+      {revision?.resultado && (
+        <div className="border-b px-5 pb-5">
+          <ResultadoDiagnosticoVista resultado={revision.resultado} />
+        </div>
+      )}
+
+      {ticket.pasos.length === 0 && !revision?.resultado ? (
+        <Vacio
+          icono={<ScanSearch />}
+          titulo="Sin pasos de investigación"
+          descripcion="Pulse «Revisar error» para que el sistema compruebe el caso, o agregue un paso manual."
+        />
+      ) : ticket.pasos.length === 0 ? null : (
         <ol className="px-5 py-2">
           {ticket.pasos.map((p, i) => (
             <PasoItem key={p.id} paso={p} ultimo={i === ticket.pasos.length - 1} />

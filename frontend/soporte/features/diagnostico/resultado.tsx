@@ -12,13 +12,17 @@ import {
   ShieldAlert,
   ShieldCheck,
   TriangleAlert,
+  BookPlus,
 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { api } from '@/soporte/lib/api';
 import { Badge } from '@/soporte/components/ui/badge';
 import { Button } from '@/soporte/components/ui/button';
 import { Card } from '@/soporte/components/ui/card';
 import { CodeBlock, useCopiar } from '@/soporte/components/ui/code-block';
+import { useAvisos } from '@/soporte/components/ui/toast';
 import { ESTADO_PASO, ETIQUETA_CAMPO, SEVERIDAD, VEREDICTO, fechaHora } from '@/soporte/lib/formato';
 import type { EstadoPaso, Hallazgo, PasoDiagnostico, ResultadoDiagnostico, Severidad } from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
@@ -89,6 +93,9 @@ export function ResultadoDiagnosticoVista({ resultado }: { resultado: ResultadoD
               <Copy />
               {copiado ? 'Copiado' : 'Copiar resumen'}
             </Button>
+            {resultado.id !== undefined && resultado.hallazgos.length > 0 && (
+              <PublicarSolucion diagnosticoId={resultado.id} />
+            )}
             {resultado.id !== undefined && <RegistrarEnTicket diagnosticoId={resultado.id} ticketActual={resultado.ticket} />}
           </div>
         </div>
@@ -245,5 +252,42 @@ function PasoFila({ paso, ultimo }: { paso: PasoDiagnostico; ultimo: boolean }) 
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Publica el diagnóstico como artículo del árbol de categorías: qué se revisó, qué
+ * se encontró y el SQL ya resuelto. Es a petición y no automático — un diagnóstico
+ * sin hallazgos no merece artículo, y publicarlos todos llenaría el árbol.
+ */
+function PublicarSolucion({ diagnosticoId }: { diagnosticoId: number }) {
+  const avisar = useAvisos();
+  const [publicado, setPublicado] = useState<{ id: string; titulo: string } | null>(null);
+
+  const publicar = useMutation({
+    mutationFn: () => api.publicarSolucion(diagnosticoId),
+    onSuccess: (r) => {
+      setPublicado(r);
+      avisar('exito', r.creado ? 'Solución publicada' : 'Solución actualizada', r.titulo);
+    },
+    onError: (e) => avisar('error', 'No se pudo publicar', (e as Error).message),
+  });
+
+  if (publicado) {
+    return (
+      <Link
+        href={`/admin?articulo=${encodeURIComponent(publicado.id)}`}
+        className="text-[13px] font-medium text-primary hover:underline"
+      >
+        Ver en categorías
+      </Link>
+    );
+  }
+
+  return (
+    <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate()} cargando={publicar.isPending}>
+      <BookPlus />
+      Publicar como solución
+    </Button>
   );
 }

@@ -52,7 +52,10 @@ export function extraerIdentificadores(texto: string): Identificadores {
 
   const macs = [...texto.matchAll(/\b\d{15}\b/g)].map((m) => m[0]);
 
-  const usuarios = [...texto.matchAll(/(?<![@\w.])([a-z][a-z0-9]{1,30}\.[a-z][a-z0-9]{1,30})(?![\w.@])/gi)]
+  // El punto final de una frase no debe impedir la detección: antes «el usuario es
+  // demo.duplicado.» no encontraba nada. Se sigue descartando «a.b.c», que no es un
+  // nombre de usuario sino una ruta o un dominio.
+  const usuarios = [...texto.matchAll(/(?<![@\w.])([a-z][a-z0-9]{1,30}\.[a-z][a-z0-9]{1,30})(?![\w@])(?!\.[a-z0-9])/gi)]
     .map((m) => m[1].toLowerCase())
     .filter((u) => !DOMINIOS.test(u) && !/^(p|a)\.m$/.test(u));
 

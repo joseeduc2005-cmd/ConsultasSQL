@@ -244,11 +244,11 @@ export function crearSoporteRouter(
         estado: (datos.estado as never) ?? 'abierto',
         creado_en: datos.creado_en ?? new Date().toISOString().slice(0, 10),
       });
-      // Se diagnostica al vuelo si el texto trae MAC, usuario o cédula. Nunca falla
-      // la creación por esto: `diagnosticarTicket` captura sus propios errores.
-      const autodiagnostico = await diagnosticarTicket(ticket);
+      // El ticket se crea y ya: el diagnóstico lo lanza la persona con «Revisar
+      // error». Hacerlo en el alta dejaba el botón sin sentido y disparaba
+      // consultas a Oracle sin que nadie las pidiera.
       res.status(201);
-      return { ...ticket, autodiagnostico };
+      return ticket;
     }),
   );
 
@@ -452,6 +452,7 @@ export function crearSoporteRouter(
       const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
       const publicado = await publicarSolucion(resultado, {
         sistema: ticket?.sistema ?? null,
+        baseDatos: ticket?.base_datos ?? config.oracle.dbId,
         autorId: usuario.id,
         autorNombre: usuario.username,
       });

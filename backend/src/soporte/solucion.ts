@@ -152,10 +152,37 @@ function contenidoDeSolucion(r: ResultadoDiagnostico, numeroTicket: string | nul
  * publicar todos llenaría el árbol. Reconoce el artículo por su título, así que
  * volver a publicar el mismo caso lo actualiza en vez de duplicarlo.
  */
+/**
+ * Saca de los hallazgos la primera corrección de escritura, para dejarla como script
+ * del artículo. Se usa la plantilla con marcadores, no el SQL ya resuelto: así el
+ * artículo sirve para el próximo caso y no solo para este.
+ */
+function scriptDeLaSolucion(r: ResultadoDiagnostico, databaseId: string | null) {
+  for (const h of r.hallazgos) {
+    for (const a of h.acciones ?? []) {
+      if (a.riesgo !== 'escritura' || !a.correccion) continue;
+      const correccion = Object.values(CORRECCIONES).find((c) => c.id === a.correccion);
+      if (!correccion) continue;
+      return {
+        script: { sql: correccion.plantilla, databaseId: databaseId ?? undefined },
+        campos: correccion.campos.map((c) => ({
+          tipo: c.tipo,
+          nombre: c.nombre,
+          etiqueta: c.etiqueta,
+          requerido: true,
+          // El valor del caso queda como sugerencia, no fijado: el artículo se reutiliza.
+          placeholder: String(a.parametros?.[c.nombre] ?? c.placeholder ?? ''),
+        })),
+      };
+    }
+  }
+  return null;
+}
+
 export async function publicarSolucion(
   r: ResultadoDiagnostico,
-  opciones: { sistema?: string | null; autorId: string; autorNombre: string },
-): Promise<{ id: string; titulo: string; creado: boolean }> {
+  opciones: { sistema?: string | null; baseDatos?: string | null; autorId: string; autorNombre: string },
+): Promise<{ id: string; titulo: string; creado: boolean; conScript: boolean }> {
   const numeroTicket = r.ticket ?? null;
   const titulo = numeroTicket
     ? `Solución ${numeroTicket} — ${r.resumen}`
@@ -163,34 +190,38 @@ export async function publicarSolucion(
 
   const contenido = contenidoDeSolucion(r, numeroTicket);
   const categoria = opciones.sistema || 'Corresponsales';
+  const conScript = scriptDeLaSolucion(r, opciones.baseDatos ?? null);
+  // Con script el artículo se comporta como cualquier otro de categorías: visor de
+  // SQL y formulario. Sin él (un hallazgo sin corrección) queda como documentación.
+  const tipo = conScript ? 'script' : 'lectura';
+  const etiquetas = ['solucion', 'soporte', r.playbook, numeroTicket ?? 'sin-ticket'].filter(Boolean);
   const existente = await fila<{ id: string }>('SELECT id FROM knowledge_base WHERE titulo = $1 LIMIT 1', [titulo]);
 
   if (existente) {
     await ejecutar(
       `UPDATE knowledge_base
        SET contenido = $2, contenido_md = $2, descripcion = $3, categoria = $4, subcategoria = 'Soluciones',
-           tipo_solucion = 'lectura', visible_para = 'admin', actualizado = now(), actualizado_por = $5
+           tipo_solucion = $6, script_json = $7, campos_formulario = $8,
+           visible_para = 'admin', actualizado = now(), actualizado_por = $5
        WHERE id = $1`,
-      [existente.id, contenido, r.resumen, categoria, opciones.autorNombre],
+      [existente.id, contenido, r.resumen, categoria, opciones.autorNombre, tipo,
+       conScript ? JSON.stringify(conScript.script) : null,
+       conScript ? JSON.stringify(conScript.campos) : null],
     );
-    return { id: existente.id, titulo, creado: false };
+    return { id: existente.id, titulo, creado: false, conScript: Boolean(conScript) };
   }
 
   const creado = await fila<{ id: string }>(
     `INSERT INTO knowledge_base
        (titulo, contenido, contenido_md, descripcion, categoria, subcategoria, tipo_solucion,
-        visible_para, creado_por, creado_por_username, tags)
-     VALUES ($1, $2, $2, $3, $4, 'Soluciones', 'lectura', 'admin', $5, $6, $7)
+        script_json, campos_formulario, visible_para, creado_por, creado_por_username, tags)
+     VALUES ($1, $2, $2, $3, $4, 'Soluciones', $8, $9, $10, 'admin', $5, $6, $7)
      RETURNING id`,
     [
-      titulo,
-      contenido,
-      r.resumen,
-      categoria,
-      opciones.autorId,
-      opciones.autorNombre,
-      ['solucion', 'soporte', r.playbook, numeroTicket ?? 'sin-ticket'].filter(Boolean),
+      titulo, contenido, r.resumen, categoria, opciones.autorId, opciones.autorNombre, etiquetas, tipo,
+      conScript ? JSON.stringify(conScript.script) : null,
+      conScript ? JSON.stringify(conScript.campos) : null,
     ],
   );
-  return { id: creado!.id, titulo, creado: true };
+  return { id: creado!.id, titulo, creado: true, conScript: Boolean(conScript) };
 }

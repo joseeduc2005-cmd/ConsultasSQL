@@ -15,16 +15,24 @@ import {
   BookPlus,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { api } from '@/soporte/lib/api';
 import { Badge } from '@/soporte/components/ui/badge';
 import { Button } from '@/soporte/components/ui/button';
 import { Card } from '@/soporte/components/ui/card';
+import { Dialog } from '@/soporte/components/ui/dialog';
 import { CodeBlock, useCopiar } from '@/soporte/components/ui/code-block';
 import { useAvisos } from '@/soporte/components/ui/toast';
 import { ESTADO_PASO, ETIQUETA_CAMPO, SEVERIDAD, VEREDICTO, fechaHora } from '@/soporte/lib/formato';
-import type { EstadoPaso, Hallazgo, PasoDiagnostico, ResultadoDiagnostico, Severidad } from '@/soporte/lib/types';
+import type {
+  EstadoPaso,
+  Hallazgo,
+  PasoDiagnostico,
+  ResultadoDiagnostico,
+  Severidad,
+  SolucionPublicada,
+} from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
 import { RegistrarEnTicket } from './registrar-en-ticket';
 import { TablaFilas } from './tabla-filas';
@@ -94,7 +102,7 @@ export function ResultadoDiagnosticoVista({ resultado }: { resultado: ResultadoD
               {copiado ? 'Copiado' : 'Copiar resumen'}
             </Button>
             {resultado.id !== undefined && resultado.hallazgos.length > 0 && (
-              <PublicarSolucion diagnosticoId={resultado.id} />
+              <PublicarSolucion resultado={resultado} />
             )}
             {resultado.id !== undefined && <RegistrarEnTicket diagnosticoId={resultado.id} ticketActual={resultado.ticket} />}
           </div>
@@ -255,20 +263,69 @@ function PasoFila({ paso, ultimo }: { paso: PasoDiagnostico; ultimo: boolean }) 
   );
 }
 
+interface CorreccionElegible {
+  id: string;
+  descripcion: string;
+  hallazgo: string;
+  severidad: Severidad;
+  parametros: Record<string, string | number | null>;
+}
+
 /**
- * Publica el diagnóstico como artículo del árbol de categorías: qué se revisó, qué
- * se encontró y el SQL ya resuelto. Es a petición y no automático — un diagnóstico
- * sin hallazgos no merece artículo, y publicarlos todos llenaría el árbol.
+ * Correcciones de escritura que propone el diagnóstico, sin repetir.
+ *
+ * Es la misma lista que arma el backend al publicar; aquí se deriva de los hallazgos
+ * que ya están en pantalla para no pedirla otra vez. Vienen en orden de severidad,
+ * porque el motor ordena los hallazgos antes de devolverlos.
  */
-function PublicarSolucion({ diagnosticoId }: { diagnosticoId: number }) {
+function correccionesElegibles(r: ResultadoDiagnostico): CorreccionElegible[] {
+  const vistas = new Set<string>();
+  const salida: CorreccionElegible[] = [];
+  for (const h of r.hallazgos) {
+    for (const a of h.acciones ?? []) {
+      if (a.riesgo !== 'escritura' || !a.correccion || vistas.has(a.correccion)) continue;
+      vistas.add(a.correccion);
+      salida.push({
+        id: a.correccion,
+        descripcion: a.descripcion,
+        hallazgo: h.titulo,
+        severidad: h.severidad,
+        parametros: a.parametros ?? {},
+      });
+    }
+  }
+  return salida;
+}
+
+/**
+ * Publica el diagnóstico en el árbol de categorías: un artículo con el caso y uno
+ * ejecutable por cada corrección que se marque.
+ *
+ * El selector existe porque un diagnóstico puede proponer varias correcciones y no
+ * todas valen para el caso — quien atiende decide cuáles se publican. Marcarlas
+ * todas no las ejecuta: solo las deja listas con su formulario.
+ */
+function PublicarSolucion({ resultado }: { resultado: ResultadoDiagnostico }) {
   const avisar = useAvisos();
-  const [publicado, setPublicado] = useState<{ id: string; titulo: string } | null>(null);
+  const diagnosticoId = resultado.id!;
+  const elegibles = useMemo(() => correccionesElegibles(resultado), [resultado]);
+  const [abierto, setAbierto] = useState(false);
+  const [marcadas, setMarcadas] = useState<string[]>(() => elegibles.map((c) => c.id));
+  const [publicado, setPublicado] = useState<SolucionPublicada | null>(null);
 
   const publicar = useMutation({
-    mutationFn: () => api.publicarSolucion(diagnosticoId),
+    mutationFn: (ids: string[] | undefined) => api.publicarSolucion(diagnosticoId, ids),
     onSuccess: (r) => {
       setPublicado(r);
-      avisar('exito', r.creado ? 'Solución publicada' : 'Solución actualizada', r.titulo);
+      setAbierto(false);
+      const n = r.scripts.length;
+      avisar(
+        'exito',
+        r.articulo.creado ? 'Solución publicada' : 'Solución actualizada',
+        n === 0
+          ? r.articulo.titulo
+          : `${r.articulo.titulo} · ${n} corrección${n === 1 ? '' : 'es'} lista${n === 1 ? '' : 's'} para ejecutar`,
+      );
     },
     onError: (e) => avisar('error', 'No se pudo publicar', (e as Error).message),
   });
@@ -276,7 +333,7 @@ function PublicarSolucion({ diagnosticoId }: { diagnosticoId: number }) {
   if (publicado) {
     return (
       <Link
-        href={`/admin?articulo=${encodeURIComponent(publicado.id)}`}
+        href={`/admin?articulo=${encodeURIComponent(publicado.articulo.id)}`}
         className="text-[13px] font-medium text-primary hover:underline"
       >
         Ver en categorías
@@ -284,10 +341,90 @@ function PublicarSolucion({ diagnosticoId }: { diagnosticoId: number }) {
     );
   }
 
+  // Sin correcciones de escritura no hay nada que elegir: se publica el caso y ya.
+  if (elegibles.length === 0) {
+    return (
+      <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate(undefined)} cargando={publicar.isPending}>
+        <BookPlus />
+        Publicar como solución
+      </Button>
+    );
+  }
+
+  const alternar = (id: string) =>
+    setMarcadas((previas) => (previas.includes(id) ? previas.filter((x) => x !== id) : [...previas, id]));
+
   return (
-    <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate()} cargando={publicar.isPending}>
-      <BookPlus />
-      Publicar como solución
-    </Button>
+    <>
+      <Button variante="fantasma" tamano="sm" onClick={() => setAbierto(true)}>
+        <BookPlus />
+        Publicar como solución
+      </Button>
+
+      <Dialog
+        abierto={abierto}
+        onCerrar={() => setAbierto(false)}
+        titulo="Publicar la solución"
+        descripcion={`El diagnóstico propone ${elegibles.length} corrección${elegibles.length === 1 ? '' : 'es'}. Marque las que valen para este caso: cada una queda como artículo ejecutable en categorías.`}
+        ancho="max-w-2xl"
+        pie={
+          <>
+            <Button variante="fantasma" tamano="sm" onClick={() => setAbierto(false)}>
+              Cancelar
+            </Button>
+            <Button tamano="sm" onClick={() => publicar.mutate(marcadas)} cargando={publicar.isPending}>
+              <BookPlus />
+              Publicar {marcadas.length > 0 && `(${marcadas.length})`}
+            </Button>
+          </>
+        }
+      >
+        <ul className="space-y-2">
+          {elegibles.map((c) => {
+            const marcada = marcadas.includes(c.id);
+            const s = SEVERIDAD[c.severidad];
+            return (
+              <li key={c.id}>
+                <label
+                  className={cn(
+                    'flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors',
+                    marcada ? 'border-primary/40 bg-primary-soft/30' : 'hover:bg-surface-muted/50',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={marcada}
+                    onChange={() => alternar(c.id)}
+                    className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13.5px] font-medium">{c.descripcion}</span>
+                      <Badge tono={s.tono} punto>
+                        {s.etiqueta}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[12.5px] text-muted-foreground">
+                      Hallazgo: {c.hallazgo}
+                      {Object.keys(c.parametros).length > 0 && (
+                        <span className="ml-2 font-mono">
+                          {Object.entries(c.parametros)
+                            .map(([k, v]) => `${k} = ${v ?? '?'}`)
+                            .join('  ·  ')}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-3 text-[12px] text-muted-foreground">
+          El artículo guarda la plantilla con sus marcadores, no el SQL ya resuelto: los valores del caso quedan como
+          sugerencia del formulario y la corrección sirve para el próximo. Publicar no ejecuta nada.
+        </p>
+      </Dialog>
+    </>
   );
 }

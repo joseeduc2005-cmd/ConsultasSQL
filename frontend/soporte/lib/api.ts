@@ -82,6 +82,12 @@ export const api = {
   agregarPaso: (numero: string, paso: Partial<PasoTicket> & { titulo: string }) =>
     solicitar<PasoTicket>(`/tickets/${encodeURIComponent(numero)}/pasos`, { method: 'POST', body: json(paso) }),
 
+  revisarTicket: (numero: string) =>
+    solicitar<{ ejecutado: boolean; motivo?: string; diagnosticoId?: number; resultado?: ResultadoDiagnostico }>(
+      `/tickets/${encodeURIComponent(numero)}/revisar`,
+      { method: 'POST' },
+    ),
+
   consultas: (f: { q?: string; categoria?: string; riesgo?: string } = {}) =>
     solicitar<{ consultas: ConsultaBiblioteca[]; categorias: { categoria: string; total: number }[] }>(`/consultas${consulta(f)}`),
 

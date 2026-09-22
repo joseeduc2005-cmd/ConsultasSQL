@@ -51,6 +51,8 @@ export interface ResultadoAutodiagnostico {
   playbook?: string;
   diagnosticoId?: number;
   veredicto?: string;
+  /** El diagnóstico completo, para mostrarlo en pantalla sin pedirlo otra vez. */
+  resultado?: ResultadoDiagnostico;
 }
 
 /**
@@ -89,7 +91,13 @@ export async function diagnosticarTicket(ticket: {
       diagnostico_id: id,
     });
 
-    return { ejecutado: true, playbook: playbook.id, diagnosticoId: id, veredicto: resultado.veredicto };
+    return {
+      ejecutado: true,
+      playbook: playbook.id,
+      diagnosticoId: id,
+      veredicto: resultado.veredicto,
+      resultado: { ...resultado, id, ticket: ticket.numero },
+    };
   } catch (error) {
     return { ejecutado: false, motivo: (error as Error).message };
   }

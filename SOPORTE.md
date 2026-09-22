@@ -644,9 +644,13 @@ dos conexiones distintas, no una con permisos mezclados.
 
 ## 21. Del ticket a la solución publicada
 
-Al crear un ticket, el backend saca MAC, usuario o cédula de su título y descripción
-—con reglas, **sin modelo de lenguaje**—, elige el diagnóstico que corresponde y lo
-ejecuta, dejando el resultado como primer paso de investigación.
+El ticket se crea y ya: **el diagnóstico lo lanza una persona** con «Revisar error». Se
+probó a hacerlo en el alta, pero dejaba el botón sin sentido y disparaba consultas a
+Oracle sin que nadie las pidiera.
+
+Al pulsarlo, el backend saca MAC, usuario o cédula del título y la descripción —con
+reglas, **sin modelo de lenguaje**—, elige el diagnóstico que corresponde y lo ejecuta,
+dejando el resultado como paso de investigación y mostrándolo en pantalla.
 
 `soporte/interpreter/` es la parte del intérprete de ticket v2.0 que no depende de IA:
 `extraer.ts` (identificadores) y `reglas.ts` (clasificación). El modelo sigue fuera.
@@ -678,8 +682,16 @@ que antes solo decía «sin pasos».
 
 `POST /diagnosticos/:id/publicar` convierte el diagnóstico en un artículo bajo
 `<sistema> / Soluciones`: qué se revisó paso a paso, qué se encontró con su severidad, y
-el SQL ya resuelto con el enlace a la plantilla reutilizable. En la pantalla del
-diagnóstico es el botón **Publicar como solución**.
+el SQL. En la pantalla del diagnóstico es el botón **Publicar como solución**.
+
+El artículo se comporta **como cualquier otro de categorías**: lleva `script_json` y
+`campos_formulario`, así que el panel muestra su visor de SQL y su formulario. Se guarda
+la **plantilla** con marcadores, no el SQL ya resuelto, y el valor del caso queda como
+sugerencia en el campo: así el artículo sirve para el próximo caso y no solo para este.
+
+`script_json.databaseId` es la base del ticket. Con un ticket apuntando a la Oracle de
+pruebas la ejecución es inocua; **con uno de producción el botón de ejecutar queda vivo**
+y aplica la decisión pendiente sobre el usuario `u11` de la sección 20.
 
 Es a petición y no automático: un diagnóstico sin hallazgos no merece artículo, y
 publicarlos todos llenaría el árbol. Rechaza publicar si no hubo hallazgos, y republicar

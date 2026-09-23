@@ -25,7 +25,7 @@ import {
 } from './knowledge/tickets.ts';
 import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
 import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
-import { fuente } from './oracle/index.ts';
+import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { explorarDesdeEntrada } from './exploracion.ts';
@@ -470,16 +470,17 @@ export function crearSoporteRouter(
       // La propuesta de exploración se vuelve a derivar aquí en vez de aceptarla del
       // navegador: así el SQL que se publica sale siempre de lo que Oracle dice ahora,
       // y no de un cuerpo que alguien pudo cambiar por el camino.
+      const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
       let exploracion = null;
       if (cuerpo.exploracion === true) {
-        const r = await explorarDesdeEntrada(fuente, resultado.entrada);
+        const suFuente = fuentePara(ticket?.base_datos) ?? fuente;
+        const r = await explorarDesdeEntrada(suFuente, resultado.entrada);
         if (!r.propuesta) {
           throw solicitudInvalida(r.motivo ?? 'La exploración ya no propone ninguna corrección para este caso.');
         }
         exploracion = r.propuesta;
       }
 
-      const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
       const publicado = await publicarSolucion(resultado, {
         sistema: ticket?.sistema ?? null,
         baseDatos: ticket?.base_datos ?? config.oracle.dbId,
@@ -502,6 +503,8 @@ export function crearSoporteRouter(
       return publicado;
     }),
   );
+
+  router.get('/bases-tickets', h(async () => basesParaTickets()));
 
   // ─── Vigilancia ───────────────────────────────────────────────────────────
   router.get(

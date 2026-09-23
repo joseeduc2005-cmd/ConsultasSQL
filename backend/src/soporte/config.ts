@@ -34,7 +34,7 @@ interface EntradaMultiDb {
   /**
    * Marca de este módulo dentro de la entrada de multidb.
    *
-   *   "soporte": { "tickets": true, "catalogo": "corresponsales", "etiqueta": "Producción" }
+   *   "soporte": { "tickets": true, "catalogo": "corresponsales" }
    *
    * `tickets` la habilita para investigar tickets. `catalogo` dice qué juego de
    * consultas entiende: las del módulo están escritas contra CORRESPONSALES.USUARIO,
@@ -42,7 +42,12 @@ interface EntradaMultiDb {
    * mal diagnóstico — da un error. Declararlo deja que la pantalla ofrezca solo las
    * que sirven en vez de dejar que se elija cualquiera.
    */
-  soporte?: { tickets?: boolean; catalogo?: string; etiqueta?: string };
+  soporte?: { tickets?: boolean; catalogo?: string };
+  /** Campos de organización del archivo; el registro del motor los ignora. */
+  label?: string;
+  grupo?: string;
+  color?: string;
+  nota?: string;
 }
 
 /** Catálogos de consultas que el módulo sabe ejecutar. */
@@ -68,6 +73,11 @@ function buscarEnMultiDb(id: string): EntradaMultiDb | null {
 export interface BaseTickets {
   id: string;
   etiqueta: string;
+  /** produccion | pruebas | otras. Agrupa el selector del ticket. */
+  grupo: string;
+  /** rojo | ambar | verde | azul | gris. Rojo avisa de que toca datos reales. */
+  color: string;
+  nota: string | null;
   catalogo: CatalogoSoporte;
   usuario: string;
   clave: string;
@@ -84,7 +94,11 @@ function aBaseTickets(e: EntradaMultiDb, porDefecto: boolean): BaseTickets {
   const catalogo = (e.soporte?.catalogo ?? 'corresponsales') as CatalogoSoporte;
   return {
     id: e.id!,
-    etiqueta: e.soporte?.etiqueta ?? e.id!,
+    etiqueta: e.label ?? e.id!,
+    grupo: e.grupo ?? 'otras',
+    // Rojo por defecto en producción: si nadie lo declaró, más vale avisar de más.
+    color: e.color ?? (e.grupo === 'pruebas' ? 'ambar' : 'rojo'),
+    nota: e.nota ?? null,
     catalogo,
     usuario: e.user!,
     clave: e.password!,

@@ -10,7 +10,7 @@
  * Las fuentes se crean cuando alguien las pide, no al arrancar: una base marcada
  * pero apagada no debe costar nada hasta que se use.
  */
-import { config } from '../config.ts';
+import { config, type BaseTickets } from '../config.ts';
 import { FuenteDemo } from './fuente-demo.ts';
 import { FuenteOracle } from './fuente-oracle.ts';
 import type { FuenteDatos } from './fuente.ts';
@@ -43,8 +43,8 @@ export function fuentePara(dbId?: string | null): FuenteDatos | null {
 }
 
 /** Bases que la pantalla del ticket puede ofrecer, sin credenciales. */
-export function basesParaTickets(): { id: string; etiqueta: string; catalogo: string; porDefecto: boolean }[] {
-  return config.basesTickets.map(({ id, etiqueta, catalogo, porDefecto }) => ({ id, etiqueta, catalogo, porDefecto }));
+export function basesParaTickets(): Omit<BaseTickets, 'usuario' | 'clave' | 'conexion'>[] {
+  return config.basesTickets.map(({ usuario, clave, conexion, ...publico }) => publico);
 }
 
 export async function cerrarFuentes(): Promise<void> {

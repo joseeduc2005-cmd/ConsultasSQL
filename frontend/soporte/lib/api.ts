@@ -107,11 +107,14 @@ export const api = {
    * `exploracion` es un sí/no: la propuesta se vuelve a derivar en el backend, no se
    * manda desde aquí, para que el SQL publicado salga siempre de la base.
    */
-  publicarSolucion: (id: number, correcciones?: string[], exploracion?: boolean) =>
-    solicitar<SolucionPublicada>(`/diagnosticos/${id}/publicar`, {
-      method: 'POST',
-      body: json({ correcciones, exploracion }),
-    }),
+  publicarSolucion: (
+    id: number,
+    opciones: {
+      correcciones?: string[];
+      exploracion?: boolean;
+      propio?: { titulo?: string; sql: string };
+    } = {},
+  ) => solicitar<SolucionPublicada>(`/diagnosticos/${id}/publicar`, { method: 'POST', body: json(opciones) }),
   registrarDiagnostico: (id: number, ticket: string) =>
     solicitar<PasoTicket>(`/diagnosticos/${id}/registrar`, { method: 'POST', body: json({ ticket }) }),
 

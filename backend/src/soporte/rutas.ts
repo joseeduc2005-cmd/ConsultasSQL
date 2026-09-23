@@ -452,7 +452,11 @@ export function crearSoporteRouter(
 
       // Sin lista se publican todas: el selector de la pantalla siempre manda una,
       // pero la API sigue sirviendo para publicar el diagnóstico entero de un tirón.
-      const cuerpo = (req.body ?? {}) as { correcciones?: unknown; exploracion?: unknown };
+      const cuerpo = (req.body ?? {}) as {
+        correcciones?: unknown;
+        exploracion?: unknown;
+        propio?: { titulo?: string; sql?: string };
+      };
       let elegidas: string[] | null = null;
       if (Array.isArray(cuerpo.correcciones)) {
         const disponibles = new Set(correccionesDelDiagnostico(resultado).map((c) => c.id));
@@ -483,6 +487,9 @@ export function crearSoporteRouter(
         autorNombre: usuario.username,
         correcciones: elegidas,
         exploracion,
+        propio: texto(cuerpo.propio?.sql)
+          ? { titulo: texto(cuerpo.propio?.titulo) ?? null, sql: cuerpo.propio!.sql! }
+          : null,
       });
       registrar(publicado, 'solución publicada como artículos');
       res.status(publicado.articulo.creado ? 201 : 200);

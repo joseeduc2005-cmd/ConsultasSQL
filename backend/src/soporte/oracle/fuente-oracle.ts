@@ -28,17 +28,33 @@ const POOL_INSERVIBLE =
  * Conexión real a Oracle en modo "thin" (no requiere Oracle Instant Client).
  * Cada consulta corre dentro de una transacción READ ONLY que se descarta al terminar.
  */
+export interface CredencialesOracle {
+  usuario: string;
+  clave: string;
+  conexion: string;
+}
+
 export class FuenteOracle implements FuenteDatos {
   readonly modo = 'oracle' as const;
   #pool: oracledb.Pool | null = null;
   /** Evita que varias consultas simultáneas rehagan el pool a la vez. */
   #rehaciendo: Promise<void> | null = null;
+  readonly #credenciales: CredencialesOracle;
+
+  /**
+   * Las credenciales se reciben en vez de leerse de la config global porque ahora hay
+   * una fuente por base registrada: producción, contingencia y la de pruebas pueden
+   * estar vivas a la vez, cada una con su pool.
+   */
+  constructor(credenciales: CredencialesOracle = config.oracle) {
+    this.#credenciales = credenciales;
+  }
 
   async #obtenerPool(): Promise<oracledb.Pool> {
     if (!this.#pool) {
-      const { usuario, clave, conexion } = config.oracle;
+      const { usuario, clave, conexion } = this.#credenciales;
       if (!usuario || !clave || !conexion) {
-        throw new Error('Faltan ORACLE_USUARIO, ORACLE_CLAVE u ORACLE_CONEXION en el archivo .env.');
+        throw new Error('Faltan usuario, clave o cadena de conexión para esta base Oracle.');
       }
       this.#pool = await oracledb.createPool({
         user: usuario,
@@ -114,7 +130,7 @@ export class FuenteOracle implements FuenteDatos {
   async estado(): Promise<EstadoFuente> {
     try {
       await this.consultar('ping');
-      return { modo: 'oracle', conectado: true, detalle: `Conectado a ${config.oracle.conexion}` };
+      return { modo: 'oracle', conectado: true, detalle: `Conectado a ${this.#credenciales.conexion}` };
     } catch (error) {
       return { modo: 'oracle', conectado: false, detalle: (error as Error).message };
     }

@@ -22,7 +22,7 @@ import { clasificarConReglas } from './interpreter/reglas.ts';
 import { ejecutar, fila } from './knowledge/db.ts';
 import { guardarDiagnostico } from './knowledge/diagnosticos.ts';
 import { agregarPaso } from './knowledge/tickets.ts';
-import { fuente } from './oracle/index.ts';
+import { fuente, fuentePara } from './oracle/index.ts';
 import { obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
 import type { ResultadoDiagnostico, Severidad } from './playbooks/tipos.ts';
@@ -86,12 +86,23 @@ export async function diagnosticarTicket(ticket: {
   numero: string;
   titulo: string;
   descripcion?: string | null;
+  base_datos?: string | null;
 }): Promise<ResultadoAutodiagnostico> {
+  // El ticket manda contra qué base se investiga. Si eligió una que no está marcada
+  // para tickets, no se cae de otra forma más adelante: se dice aquí.
+  const suFuente = fuentePara(ticket.base_datos);
+  if (!suFuente) {
+    return {
+      ejecutado: false,
+      motivo: `La base «${ticket.base_datos}» no está habilitada para investigar tickets. Revise la marca «soporte.tickets» en multidb.databases.json.`,
+    };
+  }
+
   const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;
   const identificadores = identificadoresDelTexto(texto);
   const tieneDatos = Object.keys(identificadores).length > 0;
   const exploracion = tieneDatos
-    ? await explorarDesdeEntrada(fuente, identificadores)
+    ? await explorarDesdeEntrada(suFuente, identificadores)
     : { explorado: false, motivo: 'El ticket no trae MAC, usuario ni cédula con los que investigar.' };
 
   try {
@@ -100,7 +111,7 @@ export async function diagnosticarTicket(ticket: {
     // nuevo, y sin número no habría a qué colgar la publicación.
     const sinPlaybook = async (motivo: string): Promise<ResultadoAutodiagnostico> =>
       exploracion.propuesta
-        ? await registrarExploracion(ticket, identificadores, exploracion)
+        ? await registrarExploracion(ticket, identificadores, exploracion, suFuente)
         : { ejecutado: false, motivo, exploracion };
 
     const clasificacion = clasificarConReglas(texto);
@@ -115,7 +126,7 @@ export async function diagnosticarTicket(ticket: {
     }
 
     const validada = validarEntrada(playbook, entrada);
-    const resultado = await ejecutarPlaybook(playbook, validada, fuente);
+    const resultado = await ejecutarPlaybook(playbook, validada, suFuente);
     const id = await guardarDiagnostico(resultado, ticket.numero);
 
     await agregarPaso(ticket.numero, {
@@ -152,6 +163,7 @@ async function registrarExploracion(
   ticket: { numero: string },
   entrada: Record<string, string>,
   exploracion: ResultadoExploracion,
+  fuenteUsada: { modo: 'demo' | 'oracle' },
 ): Promise<ResultadoAutodiagnostico> {
   const p = exploracion.propuesta!;
   const inicio = new Date().toISOString();
@@ -173,7 +185,7 @@ async function registrarExploracion(
         detalle: `${detalle}${SALTO}${SALTO}Comparado contra ${p.poblacion} usuarios con transacciones en los últimos ${p.dias} días. Ningún diagnóstico del catálogo reconoció este caso.`,
       },
     ],
-    origenDatos: fuente.modo,
+    origenDatos: fuenteUsada.modo,
     inicio,
     duracionMs: 0,
   };

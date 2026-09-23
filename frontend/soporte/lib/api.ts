@@ -112,7 +112,7 @@ export const api = {
     opciones: {
       correcciones?: string[];
       exploracion?: boolean;
-      propio?: { titulo?: string; sql: string };
+      propio?: { titulo?: string; sql?: string; pasos?: string; dinamico?: boolean };
     } = {},
   ) => solicitar<SolucionPublicada>(`/diagnosticos/${id}/publicar`, { method: 'POST', body: json(opciones) }),
   registrarDiagnostico: (id: number, ticket: string) =>

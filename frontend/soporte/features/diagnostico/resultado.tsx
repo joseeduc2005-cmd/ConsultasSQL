@@ -137,14 +137,7 @@ export function ResultadoDiagnosticoVista({
 
       {exploracion?.propuesta && <PropuestaExploracionVista propuesta={exploracion.propuesta} />}
 
-      {resultado.hallazgos.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">Hallazgos</h3>
-          {resultado.hallazgos.map((h, i) => (
-            <HallazgoCard key={i} hallazgo={h} />
-          ))}
-        </section>
-      )}
+      {resultado.hallazgos.length > 0 && <Hallazgos hallazgos={resultado.hallazgos} />}
 
       <section>
         <h3 className="mb-3 text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">Verificaciones</h3>
@@ -157,6 +150,43 @@ export function ResultadoDiagnosticoVista({
         </Card>
       </section>
     </div>
+  );
+}
+
+/**
+ * Los hallazgos ocupan mucha pantalla cuando son varios, y con la propuesta arriba
+ * casi nunca hace falta leerlos todos. Vienen plegados salvo que haya uno solo.
+ */
+function Hallazgos({ hallazgos }: { hallazgos: Hallazgo[] }) {
+  const [abierto, setAbierto] = useState(hallazgos.length === 1);
+  const criticos = hallazgos.filter((h) => h.severidad === 'critica' || h.severidad === 'alta').length;
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-surface-muted/50"
+        aria-expanded={abierto}
+      >
+        <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', abierto && 'rotate-180')} />
+        <h3 className="text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">
+          Hallazgos ({hallazgos.length})
+        </h3>
+        {criticos > 0 && (
+          <Badge tono="danger" punto>
+            {criticos} grave{criticos === 1 ? '' : 's'}
+          </Badge>
+        )}
+      </button>
+      {abierto && (
+        <div className="animate-entrada mt-2 space-y-3">
+          {hallazgos.map((h, i) => (
+            <HallazgoCard key={i} hallazgo={h} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -491,7 +521,9 @@ function PublicarSolucion({
   const [marcadas, setMarcadas] = useState<string[]>(() => (principal ? [principal.clave] : []));
   const [conPropio, setConPropio] = useState(false);
   const [sqlPropio, setSqlPropio] = useState('');
+  const [pasosPropios, setPasosPropios] = useState('');
   const [tituloPropio, setTituloPropio] = useState('');
+  const [dinamico, setDinamico] = useState(true);
   const [publicado, setPublicado] = useState<SolucionPublicada | null>(null);
 
   const publicar = useMutation({
@@ -499,7 +531,10 @@ function PublicarSolucion({
       api.publicarSolucion(diagnosticoId, {
         correcciones: marcadas.filter((c) => c !== 'exploracion'),
         exploracion: marcadas.includes('exploracion'),
-        propio: conPropio && sqlPropio.trim() ? { titulo: tituloPropio, sql: sqlPropio } : undefined,
+        propio:
+          conPropio && (sqlPropio.trim() || pasosPropios.trim())
+            ? { titulo: tituloPropio, sql: sqlPropio, pasos: pasosPropios, dinamico }
+            : undefined,
       }),
     onSuccess: (r) => {
       setPublicado(r);
@@ -529,7 +564,7 @@ function PublicarSolucion({
 
   const alternar = (clave: string) =>
     setMarcadas((previas) => (previas.includes(clave) ? previas.filter((x) => x !== clave) : [...previas, clave]));
-  const total = marcadas.length + (conPropio && sqlPropio.trim() ? 1 : 0);
+  const total = marcadas.length + (conPropio && (sqlPropio.trim() || pasosPropios.trim()) ? 1 : 0);
 
   return (
     <>
@@ -607,7 +642,7 @@ function PublicarSolucion({
               aria-expanded={conPropio}
             >
               <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', conPropio && 'rotate-180')} />
-              Subir mi propio script
+              Subir mi propia solucion
               <span className="ml-auto text-[12px] font-normal text-muted-foreground">si ninguna sirve</span>
             </button>
             {conPropio && (
@@ -618,18 +653,60 @@ function PublicarSolucion({
                   placeholder="Nombre de la correccion (opcional)"
                   className="w-full rounded-lg border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary/50"
                 />
-                <textarea
-                  value={sqlPropio}
-                  onChange={(e) => setSqlPropio(e.target.value)}
-                  rows={6}
-                  spellCheck={false}
-                  placeholder={'UPDATE CORRESPONSALES.USUARIO\nSET USR_ESTADO = 1\nWHERE USR_CODIGO = :usr_codigo;\nCOMMIT;'}
-                  className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[12.5px] outline-none focus:border-primary/50"
-                />
-                <p className="text-[11.5px] text-muted-foreground">
-                  Los <span className="font-mono">:marcadores</span> se convierten en campos del formulario, asi el
-                  articulo sirve para el proximo caso. Sin marcadores queda como un script de un solo uso.
-                </p>
+                <div>
+                  <p className="mb-1 text-[12px] font-medium text-muted-foreground">Pasos que seguiste (opcional)</p>
+                  <textarea
+                    value={pasosPropios}
+                    onChange={(e) => setPasosPropios(e.target.value)}
+                    rows={4}
+                    placeholder={'Un paso por linea. Por ejemplo:\nEntrar al modulo de Corresponsales\nAbrir Opciones > Mantenimiento de usuarios\nBuscar por cedula y quitar la marca de clave temporal'}
+                    className="w-full rounded-lg border bg-surface px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-primary/50"
+                  />
+                  <p className="mt-1 text-[11.5px] text-muted-foreground">
+                    Para arreglos que no son una sentencia sino un procedimiento. Cada linea se numera como paso.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-[12px] font-medium text-muted-foreground">SQL (opcional)</p>
+                  <textarea
+                    value={sqlPropio}
+                    onChange={(e) => setSqlPropio(e.target.value)}
+                    rows={6}
+                    spellCheck={false}
+                    placeholder={'UPDATE CORRESPONSALES.USUARIO\nSET USR_ESTADO = 1\nWHERE USR_CODIGO = :usr_codigo;\nCOMMIT;'}
+                    className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[12.5px] outline-none focus:border-primary/50"
+                  />
+                </div>
+
+                {sqlPropio.trim() && (
+                  <div className="space-y-1.5 rounded-lg border bg-surface-muted/30 p-2.5">
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="radio"
+                        checked={dinamico}
+                        onChange={() => setDinamico(true)}
+                        className="mt-0.5 size-3.5 shrink-0 accent-[var(--color-primary)]"
+                      />
+                      <span className="text-[12.5px]">
+                        <span className="font-medium">Script dinamico.</span> Los{' '}
+                        <span className="font-mono">:marcadores</span> se vuelven campos del formulario y el articulo
+                        sirve para el proximo caso.
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="radio"
+                        checked={!dinamico}
+                        onChange={() => setDinamico(false)}
+                        className="mt-0.5 size-3.5 shrink-0 accent-[var(--color-primary)]"
+                      />
+                      <span className="text-[12.5px]">
+                        <span className="font-medium">De un solo uso.</span> Se ejecuta tal cual, sin formulario.
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
             )}
           </div>

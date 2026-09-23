@@ -455,7 +455,7 @@ export function crearSoporteRouter(
       const cuerpo = (req.body ?? {}) as {
         correcciones?: unknown;
         exploracion?: unknown;
-        propio?: { titulo?: string; sql?: string };
+        propio?: { titulo?: string; sql?: string; pasos?: string; dinamico?: boolean };
       };
       let elegidas: string[] | null = null;
       if (Array.isArray(cuerpo.correcciones)) {
@@ -487,9 +487,15 @@ export function crearSoporteRouter(
         autorNombre: usuario.username,
         correcciones: elegidas,
         exploracion,
-        propio: texto(cuerpo.propio?.sql)
-          ? { titulo: texto(cuerpo.propio?.titulo) ?? null, sql: cuerpo.propio!.sql! }
-          : null,
+        propio:
+          texto(cuerpo.propio?.sql) || texto(cuerpo.propio?.pasos)
+            ? {
+                titulo: texto(cuerpo.propio?.titulo) ?? null,
+                sql: texto(cuerpo.propio?.sql) ?? null,
+                pasos: texto(cuerpo.propio?.pasos) ?? null,
+                dinamico: cuerpo.propio?.dinamico !== false,
+              }
+            : null,
       });
       registrar(publicado, 'solución publicada como artículos');
       res.status(publicado.articulo.creado ? 201 : 200);

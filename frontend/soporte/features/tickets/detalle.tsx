@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, ChevronDown, ExternalLink, FileText, ListPlus, ScanSearch, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, ExternalLink, FileText, ScanSearch, UserRound } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -208,7 +208,6 @@ function DiagnosticarDesdeTicket({ numero, base }: { numero: string; base: strin
 }
 
 function Investigacion({ ticket }: { ticket: TicketDetalle }) {
-  const [nuevo, setNuevo] = useState(false);
   const qc = useQueryClient();
   const avisar = useAvisos();
   const [revision, setRevision] = useState<{
@@ -239,16 +238,10 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
         descripcion={`${ticket.pasos.length} paso${ticket.pasos.length === 1 ? '' : 's'} registrados, en orden cronológico.`}
         icono={<FileText />}
         acciones={
-          <div className="flex items-center gap-2">
-            <Button tamano="sm" onClick={() => revisar.mutate()} cargando={revisar.isPending}>
-              {!revisar.isPending && <ScanSearch />}
-              Revisar error
-            </Button>
-            <Button variante="borde" tamano="sm" onClick={() => setNuevo(true)}>
-              <ListPlus />
-              Agregar paso
-            </Button>
-          </div>
+          <Button tamano="sm" onClick={() => revisar.mutate()} cargando={revisar.isPending}>
+            {!revisar.isPending && <ScanSearch />}
+            Revisar error
+          </Button>
         }
       />
 
@@ -276,7 +269,6 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
           ))}
         </ol>
       )}
-      <NuevoPaso numero={ticket.numero} abierto={nuevo} onCerrar={() => setNuevo(false)} />
     </Card>
   );
 }
@@ -343,59 +335,3 @@ function Bloque({ etiqueta, texto }: { etiqueta: string; texto: string }) {
   );
 }
 
-function NuevoPaso({ numero, abierto, onCerrar }: { numero: string; abierto: boolean; onCerrar: () => void }) {
-  const vacio = { titulo: '', resultado: '', sql: '', evidencia: '', conclusion: '' };
-  const [datos, setDatos] = useState(vacio);
-  const qc = useQueryClient();
-  const avisar = useAvisos();
-  const set = (k: keyof typeof vacio) => (e: { target: { value: string } }) => setDatos((d) => ({ ...d, [k]: e.target.value }));
-  const guardar = useMutation({
-    mutationFn: () => api.agregarPaso(numero, datos),
-    onSuccess: (p) => {
-      qc.invalidateQueries({ queryKey: claves.ticket(numero) });
-      avisar('exito', `Paso ${p.numero} agregado`);
-      setDatos(vacio);
-      onCerrar();
-    },
-    onError: (e) => avisar('error', 'No se pudo guardar el paso', (e as Error).message),
-  });
-  return (
-    <Dialog
-      abierto={abierto}
-      onCerrar={onCerrar}
-      titulo="Agregar paso de investigación"
-      descripcion="Los pasos no se reescriben: cada hallazgo nuevo se agrega al final."
-      ancho="max-w-2xl"
-      pie={
-        <>
-          <Button variante="fantasma" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button onClick={() => guardar.mutate()} cargando={guardar.isPending} disabled={!datos.titulo.trim()}>
-            Guardar paso
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <Campo etiqueta="Qué se revisó" htmlFor="np-titulo">
-          <Input id="np-titulo" value={datos.titulo} onChange={set('titulo')} placeholder="Revisión de la MAC en usuario_pos" autoFocus />
-        </Campo>
-        <Campo etiqueta="Resultado" htmlFor="np-resultado">
-          <Textarea id="np-resultado" value={datos.resultado} onChange={set('resultado')} />
-        </Campo>
-        <Campo etiqueta="SQL utilizado (opcional)" htmlFor="np-sql">
-          <Textarea id="np-sql" value={datos.sql} onChange={set('sql')} className="font-mono text-[12.5px]" />
-        </Campo>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Campo etiqueta="Evidencia (opcional)" htmlFor="np-evidencia">
-            <Textarea id="np-evidencia" value={datos.evidencia} onChange={set('evidencia')} className="min-h-20" />
-          </Campo>
-          <Campo etiqueta="Conclusión" htmlFor="np-conclusion">
-            <Textarea id="np-conclusion" value={datos.conclusion} onChange={set('conclusion')} className="min-h-20" />
-          </Campo>
-        </div>
-      </div>
-    </Dialog>
-  );
-}

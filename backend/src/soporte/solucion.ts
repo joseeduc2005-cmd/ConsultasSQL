@@ -388,23 +388,37 @@ function camposDeMarcadores(sql: string) {
   return campos.length > 0 ? campos : null;
 }
 
-/** Artículo de un script que trajo una persona, no el sistema. */
-function contenidoPropio(nombre: string, sql: string, numeroTicket: string | null, autor: string): string {
-  return [
+/** Artículo de una solución que trajo una persona, no el sistema. */
+function contenidoPropio(
+  nombre: string,
+  sql: string | null,
+  pasos: string | null,
+  numeroTicket: string | null,
+  autor: string,
+): string {
+  const lineas = [
     `# ${nombre}`,
     '',
     numeroTicket ? `Caso del ticket **${numeroTicket}**.` : '',
     '',
-    `Script aportado por **${autor}**: ninguna de las correcciones que propuso el sistema resolvía este caso.`,
+    `Aportado por **${autor}**: ninguna de las correcciones que propuso el sistema resolvía este caso.`,
     '',
-    '## Sentencia',
-    '',
-    '```sql',
-    sql,
-    '```',
-  ]
-    .filter((l) => l !== '')
-    .join(SALTO);
+  ];
+
+  if (pasos) {
+    lineas.push('## Pasos', '');
+    // Cada línea de la caja es un paso; se numeran para que se lean como receta.
+    const enumerados = pasos
+      .split(SALTO)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    enumerados.forEach((paso, i) => lineas.push(`${i + 1}. ${paso.replace(/^\d+[.)]\s*/, '')}`));
+    lineas.push('');
+  }
+
+  if (sql) lineas.push('## Sentencia', '', '```sql', sql, '```');
+
+  return lineas.filter((l) => l !== '').join(SALTO);
 }
 
 /** Artículo que cuenta el caso: qué se revisó, qué se encontró y qué correcciones salieron. */
@@ -488,8 +502,14 @@ export async function publicarSolucion(
     correcciones?: string[] | null;
     /** Propuesta de la exploración, si quien revisó decidió publicarla también. */
     exploracion?: PropuestaExploracion | null;
-    /** Script propio: cuando ninguna de las propuestas sirve y la solución la trae la persona. */
-    propio?: { titulo?: string | null; sql: string } | null;
+    /**
+     * Solución propia: cuando ninguna de las propuestas sirve y la trae la persona.
+     *
+     * Puede ser SQL, una serie de pasos, o las dos cosas — hay arreglos que no son
+     * una sentencia sino un procedimiento. `dinamico` decide si los `:marcadores` se
+     * vuelven campos del formulario o si el script es de un solo uso.
+     */
+    propio?: { titulo?: string | null; sql?: string | null; pasos?: string | null; dinamico?: boolean } | null;
   },
 ): Promise<SolucionPublicada> {
   const numeroTicket = r.ticket ?? null;
@@ -556,20 +576,24 @@ export async function publicarSolucion(
     scripts.push({ id: guardado.id, titulo, correccion: 'exploracion', creado: guardado.creado });
   }
 
-  if (opciones.propio?.sql?.trim()) {
-    const sql = opciones.propio.sql.trim();
-    const nombre = opciones.propio.titulo?.trim() || 'Corrección propia';
+  const sqlPropio = opciones.propio?.sql?.trim();
+  const pasosPropios = opciones.propio?.pasos?.trim();
+  if (sqlPropio || pasosPropios) {
+    const nombre = opciones.propio!.titulo?.trim() || (sqlPropio ? 'Corrección propia' : 'Procedimiento manual');
     const titulo = numeroTicket ? `Solución ${numeroTicket} · ${nombre}` : nombre;
+    // Sin SQL el artículo es documentación: hay soluciones que son un procedimiento
+    // y no una sentencia, y forzarlas a «script» dejaría un botón que no hace nada.
+    const dinamico = opciones.propio!.dinamico !== false;
     const guardado = await guardarArticulo({
       ...autor,
       titulo,
-      contenido: contenidoPropio(nombre, sql, numeroTicket, opciones.autorNombre),
+      contenido: contenidoPropio(nombre, sqlPropio ?? null, pasosPropios ?? null, numeroTicket, opciones.autorNombre),
       descripcion: nombre,
       categoria,
       subcategoria: 'Soluciones',
-      tipo: 'script',
-      script: { sql, databaseId: baseDatos },
-      campos: camposDeMarcadores(sql),
+      tipo: sqlPropio ? 'script' : 'lectura',
+      script: sqlPropio ? { sql: sqlPropio, databaseId: baseDatos } : null,
+      campos: sqlPropio && dinamico ? camposDeMarcadores(sqlPropio) : null,
       etiquetas: ['solucion', 'propia', 'soporte', numeroTicket ?? 'sin-ticket'].filter(Boolean),
     });
     scripts.push({ id: guardado.id, titulo, correccion: 'propio', creado: guardado.creado });

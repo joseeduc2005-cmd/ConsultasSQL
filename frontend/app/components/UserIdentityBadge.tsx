@@ -47,6 +47,13 @@ function getInitials(label: string) {
   return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
 }
 
+/**
+ * Identidad de quien está dentro, con su menú.
+ *
+ * Antes era una tarjeta con borde, fondo propio y sombra grande: pesaba más que el
+ * título del panel y competía con él. Ahora el avatar lleva el color y el resto es
+ * texto sobre la barra; el recuadro solo aparece al pasar por encima o al abrir.
+ */
 export default function UserIdentityBadge({
   username,
   role,
@@ -61,16 +68,13 @@ export default function UserIdentityBadge({
   const displayName = formatUsername(String(username || ''));
   const displayRole = formatRole(String(role || 'user'));
   const initials = getInitials(displayName);
-  const isAdmin = String(role || '').trim().toLowerCase() === 'admin' || String(role || '').trim().toLowerCase() === 'superadmin';
+  const isAdmin = ['admin', 'superadmin'].includes(String(role || '').trim().toLowerCase());
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!rootRef.current) return;
-      if (!rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      if (!rootRef.current.contains(event.target as Node)) setOpen(false);
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -80,101 +84,121 @@ export default function UserIdentityBadge({
       setShouldRenderMenu(true);
       return;
     }
-
-    const timer = window.setTimeout(() => {
-      setShouldRenderMenu(false);
-    }, 180);
-
+    const timer = window.setTimeout(() => setShouldRenderMenu(false), 180);
     return () => window.clearTimeout(timer);
   }, [open]);
+
+  const hover = isLightTheme ? 'hover:bg-slate-900/5' : 'hover:bg-white/10';
+  const activo = open ? (isLightTheme ? 'bg-slate-900/5' : 'bg-white/10') : '';
 
   return (
     <div ref={rootRef} className="relative z-70">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className={`flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 text-left backdrop-blur-md transition ${
-          isLightTheme
-            ? 'border-white/40 bg-white/55 shadow-[0_10px_25px_rgba(15,23,42,0.08)] hover:bg-white/70'
-            : 'border-[rgba(56,189,248,0.22)] bg-[rgba(10,18,44,0.72)] shadow-[0_10px_25px_rgba(0,4,18,0.35)] hover:bg-[rgba(14,24,56,0.82)] hover:border-[rgba(56,189,248,0.38)]'
-        }`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex items-center gap-2.5 rounded-xl py-1.5 pr-2 pl-1.5 text-left transition-colors ${hover} ${activo}`}
       >
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-md ${
+        <span
+          className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${
             isAdmin
               ? 'bg-linear-to-br from-[#2363eb] to-[#1aa0c8]'
               : 'bg-linear-to-br from-[#5f84ba] to-[#46618f]'
           }`}
         >
           {initials}
-        </div>
+        </span>
 
-        <div className="min-w-0 pr-1">
-          <p className={`truncate text-base font-semibold leading-none ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>
+        <span className="hidden min-w-0 sm:block">
+          <span className={`block truncate text-[13.5px] font-semibold leading-tight ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>
             {displayName}
-          </p>
-          <p className={`mt-0.5 text-xs ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>{displayRole}</p>
-        </div>
+          </span>
+          <span className={`block text-[11.5px] leading-tight ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+            {displayRole}
+          </span>
+        </span>
 
         <svg
-          className={`transition duration-200 ${open ? 'rotate-180' : ''} ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}
-          width="16"
-          height="16"
+          className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''} ${isLightTheme ? 'text-slate-400' : 'text-slate-500'}`}
+          width="14"
+          height="14"
           viewBox="0 0 20 20"
           fill="none"
           aria-hidden="true"
         >
-          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
 
       {shouldRenderMenu && (
         <div
-          className={`absolute right-0 top-[calc(100%+0.55rem)] z-80 min-w-[210px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-md transition-all duration-200 ${
+          role="menu"
+          className={`absolute right-0 top-[calc(100%+0.5rem)] z-80 min-w-[236px] overflow-hidden rounded-xl border p-1.5 backdrop-blur-md transition-all duration-200 ${
             open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-1 scale-95 opacity-0'
           } ${
             isLightTheme
-              ? 'border-white/50 bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.14)]'
-              : 'border-[rgba(56,189,248,0.22)] bg-[rgba(8,14,36,0.90)] shadow-[0_18px_40px_rgba(0,4,18,0.55)]'
+              ? 'border-slate-200/80 bg-white/95 shadow-[0_16px_38px_rgba(15,23,42,0.13)]'
+              : 'border-white/10 bg-[rgba(8,14,36,0.92)] shadow-[0_16px_38px_rgba(0,4,18,0.55)]'
           }`}
         >
+          {/* En móvil el nombre no cabe en la barra, así que encabeza el menú. */}
+          <div className={`mb-1 border-b px-3 py-2 sm:hidden ${isLightTheme ? 'border-slate-200/70' : 'border-white/10'}`}>
+            <p className={`truncate text-[13.5px] font-semibold ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>{displayName}</p>
+            <p className={`text-[11.5px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>{displayRole}</p>
+          </div>
+
           {primaryActionLabel && onPrimaryAction && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setOpen(false);
                 onPrimaryAction();
               }}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
-                isLightTheme
-                  ? 'text-sky-700 hover:bg-sky-50'
-                  : 'text-cyan-300 hover:bg-[rgba(6,182,212,0.12)]'
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ${
+                isLightTheme ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-200 hover:bg-white/10'
               }`}
             >
-              <span>{primaryActionLabel}</span>
-              <span aria-hidden="true">↗</span>
+              <IconoEnlace className={isLightTheme ? 'text-slate-400' : 'text-slate-500'} />
+              {primaryActionLabel}
             </button>
           )}
 
           {onLogout && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setOpen(false);
                 onLogout();
               }}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
-                isLightTheme
-                  ? 'text-rose-600 hover:bg-rose-50'
-                  : 'text-rose-400 hover:bg-[rgba(244,63,94,0.12)]'
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ${
+                isLightTheme ? 'text-rose-600 hover:bg-rose-50' : 'text-rose-400 hover:bg-[rgba(244,63,94,0.12)]'
               }`}
             >
-              <span>Cerrar sesión</span>
-              <span aria-hidden="true">↗</span>
+              <IconoSalir />
+              Cerrar sesión
             </button>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function IconoEnlace({ className }: { className?: string }) {
+  return (
+    <svg className={`size-4 shrink-0 ${className ?? ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+function IconoSalir() {
+  return (
+    <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+    </svg>
   );
 }

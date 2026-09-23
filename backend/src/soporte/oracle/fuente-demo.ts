@@ -122,6 +122,7 @@ const RESOLVEDORES: Record<NombreConsulta, (p: Parametros) => Fila[]> = {
   perfilUsrIntentosPin: () => [],
   perfilUsrIsClaveTemporal: () => [],
   perfilUsrIsPinTemporal: () => [],
+  usuariosActivosMuestra: () => [],
   usuarioPorUsuario: (p) => USUARIOS.filter((u) => u.usr_usuario === p.usuario),
   usuarioPorCedula: (p) => USUARIOS.filter((u) => u.usr_cedula === p.cedula),
   usuariosPorMac: (p) =>

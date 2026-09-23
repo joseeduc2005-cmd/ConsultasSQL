@@ -15,12 +15,24 @@ function normalizarFila(fila: Record<string, unknown>): Fila {
 }
 
 /**
+ * Errores que significan «el pool ya no sirve», no «esta consulta falló».
+ *
+ * Cuando Oracle se reinicia, las conexiones que el pool tenía guardadas quedan
+ * muertas: pedir una se encola y revienta por tiempo (NJS-040) una y otra vez,
+ * aunque la base ya esté arriba. La única salida es tirar el pool y rehacerlo.
+ */
+const POOL_INSERVIBLE =
+  /\b(NJS-040|NJS-500|NJS-501|NJS-503|NJS-510|ORA-03113|ORA-03114|ORA-12514|ORA-12537|ORA-12541|ORA-12571|ORA-01089|ORA-28547)\b/i;
+
+/**
  * Conexión real a Oracle en modo "thin" (no requiere Oracle Instant Client).
  * Cada consulta corre dentro de una transacción READ ONLY que se descarta al terminar.
  */
 export class FuenteOracle implements FuenteDatos {
   readonly modo = 'oracle' as const;
   #pool: oracledb.Pool | null = null;
+  /** Evita que varias consultas simultáneas rehagan el pool a la vez. */
+  #rehaciendo: Promise<void> | null = null;
 
   async #obtenerPool(): Promise<oracledb.Pool> {
     if (!this.#pool) {
@@ -40,14 +52,31 @@ export class FuenteOracle implements FuenteDatos {
         connectTimeout: config.oracle.conectarTimeoutS,
         transportConnectTimeout: config.oracle.conectarTimeoutS,
         queueTimeout: config.oracle.conectarTimeoutS * 1000,
+        // Una conexión que lleva más de 10 s guardada se comprueba antes de
+        // entregarla. Es lo que descarta las que murieron mientras estaba ociosa.
+        poolPingInterval: 10,
       });
     }
     return this.#pool;
   }
 
-  async consultar(nombre: NombreConsulta, parametros: Parametros = {}): Promise<Fila[]> {
-    const { sql } = CATALOGO[nombre];
-    asegurarSoloLectura(sql);
+  /** Cierra el pool y deja que el siguiente uso lo cree de nuevo. */
+  async #rehacerPool(): Promise<void> {
+    if (this.#rehaciendo) return this.#rehaciendo;
+    const anterior = this.#pool;
+    this.#pool = null;
+    this.#rehaciendo = (async () => {
+      // `drainTime` 0 corta sin esperar: las conexiones ya están muertas.
+      await anterior?.close(0).catch(() => undefined);
+    })();
+    try {
+      await this.#rehaciendo;
+    } finally {
+      this.#rehaciendo = null;
+    }
+  }
+
+  async #ejecutar(sql: string, parametros: Parametros): Promise<Fila[]> {
     const pool = await this.#obtenerPool();
     const conexion = await pool.getConnection();
     try {
@@ -61,6 +90,24 @@ export class FuenteOracle implements FuenteDatos {
     } finally {
       await conexion.rollback().catch(() => undefined);
       await conexion.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Ejecuta una consulta del catálogo, rehaciendo el pool si quedó inservible.
+   *
+   * Un reintento y no más: si la base sigue caída, el segundo falla igual y el
+   * error llega a quien preguntó en vez de quedarse dando vueltas.
+   */
+  async consultar(nombre: NombreConsulta, parametros: Parametros = {}): Promise<Fila[]> {
+    const { sql } = CATALOGO[nombre];
+    asegurarSoloLectura(sql);
+    try {
+      return await this.#ejecutar(sql, parametros);
+    } catch (error) {
+      if (!POOL_INSERVIBLE.test((error as Error).message)) throw error;
+      await this.#rehacerPool();
+      return await this.#ejecutar(sql, parametros);
     }
   }
 

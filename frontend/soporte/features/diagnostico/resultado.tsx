@@ -4,8 +4,6 @@ import {
   ChevronDown,
   CircleAlert,
   CircleCheck,
-  CircleMinus,
-  CircleX,
   Clock,
   Copy,
   Database,
@@ -25,11 +23,9 @@ import { Card } from '@/soporte/components/ui/card';
 import { Dialog } from '@/soporte/components/ui/dialog';
 import { CodeBlock, useCopiar } from '@/soporte/components/ui/code-block';
 import { useAvisos } from '@/soporte/components/ui/toast';
-import { ESTADO_PASO, ETIQUETA_CAMPO, SEVERIDAD, VEREDICTO, fechaHora } from '@/soporte/lib/formato';
+import { ETIQUETA_CAMPO, SEVERIDAD, VEREDICTO, fechaHora } from '@/soporte/lib/formato';
 import type {
-  EstadoPaso,
   Hallazgo,
-  PasoDiagnostico,
   ResultadoDiagnostico,
   PropuestaExploracion,
   ResultadoExploracion,
@@ -38,7 +34,6 @@ import type {
 } from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
 import { RegistrarEnTicket } from './registrar-en-ticket';
-import { TablaFilas } from './tabla-filas';
 
 const BORDE_SEVERIDAD: Record<Severidad, string> = {
   critica: 'before:bg-danger',
@@ -47,13 +42,6 @@ const BORDE_SEVERIDAD: Record<Severidad, string> = {
   info: 'before:bg-info',
 };
 
-const ICONO_PASO: Record<EstadoPaso, { icono: ReactNode; clase: string }> = {
-  ok: { icono: <CircleCheck />, clase: 'text-success bg-success-soft' },
-  alerta: { icono: <TriangleAlert />, clase: 'text-warning bg-warning-soft' },
-  falla: { icono: <CircleX />, clase: 'text-danger bg-danger-soft' },
-  omitido: { icono: <CircleMinus />, clase: 'text-muted-foreground bg-surface-muted' },
-  error: { icono: <CircleAlert />, clase: 'text-danger bg-danger-soft' },
-};
 
 function textoResumen(r: ResultadoDiagnostico): string {
   const lineas = [
@@ -138,17 +126,6 @@ export function ResultadoDiagnosticoVista({
       {exploracion?.propuesta && <PropuestaExploracionVista propuesta={exploracion.propuesta} />}
 
       {resultado.hallazgos.length > 0 && <Hallazgos hallazgos={resultado.hallazgos} />}
-
-      <section>
-        <h3 className="mb-3 text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">Verificaciones</h3>
-        <Card>
-          <ol className="divide-y">
-            {resultado.pasos.map((p, i) => (
-              <PasoFila key={p.id} paso={p} ultimo={i === resultado.pasos.length - 1} />
-            ))}
-          </ol>
-        </Card>
-      </section>
     </div>
   );
 }
@@ -251,58 +228,6 @@ function HallazgoCard({ hallazgo: h }: { hallazgo: Hallazgo }) {
   );
 }
 
-function PasoFila({ paso, ultimo }: { paso: PasoDiagnostico; ultimo: boolean }) {
-  const [abierto, setAbierto] = useState(false);
-  const icono = ICONO_PASO[paso.estado];
-  return (
-    <li className="relative">
-      <button type="button" onClick={() => setAbierto((v) => !v)} className="flex w-full items-start gap-3.5 px-5 py-3.5 text-left transition-colors hover:bg-surface-muted/50" aria-expanded={abierto}>
-        <span className={cn('relative z-10 mt-px grid size-7 shrink-0 place-items-center rounded-full [&_svg]:size-4', icono.clase)}>{icono.icono}</span>
-        {!ultimo && <span className="absolute top-11 bottom-0 left-[33.5px] w-px bg-border" />}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{paso.titulo}</span>
-            <span className="text-[11px] text-muted-foreground">{ESTADO_PASO[paso.estado].etiqueta}</span>
-          </div>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">{paso.detalle}</p>
-        </div>
-        <span className="tabular hidden shrink-0 text-xs text-muted-foreground sm:block">
-          {paso.consultas.length} consulta{paso.consultas.length === 1 ? '' : 's'} · {paso.duracionMs} ms
-        </span>
-        <ChevronDown className={cn('mt-1 size-4 shrink-0 text-muted-foreground transition-transform', abierto && 'rotate-180')} />
-      </button>
-      {abierto && (
-        <div className="animate-entrada space-y-4 border-t bg-surface-muted/30 px-5 py-4 pl-[62px]">
-          {paso.consultas.length === 0 && <p className="text-xs text-muted-foreground">Este paso no ejecutó consultas.</p>}
-          {paso.consultas.map((c, i) => (
-            <div key={i} className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                <span className="font-medium">{c.descripcion}</span>
-                {c.biblioteca && (
-                  <Link href={`/admin/biblioteca?codigo=${c.biblioteca}`} className="font-mono text-xs text-primary hover:underline">
-                    {c.biblioteca}
-                  </Link>
-                )}
-                <span className="tabular text-xs text-muted-foreground">
-                  {c.filas.length} fila{c.filas.length === 1 ? '' : 's'} · {c.duracionMs} ms
-                </span>
-              </div>
-              <CodeBlock codigo={c.sql} maxAlto="max-h-48" />
-              {Object.keys(c.parametros).length > 0 && (
-                <p className="font-mono text-[11.5px] text-muted-foreground">
-                  {Object.entries(c.parametros)
-                    .map(([k, v]) => `:${k} = ${String(v).slice(0, 24)}`)
-                    .join('   ')}
-                </p>
-              )}
-              <TablaFilas filas={c.filas} />
-            </div>
-          ))}
-        </div>
-      )}
-    </li>
-  );
-}
 
 /**
  * La propuesta que sale de comparar al usuario contra los que si estan operando.

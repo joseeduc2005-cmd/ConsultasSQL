@@ -383,13 +383,54 @@ function correccionesElegibles(r: ResultadoDiagnostico): CorreccionElegible[] {
   return salida;
 }
 
+/** Una opcion del selector, venga del catalogo o de la exploracion. */
+interface OpcionSolucion {
+  clave: string;
+  titulo: string;
+  detalle: string;
+  insignia: ReactNode;
+}
+
+function FilaOpcion({
+  opcion,
+  marcada,
+  alternar,
+}: {
+  opcion: OpcionSolucion;
+  marcada: boolean;
+  alternar: () => void;
+}) {
+  return (
+    <label
+      className={cn(
+        'flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors',
+        marcada ? 'border-primary/40 bg-primary-soft/30' : 'hover:bg-surface-muted/50',
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={marcada}
+        onChange={alternar}
+        className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13.5px] font-medium">{opcion.titulo}</span>
+          {opcion.insignia}
+        </div>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">{opcion.detalle}</p>
+      </div>
+    </label>
+  );
+}
+
 /**
  * Publica el diagnostico en el arbol de categorias: un articulo con el caso y uno
  * ejecutable por cada correccion que se marque.
  *
- * El selector existe porque un diagnostico puede proponer varias correcciones y no
- * todas valen para el caso. La propuesta de la exploracion va aparte y marcada,
- * porque nadie la reviso antes de que el sistema la redactara.
+ * Arriba va una sola, la principal — la explorada si existe, si no la del hallazgo
+ * mas grave. El resto queda plegado, porque solo hacen falta si la principal no
+ * funciono. Y al final se puede subir un script propio, para cuando ninguna sirve.
  *
  * Marcar no ejecuta nada: solo deja los articulos listos con su formulario.
  */
@@ -403,16 +444,63 @@ function PublicarSolucion({
   const avisar = useAvisos();
   const diagnosticoId = resultado.id!;
   const elegibles = useMemo(() => correccionesElegibles(resultado), [resultado]);
+
+  // La explorada manda cuando existe: se compara contra la poblacion y trae su
+  // nivel de confianza. Si no, la principal es la del hallazgo mas grave.
+  const opciones = useMemo<OpcionSolucion[]>(() => {
+    const lista: OpcionSolucion[] = [];
+    if (exploracion) {
+      lista.push({
+        clave: 'exploracion',
+        titulo: exploracion.resumen,
+        detalle: `${Math.round(exploracion.confianza * 100)} % de confianza · corrige ${
+          exploracion.anomalias.length
+        } columna${exploracion.anomalias.length === 1 ? '' : 's'} en una sola sentencia. No viene del catalogo aprobado.`,
+        insignia: (
+          <Badge tono="primary">
+            <Sparkle className="size-3.5" />
+            Propuesta del sistema
+          </Badge>
+        ),
+      });
+    }
+    for (const c of elegibles) {
+      const sev = SEVERIDAD[c.severidad];
+      const params = Object.entries(c.parametros)
+        .map(([k, v]) => `${k} = ${v ?? '?'}`)
+        .join('  ·  ');
+      lista.push({
+        clave: c.id,
+        titulo: c.descripcion,
+        detalle: `Hallazgo: ${c.hallazgo}${params ? `  —  ${params}` : ''}`,
+        insignia: (
+          <Badge tono={sev.tono} punto>
+            {sev.etiqueta}
+          </Badge>
+        ),
+      });
+    }
+    return lista;
+  }, [elegibles, exploracion]);
+
+  const principal = opciones[0];
+  const secundarias = opciones.slice(1);
+
   const [abierto, setAbierto] = useState(false);
-  const [marcadas, setMarcadas] = useState<string[]>(() => elegibles.map((c) => c.id));
-  // Si el catalogo cubre el caso, sus correcciones mandan y la explorada queda
-  // desmarcada. Si no cubre nada, la explorada es lo unico que hay.
-  const [conExploracion, setConExploracion] = useState(() => elegibles.length === 0);
+  const [verMas, setVerMas] = useState(false);
+  const [marcadas, setMarcadas] = useState<string[]>(() => (principal ? [principal.clave] : []));
+  const [conPropio, setConPropio] = useState(false);
+  const [sqlPropio, setSqlPropio] = useState('');
+  const [tituloPropio, setTituloPropio] = useState('');
   const [publicado, setPublicado] = useState<SolucionPublicada | null>(null);
 
   const publicar = useMutation({
-    mutationFn: (v: { ids?: string[]; exploracion?: boolean }) =>
-      api.publicarSolucion(diagnosticoId, v.ids, v.exploracion),
+    mutationFn: () =>
+      api.publicarSolucion(diagnosticoId, {
+        correcciones: marcadas.filter((c) => c !== 'exploracion'),
+        exploracion: marcadas.includes('exploracion'),
+        propio: conPropio && sqlPropio.trim() ? { titulo: tituloPropio, sql: sqlPropio } : undefined,
+      }),
     onSuccess: (r) => {
       setPublicado(r);
       setAbierto(false);
@@ -439,19 +527,9 @@ function PublicarSolucion({
     );
   }
 
-  // Sin nada que elegir se publica el caso y ya.
-  if (elegibles.length === 0 && !exploracion) {
-    return (
-      <Button variante="fantasma" tamano="sm" onClick={() => publicar.mutate({})} cargando={publicar.isPending}>
-        <BookPlus />
-        Publicar como solucion
-      </Button>
-    );
-  }
-
-  const alternar = (id: string) =>
-    setMarcadas((previas) => (previas.includes(id) ? previas.filter((x) => x !== id) : [...previas, id]));
-  const total = marcadas.length + (conExploracion ? 1 : 0);
+  const alternar = (clave: string) =>
+    setMarcadas((previas) => (previas.includes(clave) ? previas.filter((x) => x !== clave) : [...previas, clave]));
+  const total = marcadas.length + (conPropio && sqlPropio.trim() ? 1 : 0);
 
   return (
     <>
@@ -464,100 +542,101 @@ function PublicarSolucion({
         abierto={abierto}
         onCerrar={() => setAbierto(false)}
         titulo="Publicar la solucion"
-        descripcion="Marque las correcciones que valen para este caso: cada una queda como articulo ejecutable en categorias."
+        descripcion="Cada correccion marcada queda como articulo ejecutable en categorias."
         ancho="max-w-2xl"
         pie={
           <>
             <Button variante="fantasma" tamano="sm" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
-            <Button
-              tamano="sm"
-              onClick={() => publicar.mutate({ ids: marcadas, exploracion: conExploracion })}
-              cargando={publicar.isPending}
-            >
+            <Button tamano="sm" onClick={() => publicar.mutate()} cargando={publicar.isPending} disabled={total === 0}>
               <BookPlus />
               Publicar {total > 0 && `(${total})`}
             </Button>
           </>
         }
       >
-        <ul className="space-y-2">
-          {exploracion && (
-            <li>
-              <label
-                className={cn(
-                  'flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors',
-                  conExploracion ? 'border-primary/40 bg-primary-soft/30' : 'hover:bg-surface-muted/50',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={conExploracion}
-                  onChange={() => setConExploracion((v) => !v)}
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13.5px] font-medium">{exploracion.resumen}</span>
-                    <Badge tono="primary">
-                      <Sparkle className="size-3.5" />
-                      Propuesta del sistema
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-[12.5px] text-muted-foreground">
-                    {Math.round(exploracion.confianza * 100)} % de confianza · corrige{' '}
-                    {exploracion.anomalias.length} columna{exploracion.anomalias.length === 1 ? '' : 's'} en una sola
-                    sentencia. No viene del catalogo aprobado.
-                  </p>
-                </div>
-              </label>
-            </li>
+        <div className="space-y-3">
+          {principal && (
+            <div>
+              <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase">
+                Solucion principal
+              </p>
+              <FilaOpcion
+                opcion={principal}
+                marcada={marcadas.includes(principal.clave)}
+                alternar={() => alternar(principal.clave)}
+              />
+            </div>
           )}
 
-          {elegibles.map((c) => {
-            const marcada = marcadas.includes(c.id);
-            const sev = SEVERIDAD[c.severidad];
-            return (
-              <li key={c.id}>
-                <label
-                  className={cn(
-                    'flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors',
-                    marcada ? 'border-primary/40 bg-primary-soft/30' : 'hover:bg-surface-muted/50',
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={marcada}
-                    onChange={() => alternar(c.id)}
-                    className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13.5px] font-medium">{c.descripcion}</span>
-                      <Badge tono={sev.tono} punto>
-                        {sev.etiqueta}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-[12.5px] text-muted-foreground">
-                      Hallazgo: {c.hallazgo}
-                      {Object.keys(c.parametros).length > 0 && (
-                        <span className="ml-2 font-mono">
-                          {Object.entries(c.parametros)
-                            .map(([k, v]) => `${k} = ${v ?? '?'}`)
-                            .join('  ·  ')}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
+          {secundarias.length > 0 && (
+            <div className="rounded-lg border">
+              <button
+                type="button"
+                onClick={() => setVerMas((v) => !v)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+                aria-expanded={verMas}
+              >
+                <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', verMas && 'rotate-180')} />
+                Mas soluciones ({secundarias.length})
+                <span className="ml-auto text-[12px] font-normal text-muted-foreground">
+                  si la principal no funciono
+                </span>
+              </button>
+              {verMas && (
+                <div className="animate-entrada space-y-2 border-t p-3">
+                  {secundarias.map((o) => (
+                    <FilaOpcion
+                      key={o.clave}
+                      opcion={o}
+                      marcada={marcadas.includes(o.clave)}
+                      alternar={() => alternar(o.clave)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-lg border">
+            <button
+              type="button"
+              onClick={() => setConPropio((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+              aria-expanded={conPropio}
+            >
+              <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', conPropio && 'rotate-180')} />
+              Subir mi propio script
+              <span className="ml-auto text-[12px] font-normal text-muted-foreground">si ninguna sirve</span>
+            </button>
+            {conPropio && (
+              <div className="animate-entrada space-y-2.5 border-t p-3">
+                <input
+                  value={tituloPropio}
+                  onChange={(e) => setTituloPropio(e.target.value)}
+                  placeholder="Nombre de la correccion (opcional)"
+                  className="w-full rounded-lg border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary/50"
+                />
+                <textarea
+                  value={sqlPropio}
+                  onChange={(e) => setSqlPropio(e.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  placeholder={'UPDATE CORRESPONSALES.USUARIO\nSET USR_ESTADO = 1\nWHERE USR_CODIGO = :usr_codigo;\nCOMMIT;'}
+                  className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[12.5px] outline-none focus:border-primary/50"
+                />
+                <p className="text-[11.5px] text-muted-foreground">
+                  Los <span className="font-mono">:marcadores</span> se convierten en campos del formulario, asi el
+                  articulo sirve para el proximo caso. Sin marcadores queda como un script de un solo uso.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         <p className="mt-3 text-[12px] text-muted-foreground">
-          El articulo guarda la plantilla con sus marcadores, no el SQL ya resuelto: los valores del caso quedan como
-          sugerencia del formulario y la correccion sirve para el proximo. Publicar no ejecuta nada.
+          Publicar no ejecuta nada: deja los articulos listos en categorias con su formulario.
         </p>
       </Dialog>
     </>

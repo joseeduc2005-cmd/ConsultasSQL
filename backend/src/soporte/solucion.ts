@@ -369,6 +369,44 @@ function contenidoDeExploracion(p: PropuestaExploracion, numeroTicket: string | 
     .join(SALTO);
 }
 
+/**
+ * Campos del formulario deducidos de los `:marcadores` del SQL.
+ *
+ * Si quien sube el script escribe `WHERE USR_CODIGO = :usr_codigo`, el artículo sale
+ * con ese campo y sirve para el próximo caso. Sin marcadores queda sin formulario,
+ * que es lo correcto para un script de un solo uso.
+ */
+function camposDeMarcadores(sql: string) {
+  const vistos = new Set<string>();
+  const campos: { tipo: string; nombre: string; etiqueta: string; requerido: boolean; placeholder: string }[] = [];
+  for (const m of sql.matchAll(/:([a-z_][a-z0-9_]*)/gi)) {
+    const nombre = m[1].toLowerCase();
+    if (vistos.has(nombre)) continue;
+    vistos.add(nombre);
+    campos.push({ tipo: 'text', nombre, etiqueta: nombre.replace(/_/g, ' '), requerido: true, placeholder: '' });
+  }
+  return campos.length > 0 ? campos : null;
+}
+
+/** Artículo de un script que trajo una persona, no el sistema. */
+function contenidoPropio(nombre: string, sql: string, numeroTicket: string | null, autor: string): string {
+  return [
+    `# ${nombre}`,
+    '',
+    numeroTicket ? `Caso del ticket **${numeroTicket}**.` : '',
+    '',
+    `Script aportado por **${autor}**: ninguna de las correcciones que propuso el sistema resolvía este caso.`,
+    '',
+    '## Sentencia',
+    '',
+    '```sql',
+    sql,
+    '```',
+  ]
+    .filter((l) => l !== '')
+    .join(SALTO);
+}
+
 /** Artículo que cuenta el caso: qué se revisó, qué se encontró y qué correcciones salieron. */
 function contenidoDeSolucion(
   r: ResultadoDiagnostico,
@@ -450,6 +488,8 @@ export async function publicarSolucion(
     correcciones?: string[] | null;
     /** Propuesta de la exploración, si quien revisó decidió publicarla también. */
     exploracion?: PropuestaExploracion | null;
+    /** Script propio: cuando ninguna de las propuestas sirve y la solución la trae la persona. */
+    propio?: { titulo?: string | null; sql: string } | null;
   },
 ): Promise<SolucionPublicada> {
   const numeroTicket = r.ticket ?? null;
@@ -514,6 +554,25 @@ export async function publicarSolucion(
       etiquetas: ['solucion', 'exploracion', 'soporte', r.playbook, numeroTicket ?? 'sin-ticket'].filter(Boolean),
     });
     scripts.push({ id: guardado.id, titulo, correccion: 'exploracion', creado: guardado.creado });
+  }
+
+  if (opciones.propio?.sql?.trim()) {
+    const sql = opciones.propio.sql.trim();
+    const nombre = opciones.propio.titulo?.trim() || 'Corrección propia';
+    const titulo = numeroTicket ? `Solución ${numeroTicket} · ${nombre}` : nombre;
+    const guardado = await guardarArticulo({
+      ...autor,
+      titulo,
+      contenido: contenidoPropio(nombre, sql, numeroTicket, opciones.autorNombre),
+      descripcion: nombre,
+      categoria,
+      subcategoria: 'Soluciones',
+      tipo: 'script',
+      script: { sql, databaseId: baseDatos },
+      campos: camposDeMarcadores(sql),
+      etiquetas: ['solucion', 'propia', 'soporte', numeroTicket ?? 'sin-ticket'].filter(Boolean),
+    });
+    scripts.push({ id: guardado.id, titulo, correccion: 'propio', creado: guardado.creado });
   }
 
   const tituloCaso = numeroTicket

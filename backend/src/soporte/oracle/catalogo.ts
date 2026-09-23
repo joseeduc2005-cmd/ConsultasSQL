@@ -216,6 +216,22 @@ FROM dual`,
   perfilUsrIntentosPin: perfilSano('usr_intentos_pin', 'intentos fallidos de PIN'),
   perfilUsrIsClaveTemporal: perfilSano('usr_is_clave_temporal', 'marca de clave temporal'),
   perfilUsrIsPinTemporal: perfilSano('usr_is_pin_temporal', 'marca de PIN temporal'),
+
+  // Solo la usa la herramienta de calibracion: para diagnosticar no hace falta
+  // traerse el padron, pero para medir si el umbral discrimina, si.
+  usuariosActivosMuestra: {
+    descripcion: 'Muestra de usuarios que operaron, para calibrar la exploracion',
+    sql: `SELECT u.usr_estado, u.usr_intentos, u.usr_intentos_pin,
+       u.usr_is_clave_temporal, u.usr_is_pin_temporal
+FROM corresponsales.usuario u
+WHERE EXISTS (
+  SELECT 1
+  FROM corresponsales.usuario_pos up
+  JOIN corresponsales.transaccion t ON t.trans_pos = up.up_pos
+  WHERE up.up_usuario = u.usr_codigo
+    AND t.trans_fecha >= SYSDATE - :dias
+)`,
+  },
 } satisfies Record<string, ConsultaCatalogo>;
 
 export type NombreConsulta = keyof typeof CATALOGO;

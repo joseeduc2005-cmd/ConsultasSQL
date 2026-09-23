@@ -29,6 +29,14 @@ const unicos = (valores: string[]) => [...new Set(valores)];
 
 const DOMINIOS = /\.(com|ec|fin|net|org|gob|edu|html?|php|js|ts|jpg|png|pdf|txt|sql)$/i;
 
+/**
+ * `esquema.tabla` tiene la misma forma que `nombre.apellido`, así que el ticket
+ * 2026083744 —que menciona `fisja.clientes` en el texto— dejaba «fisja.clientes»
+ * como nombre de usuario y el diagnóstico salía a buscar a una persona que no
+ * existe. Los esquemas son tres y conocidos; descartarlos sale barato.
+ */
+const ESQUEMAS = /^(corresponsales|fisja|jst_personas|sys|system|dual)\./i;
+
 function aIso(dia: number, mes: number, anio: number): string | null {
   const fecha = new Date(Date.UTC(anio, mes - 1, dia));
   if (fecha.getUTCMonth() !== mes - 1 || anio < 2000 || anio > 2100) return null;
@@ -57,7 +65,7 @@ export function extraerIdentificadores(texto: string): Identificadores {
   // nombre de usuario sino una ruta o un dominio.
   const usuarios = [...texto.matchAll(/(?<![@\w.])([a-z][a-z0-9]{1,30}\.[a-z][a-z0-9]{1,30})(?![\w@])(?!\.[a-z0-9])/gi)]
     .map((m) => m[1].toLowerCase())
-    .filter((u) => !DOMINIOS.test(u) && !/^(p|a)\.m$/.test(u));
+    .filter((u) => !DOMINIOS.test(u) && !/^(p|a)\.m$/.test(u) && !ESQUEMAS.test(u));
 
   const fechas: string[] = [];
   for (const m of texto.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {

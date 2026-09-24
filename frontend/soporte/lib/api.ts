@@ -1,6 +1,7 @@
 import type {
   Alerta,
   BaseRegistrada,
+  BaseTickets,
   ConsultaBiblioteca,
   DiagnosticoResumen,
   EjecucionMonitor,
@@ -95,6 +96,9 @@ export const api = {
 
   consultas: (f: { q?: string; categoria?: string; riesgo?: string } = {}) =>
     solicitar<{ consultas: ConsultaBiblioteca[]; categorias: { categoria: string; total: number }[] }>(`/consultas${consulta(f)}`),
+
+  /** Bases habilitadas para investigar tickets, con su grupo y color. */
+  basesTickets: () => solicitar<BaseTickets[]>('/bases-tickets'),
 
   playbooks: () => solicitar<PlaybookInfo[]>('/playbooks'),
   ejecutarPlaybook: (id: string, entrada: Record<string, string>, ticket?: string) =>

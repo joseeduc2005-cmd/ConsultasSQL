@@ -13,7 +13,7 @@ import {
   BookPlus,
   Sparkle,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { api } from '@/soporte/lib/api';
@@ -398,6 +398,8 @@ function PublicarSolucion({
 }) {
   const avisar = useAvisos();
   const diagnosticoId = resultado.id!;
+  // Para avisar en el dialogo cuando lo publicado no va a ser ejecutable.
+  const { data: estado } = useQuery({ queryKey: ['estado'], queryFn: api.estado, staleTime: 60_000 });
   const elegibles = useMemo(() => correccionesElegibles(resultado), [resultado]);
 
   // La explorada manda cuando existe: se compara contra la poblacion y trae su
@@ -639,6 +641,13 @@ function PublicarSolucion({
 
         <p className="mt-3 text-[12px] text-muted-foreground">
           Publicar no ejecuta nada: deja los articulos listos en categorias con su formulario.
+          {estado && !estado.correccionesEjecutables && (
+            <>
+              {' '}
+              Ahora mismo se publican como documentacion: el SQL y el formulario quedan guardados, pero el panel no
+              muestra el boton de ejecutar hasta que se habilite la escritura en Oracle.
+            </>
+          )}
         </p>
       </Dialog>
     </>

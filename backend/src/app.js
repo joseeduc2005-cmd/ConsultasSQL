@@ -6468,7 +6468,18 @@ const { router: distributedRouter } = createDistributedRouter({
 });
 app.use('/api/distributed', distributedRouter); // GET /api/distributed/databases
 app.use('/api/query', distributedRouter);        // POST /api/query/distributed
-app.use('/api/auth', createAuthRouter({ pool, logLoginEvent }));
+// El router de autenticación recibe un proxy, no el pool.
+//
+// `reloadActiveDatabaseConnection` reemplaza `pool` y cierra el anterior cuando
+// cambia la config multibase. Pasando el pool por valor, el router se quedaba con
+// el objeto ya cerrado y todo login posterior fallaba con un 500 genérico hasta
+// reiniciar el backend: editar multidb.databases.json en caliente dejaba a todo el
+// mundo fuera del sistema.
+const poolVigente = {
+  query: (...args) => pool.query(...args),
+  connect: (...args) => pool.connect(...args),
+};
+app.use('/api/auth', createAuthRouter({ pool: poolVigente, logLoginEvent }));
 
 // ── Audit endpoint: el frontend registra eventos del cliente (descargas, etc.) ──
 app.post('/api/audit/event', async (req, res) => {

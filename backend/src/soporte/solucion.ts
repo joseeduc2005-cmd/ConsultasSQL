@@ -15,6 +15,7 @@
  * saben comprobar y produce la corrección de su catálogo con los valores del caso.
  * Ante un caso nuevo devuelve «sin hallazgos» y sigue haciendo falta una persona.
  */
+import { config } from './config.ts';
 import { CORRECCIONES, type Correccion } from './correcciones.ts';
 import { explorarDesdeEntrada, type PropuestaExploracion, type ResultadoExploracion } from './exploracion.ts';
 import { extraerIdentificadores } from './interpreter/extraer.ts';
@@ -28,6 +29,17 @@ import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
 import type { ResultadoDiagnostico, Severidad } from './playbooks/tipos.ts';
 
 const SALTO = String.fromCharCode(10);
+
+/**
+ * Tipo del artículo de una corrección.
+ *
+ * `script` enciende el botón de ejecutar del panel; `lectura` lo deja como
+ * documentación con su SQL a la vista. Por defecto lo segundo: publicar no debería
+ * poder escribir en Oracle hasta que alguien lo habilite a propósito.
+ */
+function tipoEjecutable(): 'script' | 'lectura' {
+  return config.correccionesEjecutables ? 'script' : 'lectura';
+}
 const ETIQUETA_ESTADO = { ok: 'OK', alerta: 'REVISAR', falla: 'PROBLEMA', omitido: 'OMITIDO', error: 'ERROR' } as const;
 
 /** Elige los datos de entrada que el diagnóstico necesita, si el texto los trae. */
@@ -546,7 +558,7 @@ export async function publicarSolucion(
       descripcion: d.descripcion,
       categoria,
       subcategoria: 'Soluciones',
-      tipo: 'script',
+      tipo: tipoEjecutable(),
       script: { sql: c.plantilla, databaseId: baseDatos },
       campos: c.campos.map((campo) => ({
         tipo: campo.tipo,
@@ -572,7 +584,7 @@ export async function publicarSolucion(
       descripcion: p.resumen,
       categoria,
       subcategoria: 'Soluciones',
-      tipo: 'script',
+      tipo: tipoEjecutable(),
       script: { sql: p.plantilla, databaseId: baseDatos },
       campos: [
         {
@@ -603,7 +615,7 @@ export async function publicarSolucion(
       descripcion: nombre,
       categoria,
       subcategoria: 'Soluciones',
-      tipo: sqlPropio ? 'script' : 'lectura',
+      tipo: sqlPropio ? tipoEjecutable() : 'lectura',
       script: sqlPropio ? { sql: sqlPropio, databaseId: baseDatos } : null,
       campos: sqlPropio && dinamico ? camposDeMarcadores(sqlPropio) : null,
       etiquetas: ['solucion', 'propia', 'soporte', numeroTicket ?? 'sin-ticket'].filter(Boolean),

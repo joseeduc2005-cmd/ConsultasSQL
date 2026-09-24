@@ -186,6 +186,14 @@ export const config = {
     // inalcanzable el driver se queda esperando ~20 s y arrastra a /estado con él.
     conectarTimeoutS: numero(process.env.SOPORTE_ORACLE_CONECTAR_TIMEOUT_S, 6),
   },
+  /**
+   * Con `false` (el valor por defecto) los artículos de solución se publican como
+   * documentación: guardan el SQL y sus campos, pero el panel no muestra el botón de
+   * ejecutar. Encenderlo es una decisión aparte — hay que confirmar que el usuario de
+   * Oracle tenga permiso de escritura y que el equipo acepte que la corrección se
+   * aplique desde aquí. Un despliegue nuevo nunca debería poder escribir el día uno.
+   */
+  correccionesEjecutables: texto(process.env.SOPORTE_CORRECCIONES_EJECUTABLES).toLowerCase() === 'on',
   reglas: {
     maxIntentosPin: numero(process.env.MAX_INTENTOS_PIN, 3),
     maxIntentosClave: numero(process.env.MAX_INTENTOS_CLAVE, 3),

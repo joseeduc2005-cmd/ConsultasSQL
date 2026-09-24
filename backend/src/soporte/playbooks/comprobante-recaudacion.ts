@@ -25,6 +25,12 @@ export const comprobanteRecaudacion: Playbook = {
     /(no|error).{0,25}imprim/i,
     /recaudaci/i,
     /documentos de respaldo/i,
+    /(error|falla).{0,30}(al (momento de la|procesar)).{0,20}recaudaci/i,
+    // El 2026085243 es una recaudación de municipio que falla al procesar y sigue
+    // abierta. Estas señales existían solo como «tema» de orientación, sin nadie que
+    // las atendiera; ahora las cubre este diagnóstico.
+    /municipio/i,
+    /gad/i,
   ],
   ticketsReferencia: ['2026082703'],
   campos: [{ ...CAMPO_CEDULA, etiqueta: 'Cédula del corresponsal', requerido: false }],
@@ -61,15 +67,18 @@ export const comprobanteRecaudacion: Playbook = {
 
     ctx.hallazgo({
       severidad: 'media',
-      titulo: 'Avería conocida de impresión, no del cobro',
+      titulo: 'Separar el cobro de la emisión del comprobante',
       detalle:
-        'Confirmado en el ticket 2026082703: en Recaudaciones Locales del módulo Corresponsal Solidario, el cobro ' +
-        'se registra y procesa correctamente y el error aparece solo al generar o reimprimir el comprobante de ' +
-        'respaldo. Desarrollo ya lo identificó y la corrección está pendiente de salir a producción.' +
+        'En Recaudaciones Locales hay dos fallos distintos, y lo primero es saber cuál es. La diferencia está en ' +
+        'si el cobro llegó a entrar:' +
         '\n\n' +
-        'Lo primero es tranquilizar a quien reclama: el dinero se cobró. Antes de escalar conviene verificar en la ' +
-        'base que la transacción está registrada, con la cédula del corresponsal y el código de pago del reclamo.',
-      ticketsRelacionados: ['2026082703'],
+        '· Si el cobro SÍ se registró y el error aparece solo al imprimir o reimprimir el comprobante, es la ' +
+        'avería del ticket 2026082703. Desarrollo ya la identificó y la corrección está pendiente de salir. Lo ' +
+        'primero es tranquilizar a quien reclama: el dinero se cobró.' +
+        '\n\n' +
+        '· Si el cobro NO llegó a procesarse, es otro caso. El ticket 2026085243 (Municipio GAD Mejía) sigue ' +
+        'abierto y sin causa raíz documentada, así que ahí todavía hace falta revisar los logs del POS.',
+      ticketsRelacionados: ['2026082703', '2026085243'],
       acciones: [
         {
           descripcion:

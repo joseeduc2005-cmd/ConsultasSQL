@@ -55,6 +55,10 @@ BEGIN
            usr_is_clave_temporal NUMBER, usr_is_pin_temporal NUMBER, codigo_sucursal NUMBER)');
   crear('CREATE TABLE corresponsales.usuario_pos (
            up_id NUMBER PRIMARY KEY, up_usuario NUMBER, up_pos NUMBER)');
+  crear('CREATE TABLE corresponsales.actacomprobantes (
+           aco_codigo NUMBER PRIMARY KEY, aco_representante NUMBER, aco_numero VARCHAR2(30))');
+  crear('CREATE TABLE corresponsales.pago_corresponsal (
+           id NUMBER PRIMARY KEY, numero_acta NUMBER, estado VARCHAR2(2))');
   crear('CREATE TABLE corresponsales.parametro (
            par_id NUMBER PRIMARY KEY, par_descripcion VARCHAR2(120), par_valor VARCHAR2(120))');
   crear('CREATE TABLE corresponsales.transaccion (
@@ -100,6 +104,14 @@ DELETE FROM corresponsales.usuario;
 DELETE FROM fisja.clientes;
 DELETE FROM fisja.ca_sucursales;
 DELETE FROM jst_personas.vwt_cliente;
+
+-- Acta con pago cerrado (ticket 2026090874).
+DELETE FROM corresponsales.pago_corresponsal;
+DELETE FROM corresponsales.actacomprobantes;
+INSERT INTO corresponsales.actacomprobantes VALUES (53656, 9002, 'ACTA-53656');
+INSERT INTO corresponsales.pago_corresponsal VALUES (1, 53656, 'C');
+INSERT INTO corresponsales.actacomprobantes VALUES (53657, 9002, 'ACTA-53657');
+INSERT INTO corresponsales.pago_corresponsal VALUES (2, 53657, 'A');
 
 -- Politica de claves (ticket 2026085232).
 DELETE FROM corresponsales.parametro;

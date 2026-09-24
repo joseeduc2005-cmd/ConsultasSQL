@@ -49,6 +49,7 @@ function entradaDesdeTexto(playbookId: string, texto: string): Record<string, st
   if (ids.macs[0]) disponibles.mac = ids.macs[0];
   if (ids.usuarios[0]) disponibles.usuario = ids.usuarios[0];
   if (ids.cedulas[0]) disponibles.cedula = ids.cedulas[0];
+  if (ids.actas[0]) disponibles.acta = ids.actas[0];
 
   const playbook = obtenerPlaybook(playbookId);
   if (!playbook) return null;

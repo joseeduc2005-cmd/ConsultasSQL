@@ -130,6 +130,7 @@ const RESOLVEDORES: Record<NombreConsulta, (p: Parametros) => Fila[]> = {
   ],
   pendientesTemporales: () => [{ total: 2 }],
   transaccionesRecientesPorCedula: () => [{ total: 18 }],
+  pagosDeActa: () => [{ numero_acta: 53656, estado: 'C', aco_codigo: 53656 }],
   usuarioPorUsuario: (p) => USUARIOS.filter((u) => u.usr_usuario === p.usuario),
   usuarioPorCedula: (p) => USUARIOS.filter((u) => u.usr_cedula === p.cedula),
   usuariosPorMac: (p) =>

@@ -10,6 +10,8 @@ export interface Identificadores {
   tickets: string[];
   fechas: string[];
   cuentas: string[];
+  /** Numeros de acta de pago al corresponsal (ticket 2026090874). */
+  actas: string[];
 }
 
 /** Valida una cédula ecuatoriana (provincia, tercer dígito y dígito verificador módulo 10). */
@@ -67,6 +69,9 @@ export function extraerIdentificadores(texto: string): Identificadores {
     .map((m) => m[1].toLowerCase())
     .filter((u) => !DOMINIOS.test(u) && !/^(p|a)\.m$/.test(u) && !ESQUEMAS.test(u));
 
+  // «acta 53656» — el ticket 2026090874 lo trae así en el texto.
+  const actas = [...texto.matchAll(/\bactas?\s*(?:n[°º.]?|no\.?|numero|número)?\s*:?\s*(\d{3,10})\b/gi)].map((m) => m[1]);
+
   const fechas: string[] = [];
   for (const m of texto.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {
     const iso = aIso(Number(m[1]), Number(m[2]), Number(m[3]));
@@ -86,5 +91,6 @@ export function extraerIdentificadores(texto: string): Identificadores {
     tickets: unicos(tickets),
     fechas: unicos(fechas).sort(),
     cuentas: unicos(cuentas),
+    actas: unicos(actas),
   };
 }

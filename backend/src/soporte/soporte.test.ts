@@ -69,6 +69,12 @@ describe('extraer identificadores', () => {
     assert.equal(extraerIdentificadores('mac 860090060131281').macs[0], '860090060131281');
   });
 
+  it('saca el número de acta', () => {
+    // Ticket 2026090874: «Se intento eliminar el acta 53656 (julio)».
+    assert.equal(extraerIdentificadores('Se intento eliminar el acta 53656 desde la aplicacion').actas[0], '53656');
+    assert.equal(extraerIdentificadores('actualizar el codigo 12345').actas.length, 0);
+  });
+
   it('no toma un número cualquiera por cédula', () => {
     assert.equal(extraerIdentificadores('son 1234567890 transacciones').cedulas.length, 0);
   });

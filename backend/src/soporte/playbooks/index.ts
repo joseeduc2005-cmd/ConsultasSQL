@@ -1,4 +1,5 @@
 import { accesoCorresponsal } from './acceso-corresponsal.ts';
+import { actasPago } from './actas-pago.ts';
 import { comprobanteRecaudacion } from './comprobante-recaudacion.ts';
 import { macDuplicada } from './mac-duplicada.ts';
 import { politicaClaves } from './politica-claves.ts';
@@ -15,6 +16,7 @@ export const PLAYBOOKS: Playbook[] = [
   reporteTransacciones,
   politicaClaves,
   comprobanteRecaudacion,
+  actasPago,
   servicioExterno,
 ];
 

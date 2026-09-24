@@ -261,6 +261,17 @@ JOIN corresponsales.usuario u ON u.usr_codigo = up.up_usuario
 WHERE u.usr_cedula = :cedula
   AND t.trans_fecha >= SYSDATE - 30`,
   },
+
+  // --- Actas y pagos (ticket 2026090874) ------------------------------------
+  pagosDeActa: {
+    descripcion: 'Pagos asociados a un acta, para ver si alguno esta Cerrado',
+    sql: `SELECT pc.numero_acta, pc.estado, ac.aco_codigo
+FROM corresponsales.actacomprobantes ac
+JOIN corresponsales.pago_corresponsal pc ON pc.numero_acta = ac.aco_codigo
+LEFT JOIN corresponsales.corresponsalrepresentante cr ON cr.cr_id = ac.aco_representante
+WHERE (:acta IS NULL OR ac.aco_codigo = :acta)
+  AND (:cedula IS NULL OR cr.cr_identificacion = :cedula)`,
+  },
 } satisfies Record<string, ConsultaCatalogo>;
 
 export type NombreConsulta = keyof typeof CATALOGO;

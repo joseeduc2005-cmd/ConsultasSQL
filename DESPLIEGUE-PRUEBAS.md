@@ -103,8 +103,10 @@ esperar a ver qué carga generan los diagnósticos a demanda.
 
 ## 6. Qué esperar del piloto
 
-Medido contra los 10 tickets reales del equipo, el sistema **responde algo útil en 8**.
-Los otros dos no traen causa raíz documentada, así que no hay de dónde sacar la regla.
+Medido contra los 10 tickets reales del equipo, el sistema **responde algo útil en los
+10**. Eso no quiere decir que los resuelva: quiere decir que a ninguno le contesta «sin
+hallazgos». En dos de ellos lo que responde es que el caso no tiene causa documentada y
+qué habría que mirar, que es lo honesto.
 
 De esos 8, la mitad responden sin poder consultar la base, porque el ticket no trae MAC,
 usuario ni cédula: explican la causa ya investigada y piden el dato que falta. Eso es

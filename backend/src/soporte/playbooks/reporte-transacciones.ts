@@ -16,9 +16,44 @@ export const reporteTransacciones: Playbook = {
   senales: [/reporte/i, /report/i, /transacciones/i, /hibernate/i, /propertyaccess/i, /movimientotendero/i, /no (carga|genera|muestra)/i, /\b300\b/],
   ticketsReferencia: ['2026084289', '2026091974'],
   campos: [{ ...CAMPO_MAC, requerido: true }, campoFecha('desde', 'Desde'), campoFecha('hasta', 'Hasta')],
+  sinDatos: true,
 
   async ejecutar(ctx) {
     const { mac, desde, hasta } = ctx.entrada;
+
+    // Los tickets reales de este tipo llegan sin MAC ni fechas: «no genera el
+    // reporte» y nada más. No se puede medir el volumen, pero la causa ya se
+    // investigó dos veces y es siempre la misma, así que se dice.
+    if (!mac || !desde || !hasta) {
+      await ctx.paso('limite-conocido', 'Causa conocida del reporte', async (p) => {
+        p.alerta(`El reporte tiene un límite fijo de ${config.reglas.limiteReporte} transacciones por consulta.`);
+      });
+      ctx.hallazgo({
+        severidad: 'media',
+        titulo: `El reporte falla al superar ${config.reglas.limiteReporte} transacciones`,
+        detalle:
+          `Causa ya confirmada en los tickets 2026084289 y 2026091974: el reporte de corresponsales trae un límite ` +
+          `fijo de ${config.reglas.limiteReporte} transacciones y, al pedirle un rango con más, da error en vez de paginar. ` +
+          `Desarrollo tiene la mejora en curso.
+
+` +
+          `Mientras tanto: pedir al corresponsal rangos de fechas más cortos.
+
+` +
+          `Para confirmarlo en este caso hace falta la MAC del POS y el rango de fechas; con eso el diagnóstico ` +
+          `mide el volumen real y descarta además los campos NULL que rompen el reporte.`,
+        ticketsRelacionados: ['2026084289', '2026091974'],
+        acciones: [
+          {
+            descripcion: 'Pedir al solicitante la MAC del POS y el rango de fechas, y volver a revisar.',
+            riesgo: 'lectura',
+            responsable: 'Soporte',
+          },
+        ],
+      });
+      return;
+    }
+
     const rango = { mac, desde: aFecha(desde), hasta: aFecha(hasta) };
 
     await ctx.paso('volumen', 'Volumen de transacciones del rango', async (p) => {

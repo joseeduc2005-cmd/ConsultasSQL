@@ -232,6 +232,24 @@ WHERE EXISTS (
     AND t.trans_fecha >= SYSDATE - :dias
 )`,
   },
+
+  // --- Politica de claves (ticket 2026085232) -------------------------------
+  politicaClaves: {
+    descripcion: 'Politica vigente de contrasena y PIN de corresponsales',
+    biblioteca: 'PC5',
+    sql: `SELECT par_id, par_descripcion, par_valor
+FROM corresponsales.parametro
+WHERE UPPER(par_descripcion) LIKE '%CLAVE%'
+   OR UPPER(par_descripcion) LIKE '%PIN%'
+   OR UPPER(par_descripcion) LIKE '%CONTRASE%'
+ORDER BY par_id`,
+  },
+  pendientesTemporales: {
+    descripcion: 'Cuantos usuarios arrastran clave o PIN temporal sin cambiar',
+    sql: `SELECT COUNT(*) AS total
+FROM corresponsales.usuario u
+WHERE u.usr_is_clave_temporal = 1 OR u.usr_is_pin_temporal = 1`,
+  },
 } satisfies Record<string, ConsultaCatalogo>;
 
 export type NombreConsulta = keyof typeof CATALOGO;

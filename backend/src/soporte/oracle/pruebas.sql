@@ -55,6 +55,8 @@ BEGIN
            usr_is_clave_temporal NUMBER, usr_is_pin_temporal NUMBER, codigo_sucursal NUMBER)');
   crear('CREATE TABLE corresponsales.usuario_pos (
            up_id NUMBER PRIMARY KEY, up_usuario NUMBER, up_pos NUMBER)');
+  crear('CREATE TABLE corresponsales.parametro (
+           par_id NUMBER PRIMARY KEY, par_descripcion VARCHAR2(120), par_valor VARCHAR2(120))');
   crear('CREATE TABLE corresponsales.transaccion (
            trans_id NUMBER PRIMARY KEY, trans_pos NUMBER, trans_tipo NUMBER,
            trans_monto NUMBER(12,2), trans_fecha DATE, trans_movimiento_tendero NUMBER)');
@@ -98,6 +100,13 @@ DELETE FROM corresponsales.usuario;
 DELETE FROM fisja.clientes;
 DELETE FROM fisja.ca_sucursales;
 DELETE FROM jst_personas.vwt_cliente;
+
+-- Politica de claves (ticket 2026085232).
+DELETE FROM corresponsales.parametro;
+INSERT INTO corresponsales.parametro VALUES (1, 'LONGITUD MINIMA CLAVE', '8');
+INSERT INTO corresponsales.parametro VALUES (2, 'LONGITUD MAXIMA CLAVE', '15');
+INSERT INTO corresponsales.parametro VALUES (3, 'CLAVES ANTERIORES NO REUTILIZABLES', '3');
+INSERT INTO corresponsales.parametro VALUES (4, 'LONGITUD PIN', '4');
 
 INSERT INTO fisja.ca_sucursales VALUES (1,  'Matriz Cuenca');
 INSERT INTO fisja.ca_sucursales VALUES (12, 'Mall del Alto');

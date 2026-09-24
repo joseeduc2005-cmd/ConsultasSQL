@@ -87,8 +87,21 @@ describe('clasificar con reglas', () => {
     }
   });
 
-  it('no inventa un playbook para un texto que no va del tema', () => {
-    assert.equal(clasificarConReglas('Error en recargas Claro').playbook, null);
+  it('reconoce las caidas de un proveedor externo', () => {
+    // Antes caia en «sin playbook» y quien atendia se ponia a buscar en Oracle un
+    // problema que estaba fuera. Ver ticket 2026091131.
+    assert.equal(clasificarConReglas('Error en recargas Claro').playbook?.id, 'servicio-externo');
+  });
+
+  it('distingue una queja de formato de clave de un bloqueo de acceso', () => {
+    const formato = clasificarConReglas('Formato de contrasena y PIN: el cambio se guarda pero no persiste');
+    assert.equal(formato.playbook?.id, 'politica-claves');
+    const bloqueo = clasificarConReglas('No permite ingresar, le sale Unexpected Error con el PIN');
+    assert.equal(bloqueo.playbook?.id, 'acceso-corresponsal');
+  });
+
+  it('no inventa un playbook para un texto ajeno al dominio', () => {
+    assert.equal(clasificarConReglas('Solicito vacaciones para el proximo mes').playbook, null);
   });
 });
 

@@ -16,6 +16,8 @@ import type {
 const PESO_SEVERIDAD = { critica: 0, alta: 1, media: 2, info: 3 } as const;
 
 export function validarEntrada(playbook: Playbook, entradaCruda: Record<string, unknown>): Record<string, string> {
+  // Entrada vacía en un playbook que declara `sinDatos`: no hay nada que validar.
+  if (playbook.sinDatos && Object.keys(entradaCruda).length === 0) return {};
   const entrada: Record<string, string> = {};
   for (const campo of playbook.campos) {
     const valor = typeof entradaCruda[campo.clave] === 'string' ? (entradaCruda[campo.clave] as string).trim() : '';

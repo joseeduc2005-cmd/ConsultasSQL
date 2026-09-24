@@ -250,6 +250,17 @@ ORDER BY par_id`,
 FROM corresponsales.usuario u
 WHERE u.usr_is_clave_temporal = 1 OR u.usr_is_pin_temporal = 1`,
   },
+
+  // --- Recaudaciones (ticket 2026082703) ------------------------------------
+  transaccionesRecientesPorCedula: {
+    descripcion: 'Cuantas transacciones registro un corresponsal en los ultimos 30 dias',
+    sql: `SELECT COUNT(*) AS total
+FROM corresponsales.transaccion t
+JOIN corresponsales.usuario_pos up ON up.up_pos = t.trans_pos
+JOIN corresponsales.usuario u ON u.usr_codigo = up.up_usuario
+WHERE u.usr_cedula = :cedula
+  AND t.trans_fecha >= SYSDATE - 30`,
+  },
 } satisfies Record<string, ConsultaCatalogo>;
 
 export type NombreConsulta = keyof typeof CATALOGO;

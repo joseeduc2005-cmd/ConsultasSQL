@@ -13,6 +13,12 @@ export interface EstadoSistema {
   /** Solo si se configura un modelo de lenguaje; hoy el backend no lo expone. */
   modelo?: { configurado: boolean; conectado: boolean; detalle: string };
   vigilancia: boolean;
+  /**
+   * Si esta apagado, los articulos de solucion se publican como documentacion y el
+   * panel no muestra el boton de ejecutar. Es lo normal hasta que se confirmen los
+   * permisos de escritura en Oracle.
+   */
+  correccionesEjecutables: boolean;
   reglas: { maxIntentosPin: number; maxIntentosClave: number; limiteReporte: number };
 }
 
@@ -154,6 +160,18 @@ export interface AccionSugerida {
   /** Id en el catalogo de correcciones: lo que el selector de publicacion ofrece marcar. */
   correccion?: string;
   parametros?: Record<string, string | number | null>;
+}
+
+export interface BaseTickets {
+  id: string;
+  etiqueta: string;
+  /** produccion | pruebas | otras */
+  grupo: string;
+  /** rojo | ambar | verde | azul | gris. Rojo avisa de que toca datos reales. */
+  color: string;
+  nota: string | null;
+  catalogo: string;
+  porDefecto: boolean;
 }
 
 export interface Anomalia {

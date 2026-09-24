@@ -161,7 +161,11 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
   const vacio = { numero: '', titulo: '', descripcion: '', sistema: 'Corresponsales', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
   const [datos, setDatos] = useState(vacio);
   // Las bases registradas en el motor: sirven de contexto de investigación del caso.
-  const { data: bases } = useQuery({ queryKey: ['bases-datos'], queryFn: api.basesDatos, staleTime: 5 * 60_000 });
+  // Solo las bases habilitadas para tickets: las consultas de los diagnosticos estan
+  // escritas contra los esquemas de Corresponsales, y apuntar a otra da un error, no
+  // un mal diagnostico. Antes se ofrecian todas las registradas.
+  const { data: bases } = useQuery({ queryKey: ['bases-tickets'], queryFn: api.basesTickets, staleTime: 5 * 60_000 });
+  const baseElegida = bases?.find((b) => b.id === datos.base_datos);
   const avisar = useAvisos();
   const qc = useQueryClient();
   const router = useRouter();
@@ -241,14 +245,16 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
             ayuda="Contra qué base se consultará este caso. El ticket siempre se guarda en la base de conocimiento; esto solo indica de dónde se leen los datos."
           >
             <Select id="nt-base" value={datos.base_datos} onChange={set('base_datos')}>
-              <option value="">Sin definir</option>
+              <option value="">Usar la base por defecto</option>
               {bases?.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.label || b.id} · {b.type}
-                  {b.connected === false ? ' (sin conexión)' : ''}
+                  {b.color === 'rojo' ? '⚠ ' : ''}
+                  {b.etiqueta}
+                  {b.grupo === 'produccion' ? ' · datos reales' : b.grupo === 'pruebas' ? ' · pruebas' : ''}
                 </option>
               ))}
             </Select>
+            {baseElegida?.nota && <p className="mt-1.5 text-[12px] text-muted-foreground">{baseElegida.nota}</p>}
           </Campo>
         </div>
         <Campo etiqueta="Autor" htmlFor="nt-autor">

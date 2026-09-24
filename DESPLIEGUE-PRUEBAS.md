@@ -108,7 +108,7 @@ Medido contra los 10 tickets reales del equipo, el sistema **responde algo útil
 hallazgos». En dos de ellos lo que responde es que el caso no tiene causa documentada y
 qué habría que mirar, que es lo honesto.
 
-De esos 8, la mitad responden sin poder consultar la base, porque el ticket no trae MAC,
+La mitad responden sin poder consultar la base, porque el ticket no trae MAC,
 usuario ni cédula: explican la causa ya investigada y piden el dato que falta. Eso es
 esperado, no una falla.
 

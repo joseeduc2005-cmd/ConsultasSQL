@@ -54,6 +54,17 @@ ALTER TABLE soporte.tickets ADD COLUMN IF NOT EXISTS base_datos text;
 -- piloto lo que importa es poder rastrear que propuso el sistema y quien lo acepto.
 ALTER TABLE soporte.diagnosticos ADD COLUMN IF NOT EXISTS ejecutado_por text;
 
+-- Columnas de knowledge_base que este modulo escribe al publicar una solucion.
+--
+-- El arranque del backend ya garantiza tipo_solucion, script_json, campos_formulario
+-- y visible_para, pero no estas cuatro. Una instalacion antigua —como la del otro
+-- servidor— puede no tenerlas, y entonces publicar una solucion falla en el INSERT.
+-- Que el modulo declare lo que necesita sale mas barato que descubrirlo en produccion.
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS categoria varchar(120);
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS subcategoria varchar(120);
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS tags text[];
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado timestamp;
+
 CREATE TABLE IF NOT EXISTS soporte.ticket_pasos (
   id             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ticket         text NOT NULL REFERENCES soporte.tickets (numero) ON DELETE CASCADE,

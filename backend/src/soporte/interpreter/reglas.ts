@@ -66,8 +66,11 @@ export function clasificarConReglas(texto: string): Clasificacion {
   const mejor = puntajes[0];
   const sistema = SISTEMAS.find(([r]) => r.test(texto))?.[1] ?? null;
 
-  // Un tema conocido sin diagnóstico gana si tiene más señales que el mejor playbook.
-  if (tema && tema.puntaje >= mejor.puntaje) {
+  // Un tema conocido sin diagnóstico gana solo si tiene MÁS señales que el mejor
+  // playbook. Con `>=` ganaba los empates y devolvía `playbook: null`, así que un
+  // ticket como «Error en recargas Claro» se quedaba sin diagnosticar aunque hubiera
+  // uno que lo cubría: un diagnóstico que corre vale más que un texto de orientación.
+  if (tema && tema.puntaje > mejor.puntaje) {
     return { sistema: tema.sistema ?? sistema, categoria: tema.categoria, playbook: null, orientacion: tema.orientacion };
   }
   if (mejor.puntaje === 0) {

@@ -56,7 +56,9 @@ function entradaDesdeTexto(playbookId: string, texto: string): Record<string, st
   // Solo se conservan las claves que el diagnóstico declara como campos suyos.
   const admitidos = new Set(playbook.campos.map((c) => c.clave));
   const entrada = Object.fromEntries(Object.entries(disponibles).filter(([k]) => admitidos.has(k)));
-  return Object.keys(entrada).length > 0 ? entrada : null;
+  if (Object.keys(entrada).length > 0) return entrada;
+  // Los que sirven sin datos corren igual: saben algo del caso aunque no haya a quién buscar.
+  return playbook.sinDatos ? {} : null;
 }
 
 export interface ResultadoAutodiagnostico {

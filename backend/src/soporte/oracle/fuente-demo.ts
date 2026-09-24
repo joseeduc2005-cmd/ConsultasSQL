@@ -123,6 +123,12 @@ const RESOLVEDORES: Record<NombreConsulta, (p: Parametros) => Fila[]> = {
   perfilUsrIsClaveTemporal: () => [],
   perfilUsrIsPinTemporal: () => [],
   usuariosActivosMuestra: () => [],
+  politicaClaves: () => [
+    { par_id: 1, par_descripcion: 'LONGITUD MINIMA CLAVE', par_valor: '8' },
+    { par_id: 2, par_descripcion: 'LONGITUD MAXIMA CLAVE', par_valor: '15' },
+    { par_id: 3, par_descripcion: 'LONGITUD PIN', par_valor: '4' },
+  ],
+  pendientesTemporales: () => [{ total: 2 }],
   usuarioPorUsuario: (p) => USUARIOS.filter((u) => u.usr_usuario === p.usuario),
   usuarioPorCedula: (p) => USUARIOS.filter((u) => u.usr_cedula === p.cedula),
   usuariosPorMac: (p) =>

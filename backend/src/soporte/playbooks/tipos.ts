@@ -99,5 +99,13 @@ export interface Playbook {
   campos: CampoEntrada[];
   /** Grupos de campos de los que se necesita al menos uno (ej. MAC, usuario o cédula). */
   requiereAlguno?: string[][];
+  /**
+   * El playbook aporta algo aunque el ticket no traiga MAC, usuario ni cédula.
+   *
+   * Los tickets 2026084289 y 2026091974 son así: «no genera el reporte», sin un solo
+   * dato con que buscar. Aun sin ellos el sistema sabe la causa —el límite fijo de
+   * 300— y decirlo vale más que responder «sin hallazgos».
+   */
+  sinDatos?: boolean;
   ejecutar(ctx: Contexto): Promise<void>;
 }

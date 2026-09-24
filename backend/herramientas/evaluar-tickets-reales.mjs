@@ -20,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 
 const { clasificarConReglas } = await import('../src/soporte/interpreter/reglas.ts');
+const { obtenerPlaybook } = await import('../src/soporte/playbooks/index.ts');
 const { extraerIdentificadores } = await import('../src/soporte/interpreter/extraer.ts');
 
 const ruta = process.argv[2];
@@ -67,11 +68,16 @@ for (const t of tickets) {
     ids.macs[0] ? `mac=${ids.macs[0]}` : '',
   ].filter(Boolean);
 
+  // Un playbook marcado `sinDatos` aporta aunque el ticket no traiga identificadores:
+  // conoce la causa del caso. Contarlo como fallo subestimaba la cobertura real.
+  const sinDatos = playbook ? obtenerPlaybook(playbook)?.sinDatos === true : false;
+  const sirve = Boolean(playbook) && (datos.length > 0 || sinDatos);
+
   if (playbook) clasificados += 1;
   if (datos.length > 0) conDatos += 1;
-  if (playbook && datos.length > 0) completos += 1;
+  if (sirve) completos += 1;
 
-  const marca = playbook && datos.length ? 'OK  ' : playbook ? 'SIN DATOS' : 'SIN PLAYBOOK';
+  const marca = sirve ? (datos.length ? 'OK  ' : 'OK (sin datos)') : playbook ? 'SIN DATOS' : 'SIN PLAYBOOK';
   console.log(`${marca.padEnd(13)} ${String(t.TICKET).padEnd(24)} ${playbook ?? '-'}`);
   console.log(`              ${(t.TITULO ?? '').slice(0, 78)}`);
   console.log(`              ${datos.join('  ') || '(no se extrajo ningún identificador)'}\n`);
@@ -81,4 +87,4 @@ const pct = (n) => `${((n / tickets.length) * 100).toFixed(0)} %`;
 console.log('-'.repeat(72));
 console.log(`Clasificados        : ${clasificados}/${tickets.length}  ${pct(clasificados)}`);
 console.log(`Con datos extraídos : ${conDatos}/${tickets.length}  ${pct(conDatos)}`);
-console.log(`Investigables       : ${completos}/${tickets.length}  ${pct(completos)}   <- los que llegarían a consultar Oracle`);
+console.log(`Con respuesta útil  : ${completos}/${tickets.length}  ${pct(completos)}   <- los que dirían algo al pulsar «Revisar error»`);

@@ -27,10 +27,41 @@ export const sucursalCorresponsal: Playbook = {
     { clave: 'codigo_socio', etiqueta: 'Código de socio', tipo: 'texto', patron: '^\\d{1,10}$', ejemplo: '382019' },
   ],
   requiereAlguno: [['cedula', 'codigo_socio']],
+  sinDatos: true,
 
   async ejecutar(ctx) {
     const { cedula } = ctx.entrada;
     let codigoSocio = ctx.entrada.codigo_socio;
+
+    // El ticket 2026083744 llegó así: «descuadre por sucursal desactualizada», sin
+    // cédula ni código de socio. La causa estructural ya se investigó, y decirla
+    // orienta al técnico aunque no se pueda señalar a qué corresponsal le pasa.
+    if (!cedula && !codigoSocio) {
+      await ctx.paso('patron-conocido', 'Patrón conocido de descuadre por sucursal', async (p) => {
+        p.alerta('La sucursal del socio se desincroniza entre corresponsales, fisja y jst_personas.');
+      });
+      ctx.hallazgo({
+        severidad: 'media',
+        titulo: 'Descuadre por sucursal desactualizada entre las tres fuentes',
+        detalle:
+          'Patrón del ticket 2026083744 (caso Mall Alto): al trasladar a un corresponsal de oficina, la sucursal ' +
+          'se actualiza en CORRESPONSALES pero fisja.clientes se queda con la anterior, y la contabilización ' +
+          'imputa las transacciones a la oficina vieja. La corrección puntual sobre fisja.clientes resuelve el ' +
+          'caso, pero el proceso vuelve a desincronizar hasta que desarrollo despliegue el arreglo.' +
+          '\n\n' +
+          'Con la cédula o el código de socio este diagnóstico compara las tres fuentes y dice exactamente ' +
+          'cuál está desalineada.',
+        ticketsRelacionados: ['2026083744'],
+        acciones: [
+          {
+            descripcion: 'Pedir la cédula o el código de socio del corresponsal descuadrado y volver a revisar.',
+            riesgo: 'lectura',
+            responsable: 'Soporte',
+          },
+        ],
+      });
+      return;
+    }
 
     if (!codigoSocio && cedula) {
       codigoSocio =

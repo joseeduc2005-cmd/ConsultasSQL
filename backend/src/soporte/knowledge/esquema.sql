@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS soporte.tickets (
 -- Se añade aparte porque la tabla ya existe en instalaciones en marcha.
 ALTER TABLE soporte.tickets ADD COLUMN IF NOT EXISTS base_datos text;
 
+-- Quien pulso «Revisar error». Sin esto el diagnostico quedaba sin dueno, y en un
+-- piloto lo que importa es poder rastrear que propuso el sistema y quien lo acepto.
+ALTER TABLE soporte.diagnosticos ADD COLUMN IF NOT EXISTS ejecutado_por text;
+
 CREATE TABLE IF NOT EXISTS soporte.ticket_pasos (
   id             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ticket         text NOT NULL REFERENCES soporte.tickets (numero) ON DELETE CASCADE,

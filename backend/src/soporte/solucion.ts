@@ -102,7 +102,7 @@ export async function diagnosticarTicket(ticket: {
   titulo: string;
   descripcion?: string | null;
   base_datos?: string | null;
-}): Promise<ResultadoAutodiagnostico> {
+}, ejecutadoPor?: string | null): Promise<ResultadoAutodiagnostico> {
   // El ticket manda contra qué base se investiga. Si eligió una que no está marcada
   // para tickets, no se cae de otra forma más adelante: se dice aquí.
   const suFuente = fuentePara(ticket.base_datos);
@@ -126,7 +126,7 @@ export async function diagnosticarTicket(ticket: {
     // nuevo, y sin número no habría a qué colgar la publicación.
     const sinPlaybook = async (motivo: string): Promise<ResultadoAutodiagnostico> =>
       exploracion.propuesta
-        ? await registrarExploracion(ticket, identificadores, exploracion, suFuente)
+        ? await registrarExploracion(ticket, identificadores, exploracion, suFuente, ejecutadoPor)
         : { ejecutado: false, motivo, exploracion };
 
     const clasificacion = clasificarConReglas(texto);
@@ -142,7 +142,7 @@ export async function diagnosticarTicket(ticket: {
 
     const validada = validarEntrada(playbook, entrada);
     const resultado = await ejecutarPlaybook(playbook, validada, suFuente);
-    const id = await guardarDiagnostico(resultado, ticket.numero);
+    const id = await guardarDiagnostico(resultado, ticket.numero, ejecutadoPor);
 
     await agregarPaso(ticket.numero, {
       titulo: `Diagnóstico: ${resultado.nombrePlaybook}`,
@@ -179,6 +179,7 @@ async function registrarExploracion(
   entrada: Record<string, string>,
   exploracion: ResultadoExploracion,
   fuenteUsada: { modo: 'demo' | 'oracle' },
+  ejecutadoPor?: string | null,
 ): Promise<ResultadoAutodiagnostico> {
   const p = exploracion.propuesta!;
   const inicio = new Date().toISOString();
@@ -205,7 +206,7 @@ async function registrarExploracion(
     duracionMs: 0,
   };
 
-  const id = await guardarDiagnostico(resultado, ticket.numero);
+  const id = await guardarDiagnostico(resultado, ticket.numero, ejecutadoPor);
   await agregarPaso(ticket.numero, {
     titulo: 'Exploración: diferencias con los usuarios que operan',
     resultado: detalle,
@@ -296,6 +297,45 @@ interface ArticuloNuevo {
  * Guarda un artículo reconociéndolo por su título: volver a publicar el mismo caso
  * lo actualiza en vez de duplicarlo.
  */
+/**
+ * Deja constancia en la bitácora de artículos del panel.
+ *
+ * El módulo escribe en `knowledge_base` por su cuenta, sin pasar por los endpoints de
+ * artículos, así que sus publicaciones no aparecían en `article_changes` y quedaban
+ * fuera de la auditoría. En un piloto eso es justo lo que hay que poder rastrear:
+ * qué propuso el sistema y quién lo aceptó.
+ *
+ * No lanza: una solución publicada no debe perderse porque falle su bitácora.
+ */
+async function auditarArticulo(
+  a: ArticuloNuevo,
+  id: string,
+  creado: boolean,
+): Promise<void> {
+  try {
+    await ejecutar(
+      `INSERT INTO article_changes (article_id, article_titulo, accion, realizado_por, realizado_rol, detalle)
+       VALUES ($1, $2, $3, $4, 'admin', $5)`,
+      [
+        id,
+        a.titulo,
+        creado ? 'crear' : 'actualizar',
+        a.autorNombre,
+        JSON.stringify({
+          origen: 'centro-de-soporte',
+          tipo: a.tipo,
+          categoria: a.categoria,
+          subcategoria: a.subcategoria,
+          ejecutable: a.tipo === 'script',
+          etiquetas: a.etiquetas,
+        }),
+      ],
+    );
+  } catch {
+    // La bitácora es un extra; el artículo ya está guardado.
+  }
+}
+
 async function guardarArticulo(a: ArticuloNuevo): Promise<{ id: string; creado: boolean }> {
   const script = a.script ? JSON.stringify(a.script) : null;
   const campos = a.campos ? JSON.stringify(a.campos) : null;
@@ -310,6 +350,7 @@ async function guardarArticulo(a: ArticuloNuevo): Promise<{ id: string; creado: 
        WHERE id = $1`,
       [existente.id, a.contenido, a.descripcion, a.categoria, a.subcategoria, a.tipo, script, campos, a.autorNombre],
     );
+    await auditarArticulo(a, existente.id, false);
     return { id: existente.id, creado: false };
   }
 
@@ -322,6 +363,7 @@ async function guardarArticulo(a: ArticuloNuevo): Promise<{ id: string; creado: 
     [a.titulo, a.contenido, a.descripcion, a.categoria, a.subcategoria, a.tipo, script, campos,
      a.autorId, a.autorNombre, a.etiquetas],
   );
+  await auditarArticulo(a, creado!.id, true);
   return { id: creado!.id, creado: true };
 }
 

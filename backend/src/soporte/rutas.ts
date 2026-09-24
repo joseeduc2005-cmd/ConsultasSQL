@@ -171,6 +171,7 @@ export function crearSoporteRouter(
       // Base registrada contra la que corren los diagnósticos, o null en modo demo.
       baseDiagnosticos: config.oracle.dbId,
       vigilancia: config.vigilancia.habilitada,
+      correccionesEjecutables: config.correccionesEjecutables,
       reglas: config.reglas,
     })),
   );
@@ -432,7 +433,8 @@ export function crearSoporteRouter(
         databaseId: texto(cuerpo.databaseId) ?? config.oracle.dbId,
         autorId: usuario.id,
         autorNombre: usuario.username,
-        ejecutable: cuerpo.ejecutable === true,
+        // Aunque lo pidan, sin la llave global no se publica nada ejecutable.
+        ejecutable: cuerpo.ejecutable === true && config.correccionesEjecutables,
       });
       registrar(resultado, 'correcciones publicadas como artículos');
       return resultado;

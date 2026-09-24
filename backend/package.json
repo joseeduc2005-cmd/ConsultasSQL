@@ -12,9 +12,14 @@
     "dev": "node src/app.js",
     "build": "tsc",
     "start": "node src/app.js",
-    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test:soporte": "node --test src/soporte/soporte.test.ts"
   },
-  "keywords": ["nodejs", "express", "clean-architecture"],
+  "keywords": [
+    "nodejs",
+    "express",
+    "clean-architecture"
+  ],
   "author": "Team",
   "license": "MIT",
   "dependencies": {
@@ -46,6 +51,11 @@
     "typescript": "^5.3.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["oracledb", "unrs-resolver", "esbuild", "sharp"]
+    "onlyBuiltDependencies": [
+      "oracledb",
+      "unrs-resolver",
+      "esbuild",
+      "sharp"
+    ]
   }
 }

@@ -16,12 +16,18 @@ export interface DiagnosticoResumen {
 /** `entrada` y `resultado` son jsonb: el driver ya los entrega deserializados. */
 const COLUMNAS_RESUMEN = 'id, playbook, entrada, veredicto, resumen, ticket, origen_datos, duracion_ms, creado_en';
 
-export async function guardarDiagnostico(r: ResultadoDiagnostico, ticket: string | null): Promise<number> {
+export async function guardarDiagnostico(
+  r: ResultadoDiagnostico,
+  ticket: string | null,
+  ejecutadoPor?: string | null,
+): Promise<number> {
   const creado = await fila<{ id: number }>(
-    `INSERT INTO soporte.diagnosticos (playbook, entrada, veredicto, resumen, resultado, ticket, origen_datos, duracion_ms)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO soporte.diagnosticos
+       (playbook, entrada, veredicto, resumen, resultado, ticket, origen_datos, duracion_ms, ejecutado_por)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id`,
-    [r.playbook, JSON.stringify(r.entrada), r.veredicto, r.resumen, JSON.stringify(r), ticket, r.origenDatos, r.duracionMs],
+    [r.playbook, JSON.stringify(r.entrada), r.veredicto, r.resumen, JSON.stringify(r), ticket, r.origenDatos,
+     r.duracionMs, ejecutadoPor ?? null],
   );
   return creado!.id;
 }

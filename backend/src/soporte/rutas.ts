@@ -296,7 +296,8 @@ export function crearSoporteRouter(
     h(async (req) => {
       const ticket = await obtenerTicket(req.params.numero);
       if (!ticket) throw noEncontrado('Ticket no encontrado.');
-      const revision = await diagnosticarTicket(ticket);
+      const quien = (req as unknown as { usuarioSoporte?: { username: string } }).usuarioSoporte?.username ?? null;
+      const revision = await diagnosticarTicket(ticket, quien);
       registrar({ ticket: ticket.numero, ...revision, resultado: undefined }, 'ticket revisado');
       return revision;
     }),

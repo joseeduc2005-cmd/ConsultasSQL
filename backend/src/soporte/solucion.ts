@@ -24,6 +24,7 @@ import { ejecutar, fila } from './knowledge/db.ts';
 import { guardarDiagnostico } from './knowledge/diagnosticos.ts';
 import { agregarPaso } from './knowledge/tickets.ts';
 import { fuente, fuentePara } from './oracle/index.ts';
+import { buscarPrecedentes, type Precedente } from './precedentes.ts';
 import { obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
 import type { ResultadoDiagnostico, Severidad } from './playbooks/tipos.ts';
@@ -75,6 +76,13 @@ export interface ResultadoAutodiagnostico {
    * también —sobre todo— cuando ningún playbook reconoce el caso.
    */
   exploracion?: ResultadoExploracion;
+  /**
+   * Casos parecidos ya resueltos, de la base de conocimiento. Salen siempre: con
+   * Oracle acompañan al diagnóstico, y sin ella son lo único que puede responder
+   * — que no es poco, porque el sistema también vale para no volver a investigar
+   * lo que alguien ya investigó.
+   */
+  precedentes?: Precedente[];
 }
 
 /** Identificadores del texto, sin filtrar por los campos de ningún playbook. */
@@ -105,17 +113,21 @@ export async function diagnosticarTicket(ticket: {
 }, ejecutadoPor?: string | null): Promise<ResultadoAutodiagnostico> {
   // El ticket manda contra qué base se investiga. Si eligió una que no está marcada
   // para tickets, no se cae de otra forma más adelante: se dice aquí.
+  const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;
+  const precedentes = await buscarPrecedentes(texto, { excluirTicket: ticket.numero });
+
   const suFuente = fuentePara(ticket.base_datos);
   if (!suFuente) {
     // Se distinguen los dos motivos: no es lo mismo que falte configurar la conexión
     // que haber elegido una base que no sirve para esto.
     const motivo = ticket.base_datos
       ? `La base «${ticket.base_datos}» no está habilitada para investigar tickets. Revise la marca «soporte.tickets» en multidb.databases.json.`
-      : 'Todavía no hay ninguna base configurada para investigar. El ticket queda registrado; cuando se configure la conexión, pulse «Revisar error» otra vez.';
-    return { ejecutado: false, motivo };
+      : precedentes.length > 0
+        ? 'Sin base conectada no se pudo comprobar el caso en Oracle, pero hay casos parecidos ya resueltos.'
+        : 'Todavía no hay ninguna base configurada para investigar, y no se encontró ningún caso parecido en la base de conocimiento.';
+    return { ejecutado: false, motivo, precedentes };
   }
 
-  const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;
   const identificadores = identificadoresDelTexto(texto);
   const tieneDatos = Object.keys(identificadores).length > 0;
   const exploracion = tieneDatos
@@ -129,7 +141,7 @@ export async function diagnosticarTicket(ticket: {
     const sinPlaybook = async (motivo: string): Promise<ResultadoAutodiagnostico> =>
       exploracion.propuesta
         ? await registrarExploracion(ticket, identificadores, exploracion, suFuente, ejecutadoPor)
-        : { ejecutado: false, motivo, exploracion };
+        : { ejecutado: false, motivo, exploracion, precedentes };
 
     const clasificacion = clasificarConReglas(texto);
     if (!clasificacion.playbook) return await sinPlaybook('El texto no apunta a ningún diagnóstico conocido.');
@@ -162,9 +174,10 @@ export async function diagnosticarTicket(ticket: {
       veredicto: resultado.veredicto,
       resultado: { ...resultado, id, ticket: ticket.numero },
       exploracion,
+      precedentes,
     };
   } catch (error) {
-    return { ejecutado: false, motivo: (error as Error).message, exploracion };
+    return { ejecutado: false, motivo: (error as Error).message, exploracion, precedentes };
   }
 }
 

@@ -174,6 +174,18 @@ export interface BaseTickets {
   porDefecto: boolean;
 }
 
+export interface Precedente {
+  tipo: 'ticket' | 'articulo';
+  id: string;
+  titulo: string;
+  detalle: string;
+  /** 0..1, relativo al precedente más parecido. */
+  relevancia: number;
+  categoria: string | null;
+  sql: string | null;
+  enlace: string;
+}
+
 export interface Anomalia {
   columna: string;
   etiqueta: string;

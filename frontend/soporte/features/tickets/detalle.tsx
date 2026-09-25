@@ -12,6 +12,7 @@ import { CodeBlock } from '@/soporte/components/ui/code-block';
 import { Dialog } from '@/soporte/components/ui/dialog';
 import { Cargando, ErrorCarga, Vacio } from '@/soporte/components/ui/estados';
 import { Campo, Input, Select, Textarea } from '@/soporte/components/ui/form';
+import { PrecedentesVista } from '../diagnostico/precedentes';
 import { ResultadoDiagnosticoVista } from '../diagnostico/resultado';
 import { useAvisos } from '@/soporte/components/ui/toast';
 import { api } from '@/soporte/lib/api';
@@ -21,6 +22,7 @@ import type {
   EstadoTicket,
   PasoTicket,
   ResultadoDiagnostico,
+  Precedente,
   ResultadoExploracion,
   TicketDetalle,
 } from '@/soporte/lib/types';
@@ -215,6 +217,7 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
     motivo?: string;
     resultado?: ResultadoDiagnostico;
     exploracion?: ResultadoExploracion;
+    precedentes?: Precedente[];
   } | null>(null);
 
   // Un solo botón: el backend deduce qué comprobar del texto del ticket, lo ejecuta
@@ -247,8 +250,7 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
             tamano="sm"
             onClick={() => revisar.mutate()}
             cargando={revisar.isPending}
-            disabled={sinBase}
-            title={sinBase ? 'No hay ninguna base de datos configurada para investigar' : undefined}
+            title={sinBase ? 'Sin base conectada: buscará casos parecidos en la base de conocimiento' : undefined}
           >
             {!revisar.isPending && <ScanSearch />}
             Revisar error
@@ -258,8 +260,8 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
 
       {sinBase && (
         <p className="mx-5 mb-4 rounded-lg border px-4 py-3 text-[13px] text-muted-foreground">
-          La investigación automática está en pausa: todavía no hay una base de datos configurada contra la que
-          consultar. El ticket queda registrado igual, y cuando se conecte bastará con pulsar «Revisar error».
+          Sin base de datos conectada, «Revisar error» busca casos parecidos ya resueltos en la base de
+          conocimiento. Cuando se configure la conexión, además comprobará el caso en Oracle.
         </p>
       )}
 
@@ -271,6 +273,12 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
       {revision?.resultado && (
         <div className="border-b px-5 pb-5">
           <ResultadoDiagnosticoVista resultado={revision.resultado} exploracion={revision.exploracion} />
+        </div>
+      )}
+
+      {revision?.precedentes && revision.precedentes.length > 0 && (
+        <div className="border-b px-5 pb-5">
+          <PrecedentesVista precedentes={revision.precedentes} />
         </div>
       )}
 

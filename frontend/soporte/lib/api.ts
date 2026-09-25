@@ -11,6 +11,7 @@ import type {
   MonitorInfo,
   PasoTicket,
   PlaybookInfo,
+  Precedente,
   ResultadoDiagnostico,
   ResultadoExploracion,
   Resumen,
@@ -92,6 +93,7 @@ export const api = {
       diagnosticoId?: number;
       resultado?: ResultadoDiagnostico;
       exploracion?: ResultadoExploracion;
+      precedentes?: Precedente[];
     }>(`/tickets/${encodeURIComponent(numero)}/revisar`, { method: 'POST' }),
 
   consultas: (f: { q?: string; categoria?: string; riesgo?: string } = {}) =>

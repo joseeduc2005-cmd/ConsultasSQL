@@ -65,6 +65,21 @@ ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS subcategoria varchar(120);
 ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS tags text[];
 ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado timestamp;
 
+-- Busqueda de texto sobre los articulos, para encontrar precedentes de un ticket.
+--
+-- `soporte.tickets` ya tenia la suya; los articulos no, y son justo donde vive lo que
+-- el equipo ya resolvio. Se usa la misma funcion sin tildes para que «bloqueo» y
+-- «bloqueó» encuentren lo mismo, y GIN porque es lo que sirve para tsvector.
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS busqueda tsvector
+  GENERATED ALWAYS AS (
+    to_tsvector('spanish', soporte.sin_tildes(
+      coalesce(titulo, '') || ' ' || coalesce(descripcion, '') || ' ' ||
+      coalesce(categoria, '') || ' ' || coalesce(subcategoria, '') || ' ' ||
+      coalesce(contenido, '')))
+  ) STORED;
+
+CREATE INDEX IF NOT EXISTS knowledge_base_busqueda_idx ON knowledge_base USING GIN (busqueda);
+
 CREATE TABLE IF NOT EXISTS soporte.ticket_pasos (
   id             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ticket         text NOT NULL REFERENCES soporte.tickets (numero) ON DELETE CASCADE,

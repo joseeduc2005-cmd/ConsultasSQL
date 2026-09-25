@@ -164,6 +164,27 @@ describe('sin base configurada', () => {
   });
 });
 
+// ─── Precedentes ─────────────────────────────────────────────────────────────
+
+describe('buscar precedentes', () => {
+  it('descarta las palabras que aparecen en todos los tickets', async () => {
+    // Sin esto, «Estimados, buenos dias, reporta un problema» casaba con todo y el
+    // orden por relevancia dejaba de significar nada.
+    const { aConsultaParaPruebas } = await import('./precedentes.ts');
+    const q = aConsultaParaPruebas('Estimados buenos dias el usuario reporta un problema con el bloqueo del PIN');
+    assert.ok(q, 'deberia producir consulta');
+    for (const vacia of ['estimados', 'buenos', 'dias', 'reporta', 'usuario', 'problema']) {
+      assert.ok(!q!.includes(vacia), `no deberia incluir «${vacia}»`);
+    }
+    assert.ok(q!.includes('bloqueo'), 'deberia conservar la palabra que distingue');
+  });
+
+  it('ignora las palabras demasiado cortas para distinguir', async () => {
+    const { aConsultaParaPruebas } = await import('./precedentes.ts');
+    assert.equal(aConsultaParaPruebas('de la el un'), null);
+  });
+});
+
 // ─── Exploración ─────────────────────────────────────────────────────────────
 
 /** Fuente falsa: devuelve el perfil que se le indique, sin tocar ninguna base. */

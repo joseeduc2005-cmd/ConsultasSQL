@@ -107,10 +107,12 @@ export async function diagnosticarTicket(ticket: {
   // para tickets, no se cae de otra forma más adelante: se dice aquí.
   const suFuente = fuentePara(ticket.base_datos);
   if (!suFuente) {
-    return {
-      ejecutado: false,
-      motivo: `La base «${ticket.base_datos}» no está habilitada para investigar tickets. Revise la marca «soporte.tickets» en multidb.databases.json.`,
-    };
+    // Se distinguen los dos motivos: no es lo mismo que falte configurar la conexión
+    // que haber elegido una base que no sirve para esto.
+    const motivo = ticket.base_datos
+      ? `La base «${ticket.base_datos}» no está habilitada para investigar tickets. Revise la marca «soporte.tickets» en multidb.databases.json.`
+      : 'Todavía no hay ninguna base configurada para investigar. El ticket queda registrado; cuando se configure la conexión, pulse «Revisar error» otra vez.';
+    return { ejecutado: false, motivo };
   }
 
   const texto = `${ticket.titulo} ${ticket.descripcion ?? ''}`;

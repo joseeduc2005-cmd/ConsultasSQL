@@ -40,6 +40,16 @@ con `backend/.env`, que sale de `backend/.env.example`.
 
 El campo `schema` de cada base se llena solo: el motor introspecciona al arrancar.
 
+### Sin Oracle todavía
+
+Se puede desplegar sin ella. Todo lo que vive en `knowledge` funciona igual: artículos,
+categorías, Biblioteca SQL, tickets, y los scripts contra Postgres, MySQL o Mongo.
+
+Lo único que espera es el diagnóstico: «Revisar error» responde que no hay base
+configurada y el ticket queda registrado. Cuando se añada la conexión, se pulsa otra vez
+y ya investiga. **No inventa nada mientras tanto** — los datos de demostración solo salen
+si alguien pide `SOPORTE_MODO=demo` a propósito.
+
 ## 3. Marcar las bases en `multidb.databases.json`
 
 Una base solo sirve para investigar tickets si lo declara:

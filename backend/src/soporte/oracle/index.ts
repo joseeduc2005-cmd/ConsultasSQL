@@ -28,8 +28,10 @@ export const fuente: FuenteDatos = config.oracle.modo === 'oracle' ? new FuenteO
  * error, y es mejor decirlo que dejar que reviente a mitad de camino.
  */
 export function fuentePara(dbId?: string | null): FuenteDatos | null {
+  // Sin Oracle configurada no hay contra qué investigar. Devolver la fuente de
+  // demostración aquí haría que el diagnóstico respondiera con datos inventados.
+  if (config.oracle.modo !== 'oracle') return config.demoPedido ? fuente : null;
   if (!dbId || dbId === config.oracle.dbId) return fuente;
-  if (config.oracle.modo !== 'oracle') return fuente; // en demostración todo es la misma
 
   const base = config.basesTickets.find((b) => b.id === dbId);
   if (!base) return null;

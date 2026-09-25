@@ -150,6 +150,20 @@ describe('catalogo de correcciones', () => {
   });
 });
 
+// ─── Sin Oracle configurada ──────────────────────────────────────────────────
+
+describe('sin base configurada', () => {
+  it('no cae en datos de demostración sin que se lo pidan', async () => {
+    // Antes, quedarse sin Oracle hacía que el diagnóstico respondiera con hallazgos
+    // inventados. En un banco eso es peor que no responder.
+    const { config } = await import('./config.ts');
+    const { fuentePara } = await import('./oracle/index.ts');
+    if (config.oracle.modo === 'oracle' || config.demoPedido) return; // no aplica aquí
+    assert.equal(fuentePara(null), null);
+    assert.equal(fuentePara('oracle'), null);
+  });
+});
+
 // ─── Exploración ─────────────────────────────────────────────────────────────
 
 /** Fuente falsa: devuelve el perfil que se le indique, sin tocar ninguna base. */

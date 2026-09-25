@@ -11,6 +11,16 @@ import { fileURLToPath } from 'node:url';
 
 export type ModoOracle = 'demo' | 'oracle';
 
+/**
+ * Los datos de demostración solo se usan si alguien los pide a propósito.
+ *
+ * Antes, quedarse sin Oracle configurada hacía caer al modo demostración en silencio,
+ * y los diagnósticos respondían con hallazgos inventados —usuarios que no existen,
+ * bloqueos que nadie tiene— con una etiqueta pequeña como única advertencia. En un
+ * banco eso es peor que no responder.
+ */
+const demoPedido = (process.env.SOPORTE_MODO ?? '').trim().toLowerCase() === 'demo';
+
 const raizSoporte = fileURLToPath(new URL('./', import.meta.url));
 
 function numero(valor: string | undefined, porDefecto: number): number {
@@ -139,7 +149,7 @@ function resolverBasesTickets(idPorDefecto: string): BaseTickets[] {
  */
 function resolverOracle(): { modo: ModoOracle; usuario: string; clave: string; conexion: string; dbId: string | null } {
   const vacio = { modo: 'demo' as const, usuario: '', clave: '', conexion: '', dbId: null };
-  if (texto(process.env.SOPORTE_MODO).toLowerCase() === 'demo') return vacio;
+  if (demoPedido) return vacio;
 
   const usuario = texto(process.env.SOPORTE_ORACLE_USUARIO);
   const clave = texto(process.env.SOPORTE_ORACLE_CLAVE);
@@ -178,6 +188,8 @@ export const config = {
    * La pantalla del ticket solo ofrece estas; el resto quedan como contexto.
    */
   basesTickets,
+  /** `true` solo si se pidió SOPORTE_MODO=demo. */
+  demoPedido,
   oracle: {
     ...oracle,
     maxFilas: numero(process.env.SOPORTE_ORACLE_MAX_FILAS, 500),

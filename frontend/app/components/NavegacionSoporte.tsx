@@ -3,6 +3,8 @@
 import { BookOpen, LayoutDashboard, Radar, ScanSearch, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/soporte/lib/api';
 import { useTheme } from './ThemeProvider';
 
 /**
@@ -13,10 +15,14 @@ import { useTheme } from './ThemeProvider';
  */
 const SECCIONES = [
   { ruta: '/admin/resumen', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
-  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch },
+  // Diagnósticos y Vigilancia solo tienen sentido con una base que investigar: uno
+  // ejecuta playbooks contra ella y el otro la sondea en segundo plano. Sin conexión
+  // se muestran apagados, en vez de dejar entrar a una pantalla que no puede hacer
+  // nada. Se reactivan solos cuando la configuración tenga una base.
+  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch, requiereBase: true },
   { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket },
   { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL', icono: BookOpen },
-  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar },
+  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar, requiereBase: true },
 ];
 
 export default function NavegacionSoporte({
@@ -29,6 +35,9 @@ export default function NavegacionSoporte({
   const ruta = usePathname();
   const { theme } = useTheme();
   const claro = theme === 'light';
+  const { data: estado } = useQuery({ queryKey: ['estado'], queryFn: api.estado, staleTime: 60_000 });
+  // `baseDiagnosticos` viene en null cuando no hay ninguna base configurada.
+  const sinBase = estado !== undefined && !estado.baseDiagnosticos;
 
   return (
     <nav className={colapsado ? 'flex flex-col items-center gap-1' : 'space-y-0.5'}>
@@ -38,8 +47,26 @@ export default function NavegacionSoporte({
         </p>
       )}
 
-      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta }) => {
+      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, requiereBase }) => {
         const activa = exacta ? ruta === destino : ruta.startsWith(destino);
+        const apagada = Boolean(requiereBase) && sinBase;
+
+        if (apagada) {
+          return (
+            <span
+              key={destino}
+              aria-disabled="true"
+              title={`${etiqueta} · sin base de datos configurada para investigar`}
+              className={`flex cursor-not-allowed items-center rounded-lg text-sm opacity-45 ${
+                colapsado ? 'size-9 justify-center' : 'h-9 gap-2.5 px-3'
+              } ${claro ? 'text-(--ink-500)' : 'text-slate-500'}`}
+            >
+              <Icono className="size-[17px] shrink-0" />
+              {!colapsado && <span className="truncate">{etiqueta}</span>}
+            </span>
+          );
+        }
+
         return (
           <Link
             key={destino}

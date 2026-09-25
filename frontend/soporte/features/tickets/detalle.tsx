@@ -219,6 +219,11 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
 
   // Un solo botón: el backend deduce qué comprobar del texto del ticket, lo ejecuta
   // y deja el paso registrado. El resultado se muestra aquí mismo.
+  // Sin base configurada el botón no tiene contra qué investigar: se apaga y lo dice,
+  // en vez de dejar que alguien lo pulse para recibir un error.
+  const { data: estado } = useQuery({ queryKey: ['estado'], queryFn: api.estado, staleTime: 60_000 });
+  const sinBase = estado !== undefined && !estado.baseDiagnosticos;
+
   const revisar = useMutation({
     mutationFn: () => api.revisarTicket(ticket.numero),
     onSuccess: (r) => {
@@ -238,16 +243,29 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
         descripcion={`${ticket.pasos.length} paso${ticket.pasos.length === 1 ? '' : 's'} registrados, en orden cronológico.`}
         icono={<FileText />}
         acciones={
-          <Button tamano="sm" onClick={() => revisar.mutate()} cargando={revisar.isPending}>
+          <Button
+            tamano="sm"
+            onClick={() => revisar.mutate()}
+            cargando={revisar.isPending}
+            disabled={sinBase}
+            title={sinBase ? 'No hay ninguna base de datos configurada para investigar' : undefined}
+          >
             {!revisar.isPending && <ScanSearch />}
             Revisar error
           </Button>
         }
       />
 
+      {sinBase && (
+        <p className="mx-5 mb-4 rounded-lg border px-4 py-3 text-[13px] text-muted-foreground">
+          La investigación automática está en pausa: todavía no hay una base de datos configurada contra la que
+          consultar. El ticket queda registrado igual, y cuando se conecte bastará con pulsar «Revisar error».
+        </p>
+      )}
+
       {revision && !revision.ejecutado && (
         <p className="mx-5 mb-4 rounded-lg border border-warning/25 bg-warning-soft/60 px-4 py-3 text-[13px]">
-          {revision.motivo} Puede ejecutar un diagnóstico a mano o agregar el paso usted.
+          {revision.motivo}
         </p>
       )}
       {revision?.resultado && (

@@ -1394,4 +1394,6 @@ function AdminPage() {
   );
 }
 
-export default withAuth(AdminPage);
+// El panel de administración es solo para administradores. Sin el rol, `withAuth` no
+// comprobaba nada y cualquier sesión válida entraba.
+export default withAuth(AdminPage, ['admin', 'superadmin']);

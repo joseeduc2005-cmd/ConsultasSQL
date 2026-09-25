@@ -241,6 +241,72 @@ async function registrarExploracion(
   };
 }
 
+/**
+ * Publica la solución que escribió una persona en el ticket, como artículo.
+ *
+ * Es la otra mitad del ciclo. Los diagnósticos publican lo que encontró el sistema;
+ * esto publica lo que resolvió alguien: el caso llega, se investiga a mano, se escribe
+ * la causa y la solución, y desde ahí pasa a la base de conocimiento. La próxima vez
+ * que entre un ticket parecido, la búsqueda de precedentes lo encuentra.
+ *
+ * Sin esto el conocimiento se quedaba encerrado en el ticket: visible si alguien lo
+ * abría, invisible para el que llega con el mismo problema dos meses después.
+ */
+export async function publicarSolucionDeTicket(
+  ticket: {
+    numero: string;
+    titulo: string;
+    descripcion?: string | null;
+    causa_raiz?: string | null;
+    solucion?: string | null;
+    sistema?: string | null;
+    modulo?: string | null;
+    base_datos?: string | null;
+  },
+  opciones: { autorId: string; autorNombre: string; sql?: string | null; dinamico?: boolean },
+): Promise<{ id: string; titulo: string; creado: boolean; ejecutable: boolean }> {
+  const causa = ticket.causa_raiz?.trim();
+  const solucion = ticket.solucion?.trim();
+  if (!causa && !solucion) {
+    throw new Error('El ticket no tiene causa raíz ni solución escritas todavía.');
+  }
+
+  const sql = opciones.sql?.trim() || null;
+  const titulo = `${ticket.sistema || 'Soporte'} — ${ticket.titulo}`;
+  const lineas = [
+    `# ${ticket.titulo}`,
+    '',
+    `Caso del ticket **${ticket.numero}**.`,
+    '',
+  ];
+
+  if (ticket.descripcion?.trim()) {
+    lineas.push('## Qué reportaron', '', ticket.descripcion.trim(), '');
+  }
+  if (causa) lineas.push('## Causa raíz', '', causa, '');
+  if (solucion) lineas.push('## Solución aplicada', '', solucion, '');
+  if (sql) lineas.push('## Sentencia', '', '```sql', sql, '```', '');
+
+  lineas.push('---', '', `Documentado por **${opciones.autorNombre}** desde el ticket ${ticket.numero}.`);
+
+  const dinamico = opciones.dinamico !== false;
+  const guardado = await guardarArticulo({
+    autorId: opciones.autorId,
+    autorNombre: opciones.autorNombre,
+    titulo,
+    contenido: lineas.filter((l) => l !== '').join(SALTO),
+    descripcion: (causa ?? solucion ?? '').slice(0, 300),
+    categoria: ticket.sistema || 'Soporte',
+    subcategoria: ticket.modulo || 'Casos resueltos',
+    tipo: sql ? tipoEjecutable() : 'lectura',
+    script: sql ? { sql, databaseId: ticket.base_datos ?? undefined } : null,
+    campos: sql && dinamico ? camposDeMarcadores(sql) : null,
+    etiquetas: ['solucion', 'ticket', 'soporte', ticket.numero].filter(Boolean),
+  });
+
+  return { ...guardado, titulo, ejecutable: Boolean(sql) && tipoEjecutable() === 'script' };
+}
+
 // ─── Correcciones que propone un diagnóstico ─────────────────────────────────
 
 export interface CorreccionDisponible {

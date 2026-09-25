@@ -13,6 +13,7 @@ import { Dialog } from '@/soporte/components/ui/dialog';
 import { Cargando, ErrorCarga, Vacio } from '@/soporte/components/ui/estados';
 import { Campo, Input, Select, Textarea } from '@/soporte/components/ui/form';
 import { PrecedentesVista } from '../diagnostico/precedentes';
+import { Resolucion } from './resolucion';
 import { ResultadoDiagnosticoVista } from '../diagnostico/resultado';
 import { useAvisos } from '@/soporte/components/ui/toast';
 import { api } from '@/soporte/lib/api';
@@ -67,11 +68,12 @@ export function PaginaTicket() {
           <Card>
             <CardContent className="space-y-5">
               <Seccion titulo="Descripción" texto={t.descripcion} />
-              <Seccion titulo="Causa raíz" texto={t.causa_raiz} vacio="Aún sin causa raíz confirmada." />
-              <Seccion titulo="Solución aplicada" texto={t.solucion} vacio="Aún sin solución registrada." />
+
               {t.observaciones && <Seccion titulo="Observaciones" texto={t.observaciones} />}
             </CardContent>
           </Card>
+
+          <Resolucion ticket={t} />
 
           <Investigacion ticket={t} />
         </div>

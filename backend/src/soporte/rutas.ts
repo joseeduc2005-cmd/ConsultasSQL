@@ -29,7 +29,7 @@ import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { explorarDesdeEntrada } from './exploracion.ts';
-import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion } from './solucion.ts';
+import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
 import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
@@ -300,6 +300,37 @@ export function crearSoporteRouter(
       const revision = await diagnosticarTicket(ticket, quien);
       registrar({ ticket: ticket.numero, ...revision, resultado: undefined }, 'ticket revisado');
       return revision;
+    }),
+  );
+
+  /**
+   * Publica la solución que escribió una persona en el ticket.
+   *
+   * Es lo que cierra el ciclo: lo que alguien resolvió a mano pasa a la base de
+   * conocimiento y aparece como precedente la próxima vez que entre un caso igual.
+   */
+  router.post(
+    '/tickets/:numero/publicar',
+    h(async (req, res) => {
+      const ticket = await obtenerTicket(req.params.numero);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
+
+      const cuerpo = (req.body ?? {}) as { sql?: string; dinamico?: boolean };
+      try {
+        const publicado = await publicarSolucionDeTicket(ticket, {
+          autorId: usuario.id,
+          autorNombre: usuario.username,
+          sql: texto(cuerpo.sql),
+          dinamico: cuerpo.dinamico !== false,
+        });
+        registrar({ ticket: ticket.numero, ...publicado }, 'solución del ticket publicada');
+        res.status(publicado.creado ? 201 : 200);
+        return publicado;
+      } catch (error) {
+        throw solicitudInvalida((error as Error).message);
+      }
     }),
   );
 

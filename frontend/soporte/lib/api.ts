@@ -96,6 +96,13 @@ export const api = {
       precedentes?: Precedente[];
     }>(`/tickets/${encodeURIComponent(numero)}/revisar`, { method: 'POST' }),
 
+  /** Publica la causa y solución escritas en el ticket como artículo del árbol. */
+  publicarTicket: (numero: string, sql?: string) =>
+    solicitar<{ id: string; titulo: string; creado: boolean; ejecutable: boolean }>(
+      `/tickets/${encodeURIComponent(numero)}/publicar`,
+      { method: 'POST', body: json({ sql }) },
+    ),
+
   consultas: (f: { q?: string; categoria?: string; riesgo?: string } = {}) =>
     solicitar<{ consultas: ConsultaBiblioteca[]; categorias: { categoria: string; total: number }[] }>(`/consultas${consulta(f)}`),
 

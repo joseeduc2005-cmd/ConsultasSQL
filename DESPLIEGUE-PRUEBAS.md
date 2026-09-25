@@ -17,7 +17,7 @@ SOPORTE_ORACLE_DB_ID=oracle
 # Llave de escritura. Déjela en `off` para el piloto.
 SOPORTE_CORRECCIONES_EJECUTABLES=off
 
-# Vigilancia automática. Encenderla es una decisión aparte (ver punto 6).
+# Vigilancia automática. Encenderla es una decisión aparte (ver punto 7).
 VIGILANCIA=off
 ```
 
@@ -25,7 +25,22 @@ Con la llave en `off` las soluciones se publican como **documentación**: guarda
 y su formulario, se ven en el árbol de categorías, pero el panel no muestra el botón de
 ejecutar. Es lo que corresponde mientras no se confirmen los permisos.
 
-## 2. Marcar las bases en `multidb.databases.json`
+## 2. Crear el archivo de bases
+
+`backend/config/multidb.databases.json` **no está en el repositorio**: lleva las
+contraseñas de Oracle y Postgres en texto plano y está en `.gitignore`. Por eso al
+clonar esa carpeta aparece vacía. Hay que partir del ejemplo:
+
+```bash
+cp backend/config/multidb.databases.example.json backend/config/multidb.databases.json
+```
+
+Y reemplazar los `CAMBIAR`, `HOST-INTERNO` y `USUARIO` por los valores reales. Lo mismo
+con `backend/.env`, que sale de `backend/.env.example`.
+
+El campo `schema` de cada base se llena solo: el motor introspecciona al arrancar.
+
+## 3. Marcar las bases en `multidb.databases.json`
 
 Una base solo sirve para investigar tickets si lo declara:
 
@@ -49,7 +64,7 @@ produccion`.
 **Ojo:** editar este archivo con el sistema arriba dispara una recarga en caliente. El
 login ya la sobrevive, pero conviene hacerlo en una ventana tranquila.
 
-## 3. Si la base de conocimiento es antigua
+## 4. Si la base de conocimiento es antigua
 
 No hace falta migrarla a mano ni tocar el `db-init`. El esquema se aplica solo en cada
 arranque, y es idempotente:
@@ -64,7 +79,7 @@ arranque, y es idempotente:
 O sea: apunte el backend a la base vieja, arránquelo, y queda al día. Lo único que
 conviene es **respaldarla antes**, como con cualquier cambio de esquema.
 
-## 4. Permisos de Oracle
+## 5. Permisos de Oracle
 
 Hoy el módulo se conecta con el usuario que tenga la entrada de multidb. Lo correcto es
 pedir a los DBA un usuario propio de **solo lectura** con `SELECT` sobre los esquemas de
@@ -80,7 +95,7 @@ Tiene precedencia sobre `SOPORTE_ORACLE_DB_ID`. Mientras tanto, la única barrer
 guardián de solo lectura del código, que rechaza cualquier sentencia que no sea SELECT y
 abre cada consulta con `SET TRANSACTION READ ONLY`.
 
-## 5. Comprobaciones antes de abrir
+## 6. Comprobaciones antes de abrir
 
 ```bash
 # Pruebas del módulo. No tocan ninguna base.
@@ -106,7 +121,7 @@ padrón real se le propondría una corrección**: si sale por encima del 40 %, e
 discrimina y hay que subirlo — una corrección que aplica a media cooperativa no está
 señalando ningún problema.
 
-## 6. Qué NO encender todavía
+## 7. Qué NO encender todavía
 
 **`SOPORTE_CORRECCIONES_EJECUTABLES=on`.** Enciende el botón de ejecutar de los artículos
 publicados. Antes hace falta que Administración de Aplicaciones confirme dos cosas: que
@@ -116,7 +131,7 @@ apliquen desde el panel en vez de desde su cliente.
 **`VIGILANCIA=on`.** Pone a correr los monitores en segundo plano contra Oracle. Conviene
 esperar a ver qué carga generan los diagnósticos a demanda.
 
-## 7. Qué esperar del piloto
+## 8. Qué esperar del piloto
 
 Medido contra los 10 tickets reales del equipo, el sistema **responde algo útil en los
 10**. Eso no quiere decir que los resuelva: quiere decir que a ninguno le contesta «sin

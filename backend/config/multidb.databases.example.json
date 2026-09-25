@@ -1,0 +1,136 @@
+{
+  "_leeme": [
+    "JSON no admite comentarios, asi que la organizacion va en campos propios.",
+    "El registro del motor solo lee los que conoce e ignora el resto sin quejarse.",
+    "",
+    "  grupo   produccion | pruebas | otras   — agrupa las entradas y ordena este archivo",
+    "  color   rojo | ambar | verde | azul | gris   — pastilla en el panel; rojo = toca datos reales",
+    "  nota    comentario libre sobre para que sirve la base",
+    "  soporte { tickets, catalogo }  — habilita la base para investigar tickets del Centro de Soporte",
+    "",
+    "El `catalogo` dice que juego de consultas entiende la base. Las del modulo estan",
+    "escritas contra CORRESPONSALES.USUARIO y FISJA.CLIENTES: apuntarlas a una base sin",
+    "esos esquemas no da un mal diagnostico, da un error.",
+    "",
+    "ESTE ES EL EJEMPLO. Copielo a multidb.databases.json y ponga las credenciales",
+    "reales: ese archivo esta en .gitignore y nunca debe subirse al repositorio.",
+    "",
+    "  cp backend/config/multidb.databases.example.json backend/config/multidb.databases.json",
+    "",
+    "El campo `schema` se llena solo: el motor introspecciona cada base al arrancar."
+  ],
+  "databases": [
+    {
+      "id": "boton",
+      "label": "Postgres Boton (Produccion)",
+      "grupo": "produccion",
+      "color": "rojo",
+      "nota": "Base del boton de pagos. Solo consultas.",
+      "type": "postgres",
+      "host": "HOST-INTERNO",
+      "port": 5438,
+      "database": "chasdb",
+      "user": "USUARIO",
+      "password": "CAMBIAR",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "oracle",
+      "label": "Oracle XE 21c (Produccion)",
+      "grupo": "produccion",
+      "color": "rojo",
+      "nota": "Oracle de la cooperativa. Solo lectura desde el modulo de soporte. Requiere red interna o VPN.",
+      "type": "oracle",
+      "enabled": true,
+      "host": "HOST-INTERNO",
+      "port": 1521,
+      "database": "desajab.jardinazuayo.fin.ec",
+      "user": "USUARIO",
+      "password": "CAMBIAR",
+      "schema": {
+        "tables": []
+      },
+      "soporte": {
+        "tickets": true,
+        "catalogo": "corresponsales"
+      }
+    },
+    {
+      "id": "pg_main",
+      "label": "PostgreSQL 16 (Docker)",
+      "grupo": "produccion",
+      "color": "verde",
+      "nota": "Base del sistema: articulos, tickets, diagnosticos y el aprendizaje del motor. Es la primaria.",
+      "type": "postgres",
+      "primary": true,
+      "host": "localhost",
+      "port": 5432,
+      "database": "knowledge_base",
+      "user": "postgres",
+      "password": "CAMBIAR",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "mongo_local",
+      "label": "MongoDB 7 (Docker)",
+      "grupo": "pruebas",
+      "color": "ambar",
+      "nota": "Base de prueba del motor multi-motor.",
+      "type": "mongodb",
+      "primary": false,
+      "host": "localhost",
+      "port": 27017,
+      "database": "testdb",
+      "user": "admin",
+      "password": "CAMBIAR",
+      "connectionString": "CAMBIAR",
+      "enabled": true
+    },
+    {
+      "id": "mysql_test",
+      "label": "MySQL 8.0 (Docker)",
+      "grupo": "pruebas",
+      "color": "ambar",
+      "nota": "Base de prueba del motor multi-motor.",
+      "type": "mysql",
+      "primary": false,
+      "host": "localhost",
+      "port": 3307,
+      "database": "testdb",
+      "user": "testuser",
+      "password": "CAMBIAR",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      }
+    },
+    {
+      "id": "oracle_local",
+      "label": "Oracle 23ai Free (Docker)",
+      "grupo": "pruebas",
+      "color": "ambar",
+      "nota": "Contenedor gvenzl/oracle-free para probar diagnosticos sin tocar produccion. Ver oracle/pruebas.sql.",
+      "type": "oracle",
+      "primary": false,
+      "host": "localhost",
+      "port": 1521,
+      "database": "FREEPDB1",
+      "user": "testuser",
+      "password": "CAMBIAR",
+      "enabled": true,
+      "schema": {
+        "tables": []
+      },
+      "soporte": {
+        "tickets": true,
+        "catalogo": "corresponsales"
+      }
+    }
+  ]
+}

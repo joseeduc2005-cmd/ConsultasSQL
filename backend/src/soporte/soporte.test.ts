@@ -179,6 +179,15 @@ describe('buscar precedentes', () => {
     assert.ok(q!.includes('bloqueo'), 'deberia conservar la palabra que distingue');
   });
 
+  it('acepta ocultar los artículos que no son para todos', async () => {
+    // El filtro tiene que existir ANTES de que haya pantalla de cliente: varios
+    // artículos llevan SQL y nombres de tablas, y no son para cualquiera.
+    const { buscarPrecedentes } = await import('./precedentes.ts');
+    const firma = buscarPrecedentes.toString();
+    assert.ok(firma.includes('soloPublicos'), 'debería soportar soloPublicos');
+    assert.ok(firma.includes('visible_para'), 'debería filtrar por visible_para');
+  });
+
   it('ignora las palabras demasiado cortas para distinguir', async () => {
     const { aConsultaParaPruebas } = await import('./precedentes.ts');
     assert.equal(aConsultaParaPruebas('de la el un'), null);

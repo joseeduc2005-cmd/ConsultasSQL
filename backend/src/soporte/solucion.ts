@@ -663,7 +663,8 @@ export async function publicarSolucion(
   },
 ): Promise<SolucionPublicada> {
   const numeroTicket = r.ticket ?? null;
-  const categoria = opciones.sistema || 'Corresponsales';
+  // El sistema sirve para cualquier aplicación: sin uno indicado, no se inventa.
+  const categoria = opciones.sistema || 'Sin clasificar';
   const baseDatos = opciones.baseDatos ?? undefined;
   const autor = { autorId: opciones.autorId, autorNombre: opciones.autorNombre };
 

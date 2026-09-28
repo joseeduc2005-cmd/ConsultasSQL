@@ -96,8 +96,28 @@ export interface BaseTickets {
   porDefecto: boolean;
 }
 
+/**
+ * Una base sirve para investigar tickets si está completa y su motor tiene catálogo.
+ *
+ * Hoy solo Oracle: las consultas de los diagnósticos están escritas en su dialecto y
+ * contra esquemas concretos. La base de conocimiento —buscar, registrar, resolver,
+ * publicar— sí funciona con cualquier motor; lo que está atado a Oracle es la mitad
+ * que consulta datos ajenos, y para sumar otro motor hace falta su propio catálogo.
+ */
 function completa(e: EntradaMultiDb): boolean {
   return Boolean(e.type === 'oracle' && e.user && e.password && e.host && e.database);
+}
+
+/** Avisa de las bases marcadas que quedaron fuera, en vez de descartarlas en silencio. */
+function avisarDescartadas(entradas: EntradaMultiDb[]): void {
+  for (const e of entradas) {
+    if (e.soporte?.tickets !== true || completa(e)) continue;
+    const motivo =
+      e.type !== 'oracle'
+        ? `su motor es «${e.type}» y todavía no hay catálogo de consultas para él`
+        : 'le faltan usuario, clave, host o base';
+    console.warn(`⚠ [soporte] La base «${e.id}» está marcada para tickets pero no se usará: ${motivo}.`);
+  }
 }
 
 function aBaseTickets(e: EntradaMultiDb, porDefecto: boolean): BaseTickets {
@@ -125,7 +145,9 @@ function aBaseTickets(e: EntradaMultiDb, porDefecto: boolean): BaseTickets {
  * dejaría sin diagnósticos a quien ya lo tenía andando.
  */
 function resolverBasesTickets(idPorDefecto: string): BaseTickets[] {
-  const entradas = leerMultiDb().filter(completa);
+  const todas = leerMultiDb();
+  avisarDescartadas(todas);
+  const entradas = todas.filter(completa);
   const marcadas = entradas.filter((e) => e.soporte?.tickets === true);
   const porDefecto = entradas.find((e) => e.id === idPorDefecto);
 

@@ -82,7 +82,18 @@ export const aConsultaParaPruebas = aConsulta;
  */
 export async function buscarPrecedentes(
   texto: string,
-  opciones: { excluirTicket?: string | null; limite?: number } = {},
+  opciones: {
+    excluirTicket?: string | null;
+    limite?: number;
+    /**
+     * Con `true` solo salen artículos marcados para todos.
+     *
+     * Hoy toda la API es de administradores, así que da igual; pero en cuanto exista
+     * una pantalla de cliente, sin esto se le mostrarían artículos que llevan SQL y
+     * nombres de tablas. Es más barato tenerlo antes que acordarse después.
+     */
+    soloPublicos?: boolean;
+  } = {},
 ): Promise<Precedente[]> {
   const consulta = aConsulta(texto);
   if (!consulta) return [];
@@ -109,9 +120,10 @@ export async function buscarPrecedentes(
                 ts_rank(k.busqueda, q) * (CASE WHEN k.script_json IS NOT NULL THEN 1.4 ELSE 1 END) AS relevancia
          FROM knowledge_base k, to_tsquery('spanish', $1) q
          WHERE k.busqueda @@ q
+           AND ($3 = false OR coalesce(k.visible_para, 'todos') = 'todos')
          ORDER BY relevancia DESC
          LIMIT $2`,
-        [consulta, limite],
+        [consulta, limite, opciones.soloPublicos === true],
       ),
     ]);
 

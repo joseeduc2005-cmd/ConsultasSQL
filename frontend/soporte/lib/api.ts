@@ -96,6 +96,19 @@ export const api = {
       precedentes?: Precedente[];
     }>(`/tickets/${encodeURIComponent(numero)}/revisar`, { method: 'POST' }),
 
+  /**
+   * Busca una solución a partir del texto de un error, sin crear ticket.
+   * Es la puerta de entrada del sistema visto como base de conocimiento.
+   */
+  solucionar: (texto: string, limite?: number) =>
+    solicitar<{ consulta: string; precedentes: Precedente[] }>('/solucionar', {
+      method: 'POST',
+      body: json({ texto, limite }),
+    }),
+
+  /** Sistemas que existen de verdad en los datos, en vez de una lista escrita a mano. */
+  sistemas: () => solicitar<{ nombre: string; total: number }[]>('/sistemas'),
+
   /** Publica la causa y solución escritas en el ticket como artículo del árbol. */
   publicarTicket: (numero: string, sql?: string) =>
     solicitar<{ id: string; titulo: string; creado: boolean; ejecutable: boolean }>(

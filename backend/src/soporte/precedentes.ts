@@ -25,6 +25,8 @@ import { filas } from './knowledge/db.ts';
 
 export interface Precedente {
   tipo: 'ticket' | 'articulo';
+  /** Cómo se resolvió, completo. Es lo que la persona necesita leer, no un resumen. */
+  solucion?: string | null;
   /** Número de ticket o id de artículo. */
   id: string;
   titulo: string;
@@ -118,7 +120,8 @@ export async function buscarPrecedentes(
         tipo: 'ticket' as const,
         id: t.numero,
         titulo: t.titulo,
-        detalle: (t.causa_raiz ?? t.solucion ?? '').trim(),
+        detalle: (t.causa_raiz ?? '').trim(),
+        solucion: (t.solucion ?? '').trim() || null,
         relevancia: Number(t.relevancia),
         categoria: t.sistema,
         sql: null,
@@ -129,6 +132,7 @@ export async function buscarPrecedentes(
         id: a.id,
         titulo: a.titulo,
         detalle: (a.descripcion ?? '').trim(),
+        solucion: null,
         relevancia: Number(a.relevancia),
         categoria: a.categoria,
         sql: a.sql,

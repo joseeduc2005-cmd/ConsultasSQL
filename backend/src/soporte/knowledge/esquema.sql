@@ -70,12 +70,36 @@ ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS actualizado timestamp;
 -- `soporte.tickets` ya tenia la suya; los articulos no, y son justo donde vive lo que
 -- el equipo ya resolvio. Se usa la misma funcion sin tildes para que «bloqueo» y
 -- «bloqueó» encuentren lo mismo, y GIN porque es lo que sirve para tsvector.
+-- Busqueda de texto sobre los articulos, con el titulo pesando mas que el cuerpo.
+--
+-- Sin pesos, un articulo largo que mencionaba «clave» de pasada ganaba a otro que la
+-- lleva en el titulo: el cuerpo tiene cien veces mas palabras y arrastra el ranking.
+-- A = titulo, B = descripcion y categoria, C = contenido.
+--
+-- La columna se recrea si venia sin pesos, porque una columna generada no se altera.
+DO $peso$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'knowledge_base' AND column_name = 'busqueda'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_attrdef d
+      JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+     WHERE a.attrelid = 'knowledge_base'::regclass
+       AND a.attname = 'busqueda'
+       AND pg_get_expr(d.adbin, d.adrelid) LIKE '%setweight%'
+  ) THEN
+    EXECUTE 'ALTER TABLE knowledge_base DROP COLUMN busqueda';
+  END IF;
+END
+$peso$;
+
 ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS busqueda tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('spanish', soporte.sin_tildes(
-      coalesce(titulo, '') || ' ' || coalesce(descripcion, '') || ' ' ||
-      coalesce(categoria, '') || ' ' || coalesce(subcategoria, '') || ' ' ||
-      coalesce(contenido, '')))
+    setweight(to_tsvector('spanish', soporte.sin_tildes(coalesce(titulo, ''))), 'A') ||
+    setweight(to_tsvector('spanish', soporte.sin_tildes(
+      coalesce(descripcion, '') || ' ' || coalesce(categoria, '') || ' ' || coalesce(subcategoria, ''))), 'B') ||
+    setweight(to_tsvector('spanish', soporte.sin_tildes(coalesce(contenido, ''))), 'C')
   ) STORED;
 
 CREATE INDEX IF NOT EXISTS knowledge_base_busqueda_idx ON knowledge_base USING GIN (busqueda);

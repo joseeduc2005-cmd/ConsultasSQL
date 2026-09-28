@@ -18,10 +18,20 @@ import { claves } from '@/soporte/lib/consultas';
 import { ESTADO_TICKET, fechaCorta } from '@/soporte/lib/formato';
 import type { EstadoTicket } from '@/soporte/lib/types';
 
-const SISTEMAS = ['Corresponsales', 'Ja Movil', 'Ja Web', 'Ja Pagos'];
+// Los sistemas salen de los datos, no de una lista escrita a mano: el sistema sirve
+// para cualquier aplicación, y una lista fija obligaba a tocar código para añadir una.
+const SISTEMAS_BASE = ['Corresponsales', 'Ja Movil', 'Ja Web', 'Ja Pagos'];
+
+/** Los de la base, más los de siempre, sin repetir y en orden alfabético. */
+function useSistemas(): string[] {
+  const { data } = useQuery({ queryKey: ['sistemas'], queryFn: api.sistemas, staleTime: 5 * 60_000 });
+  const deLaBase = (data ?? []).map((s) => s.nombre);
+  return [...new Set([...deLaBase, ...SISTEMAS_BASE])].sort((a, b) => a.localeCompare(b, 'es'));
+}
 type FiltroEstado = 'activos' | EstadoTicket | 'todos';
 
 export function PaginaTickets() {
+  const sistemas = useSistemas();
   const params = useSearchParams();
   const router = useRouter();
   const rutaActual = usePathname();
@@ -85,7 +95,7 @@ export function PaginaTickets() {
             aria-label="Sistema"
           >
             <option value="">Todos los sistemas</option>
-            {SISTEMAS.map((s) => (
+            {sistemas.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </Select>
@@ -158,7 +168,8 @@ export function PaginaTickets() {
 }
 
 function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => void }) {
-  const vacio = { numero: '', titulo: '', descripcion: '', sistema: 'Corresponsales', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
+  const sistemas = useSistemas();
+  const vacio = { numero: '', titulo: '', descripcion: '', sistema: '', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
   const [datos, setDatos] = useState(vacio);
   // Las bases registradas en el motor: sirven de contexto de investigación del caso.
   // Solo las bases habilitadas para tickets: las consultas de los diagnosticos estan
@@ -212,7 +223,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
         </Campo>
         <Campo etiqueta="Sistema" htmlFor="nt-sistema">
           <Select id="nt-sistema" value={datos.sistema} onChange={set('sistema')}>
-            {SISTEMAS.map((s) => (
+            {sistemas.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </Select>

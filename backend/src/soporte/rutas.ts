@@ -29,6 +29,7 @@ import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { explorarDesdeEntrada } from './exploracion.ts';
+import { buscarPrecedentes } from './precedentes.ts';
 import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
@@ -332,6 +333,40 @@ export function crearSoporteRouter(
         throw solicitudInvalida((error as Error).message);
       }
     }),
+  );
+
+  /**
+   * Buscar una solución a partir del texto de un error, sin crear ticket.
+   *
+   * Es la puerta de entrada del sistema: alguien pega lo que le pasa y se le responde
+   * con lo que ya se resolvió antes. No pregunta de qué sistema es ni pide
+   * identificadores — para eso está el ticket con su diagnóstico.
+   */
+  router.post(
+    '/solucionar',
+    h(async (req) => {
+      const cuerpo = (req.body ?? {}) as { texto?: string; limite?: number };
+      const consulta = textoRequerido(cuerpo.texto, 'texto');
+      const limite = Math.min(Math.max(Number(cuerpo.limite) || 8, 1), 20);
+      const precedentes = await buscarPrecedentes(consulta, { limite });
+      return { consulta, precedentes };
+    }),
+  );
+
+  /** Sistemas y categorías que existen de verdad, para no escribirlos a mano. */
+  router.get(
+    '/sistemas',
+    h(async () =>
+      filas<{ nombre: string; total: number }>(
+        `SELECT nombre, SUM(total)::int AS total FROM (
+           SELECT sistema AS nombre, COUNT(*)::int AS total FROM soporte.tickets
+            WHERE sistema IS NOT NULL AND btrim(sistema) <> '' GROUP BY sistema
+           UNION ALL
+           SELECT categoria AS nombre, COUNT(*)::int AS total FROM knowledge_base
+            WHERE categoria IS NOT NULL AND btrim(categoria) <> '' GROUP BY categoria
+         ) t GROUP BY nombre ORDER BY 2 DESC, 1`,
+      ),
+    ),
   );
 
   // ─── Biblioteca SQL ───────────────────────────────────────────────────────

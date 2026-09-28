@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, LayoutDashboard, Radar, ScanSearch, Ticket } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -15,6 +15,9 @@ import { useTheme } from './ThemeProvider';
  */
 const SECCIONES = [
   { ruta: '/admin/resumen', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
+  // La búsqueda por conocimiento va arriba: es lo que responde siempre, con o sin
+  // base conectada, y para la mayoría de los casos es la única puerta que hace falta.
+  { ruta: '/admin/solucionar', etiqueta: 'Buscar solución', icono: Search },
   // Diagnósticos y Vigilancia solo tienen sentido con una base que investigar: uno
   // ejecuta playbooks contra ella y el otro la sondea en segundo plano. Sin conexión
   // se muestran apagados, en vez de dejar entrar a una pantalla que no puede hacer

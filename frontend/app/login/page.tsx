@@ -48,7 +48,8 @@ export default function LoginPage() {
       // Redirigir según el rol. Las dos ramas mandaban a /admin, así que nadie
       // llegaba nunca al panel de consulta y cualquiera entraba al de administración.
       const esAdmin = data.user.role === 'admin' || data.user.role === 'superadmin';
-      router.replace(esAdmin ? '/admin' : '/dashboard');
+      // Quien no administra entra a reportar y buscar, no al motor de consultas.
+      router.replace(esAdmin ? '/admin' : '/soporte');
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         setError('El servidor tardó demasiado en responder. Intenta nuevamente.');

@@ -103,9 +103,9 @@ comprobar('baseDiagnosticos' in estado, 'informa contra qué base investiga', St
 // Limpieza.
 await pool.query("DELETE FROM knowledge_base WHERE titulo LIKE 'Tesorería Web%'");
 await pool.query('DELETE FROM soporte.tickets WHERE numero = $1', [t1.numero]);
-servidor.close();
+await new Promise((listo) => servidor.close(listo));
 await pool.end();
 
 console.log('\n' + '-'.repeat(64));
 console.log(fallos.length === 0 ? 'TODO EN ORDEN' : `${fallos.length} FALLO(S): ${fallos.join(' · ')}`);
-process.exit(fallos.length === 0 ? 0 : 1);
+process.exitCode = fallos.length === 0 ? 0 : 1;

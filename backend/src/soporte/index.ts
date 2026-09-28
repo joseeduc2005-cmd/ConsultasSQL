@@ -16,6 +16,7 @@ import { fuente } from './oracle/index.ts';
 import { precalentarEstadoOracle } from './rutas.ts';
 import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
 
+export { crearSoporteClienteRouter } from './rutas-cliente.ts';
 export { crearSoporteRouter } from './rutas.ts';
 export { config as configSoporte } from './config.ts';
 

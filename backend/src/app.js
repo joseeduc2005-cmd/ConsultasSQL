@@ -59,7 +59,7 @@ import { createSqlRouter } from './routes/sqlRoute.js';
 import { createDistributedRouter } from './routes/distributedRoute.js';
 // Módulo de soporte (tickets, diagnósticos, vigilancia) absorbido desde ticket v2.0.
 // Está en TypeScript: Node >= 22.18 lo ejecuta sin compilar (ver SOPORTE.md).
-import { crearSoporteRouter, iniciarSoporte } from './soporte/index.ts';
+import { crearSoporteClienteRouter, crearSoporteRouter, iniciarSoporte } from './soporte/index.ts';
 import logger from './infrastructure/logger/logger.js';
 import { correlationIdMiddleware } from './middleware/correlationId.js';
 
@@ -6593,6 +6593,30 @@ async function soloAdminSoporte(req, res, next) {
 }
 
 // Soporte: /api/soporte/{estado,resumen,tickets,consultas,playbooks,diagnosticos,monitores,alertas}
+/**
+ * Cualquier persona con sesión, para la parte de reportar y buscar solución.
+ *
+ * Va aparte del guardián de admin a propósito: `/api/soporte` exige rol admin entero,
+ * y abrir agujeros ahí es la clase de cosa que se olvida. Aquí la lista de lo que
+ * puede hacer un usuario normal es explícita y corta.
+ */
+async function sesionSoporte(req, res, next) {
+  try {
+    const usuario = await getUserFromRequestAsync(req);
+    if (!usuario) {
+      return res.status(401).json({ error: 'Inicie sesión para reportar o consultar un caso.' });
+    }
+    req.usuarioSoporte = { id: usuario.id, username: usuario.username };
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+app.use('/api/soporte-cliente', sesionSoporte, crearSoporteClienteRouter({
+  log: (datos, mensaje) => logger.info(mensaje, datos),
+}));
+
 app.use('/api/soporte', soloAdminSoporte, crearSoporteRouter({
   log: (datos, mensaje) => logger.info(mensaje, datos),
   // Puente con el motor: la Biblioteca SQL puede sembrar su vocabulario en

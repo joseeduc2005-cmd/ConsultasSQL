@@ -52,6 +52,19 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   return cuerpo as T;
 }
 
+export interface TemaArticulo {
+  id: string;
+  titulo: string;
+  descripcion: string | null;
+  categoria: string | null;
+  subcategoria: string | null;
+}
+
+export interface Tema {
+  categoria: string;
+  articulos: TemaArticulo[];
+}
+
 export const clienteApi = {
   solucionar: (texto: string) =>
     pedir<{ consulta: string; precedentes: PrecedentePublico[] }>('/solucionar', {
@@ -62,6 +75,12 @@ export const clienteApi = {
   /** El autor no viaja: lo pone el backend desde la sesión. */
   reportar: (datos: { titulo: string; descripcion?: string; sistema?: string }) =>
     pedir<CasoPropio>('/casos', { method: 'POST', body: JSON.stringify(datos) }),
+
+  temas: () => pedir<Tema[]>('/temas'),
+  tema: (id: string) =>
+    pedir<{ id: string; titulo: string; contenido: string | null; categoria: string | null }>(
+      `/temas/${encodeURIComponent(id)}`,
+    ),
 
   misCasos: () => pedir<CasoPropio[]>('/casos'),
   caso: (numero: string) => pedir<CasoPropio>(`/casos/${encodeURIComponent(numero)}`),

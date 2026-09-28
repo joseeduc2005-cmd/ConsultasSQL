@@ -145,5 +145,52 @@ export function crearSoporteClienteRouter(
     }),
   );
 
+  /**
+   * El árbol de temas, para quien no sabe qué escribir.
+   *
+   * La búsqueda sirve cuando uno puede describir el problema; a veces no, y entonces
+   * hace falta poder mirar qué hay. Solo entran artículos marcados para todos, por lo
+   * mismo que la búsqueda: muchos llevan SQL y nombres de tablas.
+   */
+  router.get(
+    '/temas',
+    h(async () => {
+      const articulos = await filas<{ id: string; titulo: string; descripcion: string | null; categoria: string | null; subcategoria: string | null }>(
+        `SELECT id::text, titulo, descripcion, categoria, subcategoria
+         FROM knowledge_base
+         WHERE coalesce(visible_para, 'todos') = 'todos'
+         ORDER BY categoria NULLS LAST, subcategoria NULLS LAST, titulo`,
+      );
+
+      // Se agrupa aquí y no en SQL porque el árbol es chico y así el cliente recibe
+      // una sola respuesta en vez de pedir cada rama por separado.
+      const porCategoria = new Map<string, { categoria: string; articulos: typeof articulos }>();
+      for (const a of articulos) {
+        const clave = a.categoria?.trim() || 'Otros';
+        if (!porCategoria.has(clave)) porCategoria.set(clave, { categoria: clave, articulos: [] });
+        porCategoria.get(clave)!.articulos.push(a);
+      }
+      return [...porCategoria.values()];
+    }),
+  );
+
+  /** Un artículo, si es de los que puede ver cualquiera. */
+  router.get(
+    '/temas/:id',
+    h(async (req, res) => {
+      const [articulo] = await filas<{ id: string; titulo: string; contenido: string | null; categoria: string | null }>(
+        `SELECT id::text, titulo, coalesce(contenido_md, contenido) AS contenido, categoria
+         FROM knowledge_base
+         WHERE id::text = $1 AND coalesce(visible_para, 'todos') = 'todos'`,
+        [req.params.id],
+      );
+      if (!articulo) {
+        res.status(404);
+        return { error: 'No se encontró ese tema.' };
+      }
+      return articulo;
+    }),
+  );
+
   return router;
 }

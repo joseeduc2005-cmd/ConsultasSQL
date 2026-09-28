@@ -54,6 +54,25 @@ const internos = await pool.query(
 );
 comprobar(internos.rows[0].n === 0, 'no devuelve artículos internos', `${buscado.cuerpo.precedentes?.length ?? 0} resultados`);
 
+console.log('\nEXPLORAR POR TEMA');
+const temas = await api('/temas');
+const idsVisibles = temas.cuerpo.flatMap((t) => t.articulos.map((a) => a.id));
+const internosEnArbol = await pool.query(
+  "SELECT count(*)::int n FROM knowledge_base WHERE visible_para = 'admin' AND id::text = ANY($1)",
+  [idsVisibles],
+);
+comprobar(
+  internosEnArbol.rows[0].n === 0,
+  'el arbol no trae temas internos',
+  `${temas.cuerpo.length} categorias, ${idsVisibles.length} temas`,
+);
+
+const interno = await pool.query("SELECT id::text FROM knowledge_base WHERE visible_para = 'admin' LIMIT 1");
+if (interno.rows[0]) {
+  const directo = await api(`/temas/${interno.rows[0].id}`);
+  comprobar(directo.estado === 404, 'pedir un tema interno por su id no lo devuelve', `HTTP ${directo.estado}`);
+}
+
 console.log('\nREPORTAR');
 const creado = await api('/casos', 'POST', {
   titulo: 'No me carga el listado de aprobaciones',

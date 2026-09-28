@@ -1,13 +1,13 @@
 'use client';
 
-import { BookOpen, CheckCircle2, Clock, History, Search, Send } from 'lucide-react';
+import { BookOpen, CheckCircle2, ChevronDown, Clock, History, Search, Send } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
-import { clienteApi, type CasoPropio, type PrecedentePublico } from './api';
+import { clienteApi, type CasoPropio, type PrecedentePublico, type Tema } from './api';
 
 /**
  * Lo que ve quien tiene el problema, no quien lo resuelve.
@@ -140,6 +140,8 @@ function SoportePage() {
           </>
         )}
 
+        {!reportado && <Temas />}
+
         {misCasos && misCasos.length > 0 && <MisCasos casos={misCasos} />}
       </div>
     </div>
@@ -204,6 +206,104 @@ function leerUsuario(): { username?: string; role?: string } | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Explorar por tema, para quien no sabe qué escribir.
+ *
+ * La búsqueda sirve cuando uno puede poner el problema en palabras; a veces no, y
+ * entonces hace falta poder mirar qué hay. Viene plegado porque lo primero que se
+ * ofrece sigue siendo buscar: es más rápido cuando funciona.
+ */
+function Temas() {
+  const [abierto, setAbierto] = useState(false);
+  const { data: temas } = useQuery({
+    queryKey: ['temas'],
+    queryFn: clienteApi.temas,
+    // No se pide hasta que alguien despliega: la mayoría busca y se va.
+    enabled: abierto,
+  });
+
+  return (
+    <section className="mt-8">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-xl border border-(--line) bg-white/70 px-4 py-3 text-left"
+        aria-expanded={abierto}
+      >
+        <ChevronDown
+          className={`size-4 text-(--ink-500) transition-transform ${abierto ? 'rotate-180' : ''}`}
+        />
+        <span className="text-[13.5px] font-medium text-(--ink-900)">Explorar por tema</span>
+        <span className="ml-auto text-[12px] text-(--ink-500)">si no sabe cómo describirlo</span>
+      </button>
+
+      {abierto && (
+        <div className="mt-2 space-y-2">
+          {temas === undefined && <p className="px-4 text-[13px] text-(--ink-500)">Cargando…</p>}
+          {temas?.length === 0 && (
+            <p className="px-4 text-[13px] text-(--ink-700)">Todavía no hay temas publicados.</p>
+          )}
+          {temas?.map((t) => (
+            <Categoria key={t.categoria} tema={t} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Categoria({ tema }: { tema: Tema }) {
+  return (
+    <details className="rounded-xl border border-(--line) bg-white/70">
+      <summary className="flex cursor-pointer items-center gap-3 px-4 py-2.5">
+        <BookOpen className="size-4 shrink-0 text-(--ink-500)" />
+        <span className="text-[13.5px] font-medium text-(--ink-900)">{tema.categoria}</span>
+        <span className="ml-auto text-[12px] text-(--ink-500)">{tema.articulos.length}</span>
+      </summary>
+      <div className="border-t border-(--line)">
+        {tema.articulos.map((a) => (
+          <Articulo key={a.id} id={a.id} titulo={a.titulo} descripcion={a.descripcion} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function Articulo({ id, titulo, descripcion }: { id: string; titulo: string; descripcion: string | null }) {
+  const [abierto, setAbierto] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ['tema', id],
+    queryFn: () => clienteApi.tema(id),
+    enabled: abierto,
+  });
+
+  return (
+    <div className="border-b border-(--line) last:border-b-0">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="w-full px-4 py-2.5 text-left"
+        aria-expanded={abierto}
+      >
+        <span className="block text-[13.5px] text-(--ink-900)">{titulo}</span>
+        {!abierto && descripcion && (
+          <span className="mt-0.5 line-clamp-1 block text-[12px] text-(--ink-700)">{descripcion}</span>
+        )}
+      </button>
+      {abierto && (
+        <div className="px-4 pb-3">
+          {isLoading && <p className="text-[13px] text-(--ink-500)">Cargando…</p>}
+          {data && (
+            <p className="text-[13.5px] leading-relaxed whitespace-pre-line text-(--ink-800)">
+              {data.contenido ?? 'Este tema no tiene contenido escrito.'}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** El título del caso sale de la primera frase, para no pedir dos veces lo mismo. */

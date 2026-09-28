@@ -1,13 +1,14 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Ticket as IconoTicket } from 'lucide-react';
+import { ChevronDown, Plus, Search, Ticket as IconoTicket } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { EncabezadoPagina } from '@/soporte/components/layout/encabezado';
 import { Badge } from '@/soporte/components/ui/badge';
 import { Button } from '@/soporte/components/ui/button';
 import { Card } from '@/soporte/components/ui/card';
+import { cn } from '@/soporte/lib/utils';
 import { Dialog } from '@/soporte/components/ui/dialog';
 import { Cargando, ErrorCarga, Vacio } from '@/soporte/components/ui/estados';
 import { Campo, Input, Select, Textarea } from '@/soporte/components/ui/form';
@@ -169,6 +170,7 @@ export function PaginaTickets() {
 
 function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => void }) {
   const sistemas = useSistemas();
+  const [masDetalles, setMasDetalles] = useState(false);
   const vacio = { numero: '', titulo: '', descripcion: '', sistema: '', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
   const [datos, setDatos] = useState(vacio);
   // Las bases registradas en el motor: sirven de contexto de investigación del caso.
@@ -203,77 +205,127 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
     <Dialog
       abierto={abierto}
       onCerrar={onCerrar}
-      titulo="Nuevo ticket"
-      descripcion="Registre el caso tal como llegó; la investigación se agrega luego como pasos."
+      titulo="Registrar un caso"
+      descripcion="Con el problema basta. Lo demás se puede completar después."
       ancho="max-w-2xl"
       pie={
         <>
           <Button variante="fantasma" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={() => crear.mutate()} cargando={crear.isPending} disabled={!datos.numero.trim() || !datos.titulo.trim()}>
+          <Button onClick={() => crear.mutate()} cargando={crear.isPending} disabled={!datos.titulo.trim()}>
             Crear ticket
           </Button>
         </>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo etiqueta="Número de ticket (SIR)" htmlFor="nt-numero">
-          <Input id="nt-numero" value={datos.numero} onChange={set('numero')} placeholder="2026091974" className="font-mono" autoFocus />
+      <div className="space-y-4">
+        {/*
+          Primero el problema, que es lo único que siempre se sabe. El resto se
+          clasifica después, y no debería estorbar para registrar un caso: antes el
+          formulario abría pidiendo un número del SIR y un sistema, y no todo lo que
+          entra viene del SIR ni pertenece a un sistema conocido.
+        */}
+        <Campo etiqueta="¿Qué está pasando?" htmlFor="nt-titulo">
+          <Input
+            id="nt-titulo"
+            value={datos.titulo}
+            onChange={set('titulo')}
+            placeholder="El corresponsal no puede ingresar con su PIN"
+            autoFocus
+          />
         </Campo>
-        <Campo etiqueta="Sistema" htmlFor="nt-sistema">
-          <Select id="nt-sistema" value={datos.sistema} onChange={set('sistema')}>
-            {sistemas.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </Select>
+
+        <Campo etiqueta="Descripción" htmlFor="nt-desc" ayuda="El mensaje tal como llegó, con los datos que traiga.">
+          <Textarea
+            id="nt-desc"
+            value={datos.descripcion}
+            onChange={set('descripcion')}
+            placeholder="Mensaje original de quien reporta, datos del caso, lo que se ve en pantalla…"
+          />
         </Campo>
-        <div className="sm:col-span-2">
-          <Campo etiqueta="Título" htmlFor="nt-titulo">
-            <Input id="nt-titulo" value={datos.titulo} onChange={set('titulo')} placeholder="Corresponsal no puede ingresar con su PIN" />
-          </Campo>
-        </div>
-        <div className="sm:col-span-2">
-          <Campo etiqueta="Descripción" htmlFor="nt-desc">
-            <Textarea id="nt-desc" value={datos.descripcion} onChange={set('descripcion')} placeholder="Mensaje original del solicitante, datos del socio, capturas descritas…" />
-          </Campo>
-        </div>
-        <Campo etiqueta="Módulo" htmlFor="nt-modulo">
-          <Input id="nt-modulo" value={datos.modulo} onChange={set('modulo')} placeholder="Usuarios / Reset de clave" />
-        </Campo>
-        <Campo etiqueta="Prioridad" htmlFor="nt-prioridad">
-          <Select id="nt-prioridad" value={datos.prioridad} onChange={set('prioridad')}>
-            <option value="">Sin definir</option>
-            <option>Alta</option>
-            <option>Media</option>
-            <option>Baja</option>
-          </Select>
-        </Campo>
-        <div className="sm:col-span-2">
-          <Campo
-            etiqueta="Base de datos a investigar"
-            htmlFor="nt-base"
-            ayuda="Contra qué base se consultará este caso. El ticket siempre se guarda en la base de conocimiento; esto solo indica de dónde se leen los datos."
-          >
-            <Select id="nt-base" value={datos.base_datos} onChange={set('base_datos')}>
-              <option value="">Usar la base por defecto</option>
-              {bases?.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.color === 'rojo' ? '⚠ ' : ''}
-                  {b.etiqueta}
-                  {b.grupo === 'produccion' ? ' · datos reales' : b.grupo === 'pruebas' ? ' · pruebas' : ''}
-                </option>
-              ))}
-            </Select>
-            {baseElegida?.nota && <p className="mt-1.5 text-[12px] text-muted-foreground">{baseElegida.nota}</p>}
-          </Campo>
-        </div>
-        <Campo etiqueta="Autor" htmlFor="nt-autor">
-          <Input id="nt-autor" value={datos.autor} onChange={set('autor')} placeholder="Nombre de quien registra" />
-        </Campo>
-        <Campo etiqueta="URL en el SIR (opcional)" htmlFor="nt-url" ayuda="Si se deja vacío se arma con el número.">
-          <Input id="nt-url" value={datos.url_sir} onChange={set('url_sir')} />
-        </Campo>
+
+        <button
+          type="button"
+          onClick={() => setMasDetalles((v) => !v)}
+          className="flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+          aria-expanded={masDetalles}
+        >
+          <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', masDetalles && 'rotate-180')} />
+          Clasificación y referencia
+          <span className="ml-auto text-[12px] font-normal text-muted-foreground">opcional</span>
+        </button>
+
+        {masDetalles && (
+          <div className="animate-entrada grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+            <Campo etiqueta="Sistema o aplicación" htmlFor="nt-sistema" ayuda="Escriba uno nuevo si no está en la lista.">
+              <Input
+                id="nt-sistema"
+                value={datos.sistema}
+                onChange={set('sistema')}
+                list="nt-sistemas"
+                placeholder="Sin clasificar"
+              />
+              <datalist id="nt-sistemas">
+                {sistemas.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </Campo>
+
+            <Campo etiqueta="Módulo" htmlFor="nt-modulo">
+              <Input id="nt-modulo" value={datos.modulo} onChange={set('modulo')} placeholder="Usuarios / Reset de clave" />
+            </Campo>
+
+            <Campo etiqueta="Prioridad" htmlFor="nt-prioridad">
+              <Select id="nt-prioridad" value={datos.prioridad} onChange={set('prioridad')}>
+                <option value="">Sin definir</option>
+                <option>Alta</option>
+                <option>Media</option>
+                <option>Baja</option>
+              </Select>
+            </Campo>
+
+            <Campo etiqueta="Quién registra" htmlFor="nt-autor">
+              <Input id="nt-autor" value={datos.autor} onChange={set('autor')} placeholder="Su nombre" />
+            </Campo>
+
+            <Campo
+              etiqueta="Referencia"
+              htmlFor="nt-numero"
+              ayuda="Número en otro sistema, si lo tiene. Vacío, se numera solo."
+            >
+              <Input id="nt-numero" value={datos.numero} onChange={set('numero')} placeholder="2026091974" className="font-mono" />
+            </Campo>
+
+            <Campo etiqueta="Enlace al caso original" htmlFor="nt-url">
+              <Input id="nt-url" value={datos.url_sir} onChange={set('url_sir')} placeholder="https://…" />
+            </Campo>
+
+            {/* Solo aparece si hay alguna base habilitada: sin ellas no significa nada. */}
+            {bases && bases.length > 0 && (
+              <div className="sm:col-span-2">
+                <Campo
+                  etiqueta="Base de datos a investigar"
+                  htmlFor="nt-base"
+                  ayuda="Solo indica de dónde leer los datos al revisar el caso. El ticket se guarda siempre en la base de conocimiento."
+                >
+                  <Select id="nt-base" value={datos.base_datos} onChange={set('base_datos')}>
+                    <option value="">Usar la base por defecto</option>
+                    {bases.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.color === 'rojo' ? '\u26A0 ' : ''}
+                        {b.etiqueta}
+                        {b.grupo === 'produccion' ? ' · datos reales' : b.grupo === 'pruebas' ? ' · pruebas' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  {baseElegida?.nota && <p className="mt-1.5 text-[12px] text-muted-foreground">{baseElegida.nota}</p>}
+                </Campo>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Dialog>
   );

@@ -126,6 +126,22 @@ async function estadoOracle(): Promise<EstadoFuente & { comprobando?: boolean }>
   );
 }
 
+/**
+ * Numera un caso registrado sin referencia externa: CASO-2026-0001.
+ *
+ * Se cuenta solo sobre los que ya llevan este formato, para no chocar con los
+ * números del SIR ni con los que alguien escriba a mano.
+ */
+async function siguienteNumero(): Promise<string> {
+  const anio = new Date().getFullYear();
+  const [fila] = await filas<{ ultimo: string | null }>(
+    `SELECT MAX(numero) AS ultimo FROM soporte.tickets WHERE numero LIKE $1`,
+    [`CASO-${anio}-%`],
+  );
+  const correlativo = Number(fila?.ultimo?.split('-')[2] ?? 0) + 1;
+  return `CASO-${anio}-${String(correlativo).padStart(4, '0')}`;
+}
+
 function validarEstadoTicket(estado: unknown): void {
   if (estado !== undefined && !(ESTADOS_TICKET as readonly unknown[]).includes(estado)) {
     throw solicitudInvalida(`Estado inválido. Valores permitidos: ${ESTADOS_TICKET.join(', ')}.`);
@@ -236,7 +252,9 @@ export function crearSoporteRouter(
     '/tickets',
     h(async (req, res) => {
       const cuerpo = (req.body ?? {}) as Record<string, unknown>;
-      const numero = textoRequerido(cuerpo.numero, 'numero');
+      // El número deja de ser obligatorio: no todo lo que entra viene de otro sistema
+      // con su referencia. Sin uno se numera solo, con el año y un correlativo.
+      const numero = texto(cuerpo.numero) ?? (await siguienteNumero());
       if (await obtenerTicket(numero)) throw solicitudInvalida(`El ticket ${numero} ya existe.`);
       validarEstadoTicket(cuerpo.estado);
       const datos = Object.fromEntries(CAMPOS_TICKET.map((c) => [c, texto(cuerpo[c]) ?? undefined]));

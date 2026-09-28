@@ -33,10 +33,12 @@ clonar esa carpeta aparece vacía. Hay que partir del ejemplo:
 
 ```bash
 cp backend/config/multidb.databases.example.json backend/config/multidb.databases.json
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
 ```
 
-Y reemplazar los `CAMBIAR`, `HOST-INTERNO` y `USUARIO` por los valores reales. Lo mismo
-con `backend/.env`, que sale de `backend/.env.example`.
+Y reemplazar los `CAMBIAR`, `HOST-INTERNO` y `USUARIO` por los valores reales. Ninguno
+de los tres archivos se versiona: llevan credenciales.
 
 El campo `schema` de cada base se llena solo: el motor introspecciona al arrancar.
 
@@ -106,6 +108,15 @@ guardián de solo lectura del código, que rechaza cualquier sentencia que no se
 abre cada consulta con `SET TRANSACTION READ ONLY`.
 
 ## 6. Comprobaciones antes de abrir
+
+La más completa, que recorre el ciclo entero contra la API real y sin Oracle —registra
+un caso de un sistema inventado, lo resuelve, lo publica y comprueba que otro caso
+parecido lo encuentra:
+
+```bash
+cd backend && node herramientas/revision-integral.mjs
+```
+
 
 ```bash
 # Pruebas del módulo. No tocan ninguna base.

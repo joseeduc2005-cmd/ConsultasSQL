@@ -21,6 +21,18 @@ import type { EstadoTicket } from '@/soporte/lib/types';
 
 // Los sistemas salen de los datos, no de una lista escrita a mano: el sistema sirve
 // para cualquier aplicación, y una lista fija obligaba a tocar código para añadir una.
+/**
+ * Enlace al caso en el sistema de tickets de la organización, si hay uno configurado.
+ *
+ * Antes se armaba siempre contra el SIR: cualquier referencia numérica producía un
+ * enlace a una URL de la cooperativa, aunque el caso fuera de otro sistema o de otra
+ * organización. Sin `NEXT_PUBLIC_TICKETS_URL` no se inventa ningún enlace.
+ */
+function enlaceExterno(numero: string): string {
+  const base = process.env.NEXT_PUBLIC_TICKETS_URL;
+  return base && /^\d+$/.test(numero) ? `${base}${numero}` : '';
+}
+
 const SISTEMAS_BASE = ['Corresponsales', 'Ja Movil', 'Ja Web', 'Ja Pagos'];
 
 /** Los de la base, más los de siempre, sin repetir y en orden alfabético. */
@@ -188,7 +200,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
     mutationFn: () =>
       api.crearTicket({
         ...datos,
-        url_sir: datos.url_sir || (/^\d+$/.test(datos.numero) ? `https://sir.jardinazuayo.fin.ec/sir/front/ticket.form.php?id=${datos.numero}` : ''),
+        url_sir: datos.url_sir || enlaceExterno(datos.numero),
       }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ['tickets'] });

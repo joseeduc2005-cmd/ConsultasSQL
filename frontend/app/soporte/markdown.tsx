@@ -41,7 +41,7 @@ export function Markdown({ contenido }: { contenido: string }) {
             className?.startsWith('language-') ? (
               <code className="font-mono text-[12.5px] whitespace-pre">{children}</code>
             ) : (
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12.5px] text-slate-800">
+              <code className="rounded bg-(--surface-2) px-1.5 py-0.5 font-mono text-[12.5px] text-(--ink-900)">
                 {children}
               </code>
             ),
@@ -60,7 +60,7 @@ export function Markdown({ contenido }: { contenido: string }) {
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-(--line) bg-slate-50 px-3 py-1.5 font-medium">{children}</th>
+            <th className="border-b border-(--line) bg-(--surface-2) px-3 py-1.5 font-medium">{children}</th>
           ),
           td: ({ children }) => <td className="border-b border-(--line) px-3 py-1.5 last:border-b-0">{children}</td>,
         }}

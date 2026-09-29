@@ -32,6 +32,7 @@ type Vista = { tipo: 'buscar' } | { tipo: 'articulo'; id: string } | { tipo: 'ca
  */
 function SoportePage() {
   const [vista, setVista] = useState<Vista>({ tipo: 'buscar' });
+  const [comentarios, setComentarios] = useState(false);
 
   return (
     <div className="app-shell min-h-screen">
@@ -41,11 +42,32 @@ function SoportePage() {
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-[264px_minmax(0,1fr)]">
           <BarraLateral vista={vista} onElegir={setVista} />
 
-          <main className="min-w-0 rounded-2xl border border-(--line) bg-white/70 px-5 py-5 sm:px-6">
-            {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
-            {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
-            {vista.tipo === 'caso' && <Caso numero={vista.numero} />}
-          </main>
+          <div className="flex min-w-0 gap-4">
+            <main className="min-w-0 flex-1 glass-panel-strong rounded-2xl px-5 py-5 sm:px-6">
+              {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
+              {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
+              {vista.tipo === 'caso' && <Caso numero={vista.numero} />}
+            </main>
+
+            {/*
+              Los comentarios van en su propia columna, como en el panel: dentro del
+              artículo quedaban al final de un texto largo, y el botón de plegar se
+              veía suelto en medio de la nada.
+            */}
+            {vista.tipo === 'articulo' && (
+              <section
+                className={`hidden shrink-0 glass-panel-strong rounded-2xl p-3 transition-[width] duration-300 lg:block ${
+                  comentarios ? 'w-[300px]' : 'w-[52px]'
+                }`}
+              >
+                <PanelComentarios
+                  id={vista.id}
+                  plegado={!comentarios}
+                  onAlternar={() => setComentarios((v) => !v)}
+                />
+              </section>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -60,12 +82,12 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
   const pendientes = (casos ?? []).filter((c) => c.estado !== 'resuelto').length;
 
   return (
-    <aside className="space-y-4 rounded-2xl border border-(--line) bg-white/60 p-3 lg:sticky lg:top-5">
+    <aside className="space-y-4 glass-panel-strong rounded-2xl p-3 lg:sticky lg:top-5">
       <button
         type="button"
         onClick={() => onElegir({ tipo: 'buscar' })}
         className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
-          vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-white/80'
+          vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
         }`}
       >
         <MessageSquarePlus className="size-4" />
@@ -99,7 +121,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
                 type="button"
                 onClick={() => onElegir({ tipo: 'caso', numero: c.numero })}
                 className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
-                  activo ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-white/80'
+                  activo ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-(--surface-2)'
                 }`}
               >
                 {resuelto ? (
@@ -153,7 +175,7 @@ function Categoria({
       <button
         type="button"
         onClick={() => setAbierta((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-(--ink-900) transition-colors hover:bg-white/80"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
         aria-expanded={abierta}
       >
         <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${abierta ? '' : '-rotate-90'}`} />
@@ -168,7 +190,7 @@ function Categoria({
               type="button"
               onClick={() => onElegir(a.id)}
               className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
-                activo === a.id ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-white/80'
+                activo === a.id ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-(--surface-2)'
               }`}
             >
               <span className="line-clamp-2">{a.titulo}</span>
@@ -227,7 +249,7 @@ function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
               setTexto('');
               setReportado(null);
             }}
-            className="inline-flex h-10 items-center rounded-lg border border-(--line) bg-white px-4 text-[13.5px] font-semibold text-(--ink-900)"
+            className="inline-flex h-10 items-center rounded-lg border border-(--line) bg-(--surface-2) px-4 text-[13.5px] font-semibold text-(--ink-900)"
           >
             Reportar otro
           </button>
@@ -253,7 +275,7 @@ function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
           rows={4}
           autoFocus
           placeholder="Por ejemplo: entro al módulo de aprobaciones y la tabla se queda vacía, no carga nada desde ayer."
-          className="mt-4 w-full resize-none rounded-xl border border-(--line) bg-white px-4 py-3.5 text-[15px] leading-relaxed outline-none focus:border-(--accent)"
+          className="mt-4 w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3.5 text-[15px] leading-relaxed outline-none focus:border-(--accent)"
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -284,13 +306,13 @@ function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
               ))}
             </>
           ) : (
-            <p className="rounded-xl border border-(--line) bg-white px-4 py-6 text-center text-[14px] text-(--ink-700)">
+            <p className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-6 text-center text-[14px] text-(--ink-700)">
               No encontramos nada parecido todavía.
             </p>
           )}
 
           {/* Aparece también cuando hubo resultados: que salgan no significa que sirvan. */}
-          <div className="rounded-xl border border-(--line) bg-white px-4 py-4">
+          <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-4">
             <p className="text-[14px] font-medium text-(--ink-900)">
               {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo reportamos al equipo?'}
             </p>
@@ -301,7 +323,7 @@ function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
               type="button"
               onClick={() => reportar.mutate()}
               disabled={reportar.isPending}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-white px-3.5 text-[13px] font-semibold text-(--ink-900) disabled:opacity-40"
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) disabled:opacity-40"
             >
               <Send className="size-4" />
               {reportar.isPending ? 'Enviando…' : 'Reportar el problema'}
@@ -323,7 +345,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
   const cuerpo = p.solucion || p.detalle;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-(--line) bg-white">
+    <div className="overflow-hidden rounded-xl border border-(--line) bg-(--surface-2)">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
@@ -358,8 +380,6 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
 // ─── Un tema ─────────────────────────────────────────────────────────────────
 
 function Articulo({ id }: { id: string }) {
-  const [comentariosPlegados, setComentariosPlegados] = useState(true);
-  const usuario = leerUsuario();
   const { data, isLoading } = useQuery({ queryKey: ['tema', id], queryFn: () => clienteApi.tema(id) });
 
   if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
@@ -380,20 +400,24 @@ function Articulo({ id }: { id: string }) {
         )}
       </div>
 
-      {/*
-        Los mismos comentarios que ve el administrador. Aquí valen más todavía: quien
-        tiene el problema es el que sabe si la solución le funcionó.
-      */}
-      <div className="mt-6 border-t border-(--line) pt-5">
-        <CommentsSection
-          articleId={data.id}
-          articleTitle={data.titulo}
-          currentUser={usuario ? { username: usuario.username ?? '', role: usuario.role ?? 'user' } : null}
-          collapsed={comentariosPlegados}
-          onToggleCollapse={() => setComentariosPlegados((v) => !v)}
-        />
-      </div>
     </article>
+  );
+}
+
+/** Los comentarios del tema abierto, en la columna de la derecha. */
+function PanelComentarios({ id, plegado, onAlternar }: { id: string; plegado: boolean; onAlternar: () => void }) {
+  const usuario = leerUsuario();
+  const { data } = useQuery({ queryKey: ['tema', id], queryFn: () => clienteApi.tema(id) });
+  if (!data) return null;
+
+  return (
+    <CommentsSection
+      articleId={data.id}
+      articleTitle={data.titulo}
+      currentUser={usuario ? { username: usuario.username ?? '', role: usuario.role ?? 'user' } : null}
+      collapsed={plegado}
+      onToggleCollapse={onAlternar}
+    />
   );
 }
 

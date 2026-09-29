@@ -50,7 +50,9 @@ const comprobar = (ok, que, detalle = '') => {
 
 // Un sistema que no existe en ningún sitio del código: si funciona, es global.
 const SISTEMA = 'Tesorería Web';
-await pool.query("DELETE FROM soporte.tickets WHERE numero LIKE 'REV-%' OR numero LIKE 'CASO-%'");
+// Solo lo de esta revisión: antes borraba todo lo que empezara por CASO-, y se
+// llevaba por delante los casos reales de la gente.
+await pool.query("DELETE FROM soporte.tickets WHERE sistema = $1", [SISTEMA]);
 await pool.query("DELETE FROM knowledge_base WHERE titulo LIKE 'Tesorería Web%'");
 
 console.log('\n1. REGISTRAR — un caso de un sistema nuevo, con lo mínimo');

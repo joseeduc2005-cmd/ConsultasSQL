@@ -104,6 +104,16 @@ ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS busqueda tsvector
 
 CREATE INDEX IF NOT EXISTS knowledge_base_busqueda_idx ON knowledge_base USING GIN (busqueda);
 
+-- Los articulos que este modulo publico antes llevan solo { sql, databaseId }, que
+-- basta para ejecutarlos pero no pasa la validacion del editor del panel: exige
+-- `modo` y `origen`. Quedaban ejecutables pero imposibles de volver a guardar desde
+-- la pantalla. Se completan una vez; los que ya los traen no se tocan.
+UPDATE knowledge_base
+   SET script_json = script_json || '{"modo":"script","origen":"manual-sql"}'::jsonb
+ WHERE script_json IS NOT NULL
+   AND script_json ? 'sql'
+   AND NOT (script_json ? 'modo');
+
 CREATE TABLE IF NOT EXISTS soporte.ticket_pasos (
   id             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ticket         text NOT NULL REFERENCES soporte.tickets (numero) ON DELETE CASCADE,

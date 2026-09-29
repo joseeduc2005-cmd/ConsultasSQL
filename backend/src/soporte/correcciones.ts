@@ -230,7 +230,14 @@ export async function publicarCorrecciones(opciones: {
       requerido: true,
       placeholder: c.placeholder ?? '',
     }));
-    const script = { sql: correccion.plantilla, databaseId: databaseIdDe(opciones.databaseId) };
+    // `modo` y `origen` los exige el validador del editor de artículos: sin ellos el
+    // artículo se ejecuta pero no se puede volver a guardar desde la pantalla.
+    const script = {
+      modo: 'script',
+      origen: 'manual-sql',
+      sql: correccion.plantilla,
+      databaseId: databaseIdDe(opciones.databaseId),
+    };
 
     if (existente) {
       await ejecutar(

@@ -417,8 +417,20 @@ async function auditarArticulo(
   }
 }
 
+/**
+ * Da al script la forma que espera el editor de artículos del panel.
+ *
+ * El módulo guardaba `{ sql, databaseId }`, que basta para ejecutarlo pero no pasa la
+ * validación del editor: exige `modo` y `origen`. El resultado era un artículo que se
+ * ejecuta pero no se puede volver a guardar desde la pantalla. Se escribe en el
+ * formato del sistema y deja de ser un caso aparte.
+ */
+function comoLoEsperaElPanel(script: { sql: string; databaseId?: string }) {
+  return { modo: 'script', origen: 'manual-sql', ...script };
+}
+
 async function guardarArticulo(a: ArticuloNuevo): Promise<{ id: string; creado: boolean }> {
-  const script = a.script ? JSON.stringify(a.script) : null;
+  const script = a.script ? JSON.stringify(comoLoEsperaElPanel(a.script)) : null;
   const campos = a.campos ? JSON.stringify(a.campos) : null;
   const existente = await fila<{ id: string }>('SELECT id FROM knowledge_base WHERE titulo = $1 LIMIT 1', [a.titulo]);
 

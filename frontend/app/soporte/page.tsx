@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import CommentsSection from '../components/CommentsSection';
 import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
@@ -316,6 +317,8 @@ function Temas() {
 
 function Articulo({ id, titulo, descripcion }: { id: string; titulo: string; descripcion: string | null }) {
   const [abierto, setAbierto] = useState(false);
+  const [comentariosPlegados, setComentariosPlegados] = useState(true);
+  const usuario = leerUsuario();
   const { data, isLoading } = useQuery({
     queryKey: ['tema', id],
     queryFn: () => clienteApi.tema(id),
@@ -331,12 +334,30 @@ function Articulo({ id, titulo, descripcion }: { id: string; titulo: string; des
       onAlternar={() => setAbierto((v) => !v)}
     >
       {isLoading && <p className="text-[13.5px] text-(--ink-500)">Cargando…</p>}
-      {data &&
-        (data.contenido ? (
-          <Markdown contenido={data.contenido} />
-        ) : (
-          <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
-        ))}
+      {data && (
+        <>
+          {data.contenido ? (
+            <Markdown contenido={data.contenido} />
+          ) : (
+            <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
+          )}
+
+          {/*
+            Los mismos comentarios que ve el administrador. Aquí valen más todavía:
+            quien tiene el problema es el que sabe si la solución le funcionó, y sin
+            un sitio donde decirlo esa información se pierde.
+          */}
+          <div className="mt-5 border-t border-(--line) pt-4">
+            <CommentsSection
+              articleId={data.id}
+              articleTitle={data.titulo}
+              currentUser={usuario ? { username: usuario.username ?? '', role: usuario.role ?? 'user' } : null}
+              collapsed={comentariosPlegados}
+              onToggleCollapse={() => setComentariosPlegados((v) => !v)}
+            />
+          </div>
+        </>
+      )}
     </Desplegable>
   );
 }

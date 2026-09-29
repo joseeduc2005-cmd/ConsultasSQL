@@ -164,6 +164,82 @@ describe('sin base configurada', () => {
   });
 });
 
+// ─── Exploración sin catálogo ────────────────────────────────────────────────
+
+describe('exploracion generica', () => {
+  const ESQUEMA = [
+    { name: 'usuarios', columns: [{ name: 'id' }, { name: 'cedula' }, { name: 'estado' }, { name: 'intentos' }, { name: 'creado_at' }] },
+    { name: 'usuario_rol', columns: [{ name: 'usuario_id' }, { name: 'rol' }] },
+    { name: 'facturas', columns: [{ name: 'id' }, { name: 'monto' }, { name: 'cliente_documento' }] },
+  ];
+
+  it('encuentra la tabla que guarda ese dato sin saber el esquema', async () => {
+    const { tablasCandidatas } = await import('./exploracion-generica.ts');
+    const c = tablasCandidatas(ESQUEMA, 'cedula');
+    assert.equal(c[0].tabla, 'usuarios', 'la coincidencia exacta debe ganar');
+    assert.equal(c[0].columna, 'cedula');
+    // «cliente_documento» también vale, pero después.
+    assert.ok(c.some((x) => x.tabla === 'facturas'));
+  });
+
+  it('señala la columna que se sale de lo normal, sin proponer UPDATE', async () => {
+    const { explorarTabla } = await import('./exploracion-generica.ts');
+    const ejecutar = async (sql: string) => {
+      if (sql.includes('WHERE')) return [{ id: 7, cedula: '0102030405', estado: 0, intentos: 3, creado_at: 'x' }];
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 100 }];
+      if (sql.includes('"estado"')) return [{ valor: 1, veces: 97 }, { valor: 0, veces: 3 }];
+      if (sql.includes('"intentos"')) return [{ valor: 0, veces: 95 }, { valor: 3, veces: 5 }];
+      return [];
+    };
+    const r = await explorarTabla(ejecutar, { tabla: 'usuarios', columna: 'cedula', columnas: 5 }, '0102030405', ESQUEMA);
+    assert.ok(r, 'deberia encontrar algo');
+    assert.deepEqual(r!.diferencias.map((d) => d.columna).sort(), ['estado', 'intentos']);
+    assert.ok(!JSON.stringify(r).includes('UPDATE'), 'no debe redactar ninguna escritura');
+  });
+
+  it('no dice nada de una fila igual a las demas', async () => {
+    const { explorarTabla } = await import('./exploracion-generica.ts');
+    const ejecutar = async (sql: string) => {
+      if (sql.includes('WHERE')) return [{ id: 1, cedula: '0102030405', estado: 1, intentos: 0 }];
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 100 }];
+      if (sql.includes('"estado"')) return [{ valor: 1, veces: 97 }];
+      if (sql.includes('"intentos"')) return [{ valor: 0, veces: 95 }];
+      return [];
+    };
+    assert.equal(
+      await explorarTabla(ejecutar, { tabla: 'usuarios', columna: 'cedula', columnas: 5 }, '0102030405', ESQUEMA),
+      null,
+    );
+  });
+
+  it('se calla con poblacion chica: una rareza entre diez no es una rareza', async () => {
+    const { explorarTabla } = await import('./exploracion-generica.ts');
+    const ejecutar = async (sql: string) => {
+      if (sql.includes('WHERE')) return [{ id: 1, cedula: '0102030405', estado: 0 }];
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 8 }];
+      return [];
+    };
+    assert.equal(
+      await explorarTabla(ejecutar, { tabla: 'usuarios', columna: 'cedula', columnas: 5 }, '0102030405', ESQUEMA),
+      null,
+    );
+  });
+
+  it('el identificador viaja como parametro, no dentro del SQL', async () => {
+    const { explorarTabla } = await import('./exploracion-generica.ts');
+    let visto = '';
+    const ejecutar = async (sql: string, p: unknown[]) => {
+      if (sql.includes('WHERE')) {
+        visto = sql;
+        assert.deepEqual(p, ["0102030405' OR 1=1--"]);
+      }
+      return [];
+    };
+    await explorarTabla(ejecutar, { tabla: 'usuarios', columna: 'cedula', columnas: 5 }, "0102030405' OR 1=1--", ESQUEMA);
+    assert.ok(visto.includes('$1') && !visto.includes('OR 1=1'), 'el valor no debe interpolarse');
+  });
+});
+
 // ─── Precedentes ─────────────────────────────────────────────────────────────
 
 describe('buscar precedentes', () => {

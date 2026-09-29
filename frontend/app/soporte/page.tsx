@@ -1,11 +1,10 @@
 'use client';
 
 import {
-  ArrowLeft,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   Clock,
-  FolderOpen,
   History,
   MessageSquarePlus,
   Search,
@@ -19,95 +18,171 @@ import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
 import { Markdown, resumenPlano } from './markdown';
-import { clienteApi, type CasoPropio, type PrecedentePublico, type Tema } from './api';
+import { clienteApi, type CasoPropio, type PrecedentePublico } from './api';
 
-type Seccion = 'buscar' | 'temas' | 'casos';
+/** Qué se está mirando en el panel de la derecha. */
+type Vista = { tipo: 'buscar' } | { tipo: 'articulo'; id: string } | { tipo: 'caso'; numero: string };
 
 /**
- * Lo que ve quien tiene el problema, no quien lo resuelve.
+ * Lo que ve quien tiene el problema.
  *
- * Tres secciones, una a la vez y a pantalla completa. La versión anterior las metía
- * todas en la misma vista, en columnas, y el resultado era una barra lateral apretada
- * donde el contenido de un artículo no se podía leer. Quien entra aquí hace una cosa:
- * o describe su problema, o mira temas, o revisa sus casos.
+ * Misma forma que el panel de administración —índice a la izquierda, contenido a la
+ * derecha— porque es la que ya conoce quien usa el sistema, y porque el contenido de
+ * un artículo necesita ancho para leerse.
  */
 function SoportePage() {
-  const [seccion, setSeccion] = useState<Seccion>('buscar');
-  const { data: misCasos } = useQuery({ queryKey: ['mis-casos'], queryFn: clienteApi.misCasos });
-  const pendientes = (misCasos ?? []).filter((c) => c.estado !== 'resuelto').length;
+  const [vista, setVista] = useState<Vista>({ tipo: 'buscar' });
 
   return (
     <div className="app-shell min-h-screen">
-      <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">
         <Cabecera />
 
-        <nav className="mt-5 flex gap-1 rounded-xl border border-(--line) bg-white/60 p-1">
-          <Pestana activa={seccion === 'buscar'} onClick={() => setSeccion('buscar')} icono={<MessageSquarePlus />}>
-            Mi problema
-          </Pestana>
-          <Pestana activa={seccion === 'temas'} onClick={() => setSeccion('temas')} icono={<FolderOpen />}>
-            Temas de ayuda
-          </Pestana>
-          <Pestana
-            activa={seccion === 'casos'}
-            onClick={() => setSeccion('casos')}
-            icono={<Clock />}
-            insignia={pendientes > 0 ? pendientes : undefined}
-          >
-            Mis casos
-          </Pestana>
-        </nav>
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[264px_minmax(0,1fr)]">
+          <BarraLateral vista={vista} onElegir={setVista} />
 
-        <main className="mt-6">
-          {seccion === 'buscar' && <Buscar />}
-          {seccion === 'temas' && <Temas />}
-          {seccion === 'casos' && <MisCasos casos={misCasos ?? []} onBuscar={() => setSeccion('buscar')} />}
-        </main>
+          <main className="min-w-0 rounded-2xl border border-(--line) bg-white/70 px-5 py-5 sm:px-6">
+            {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
+            {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
+            {vista.tipo === 'caso' && <Caso numero={vista.numero} />}
+          </main>
+        </div>
       </div>
     </div>
   );
 }
 
-function Pestana({
-  activa,
-  onClick,
-  icono,
-  insignia,
-  children,
-}: {
-  activa: boolean;
-  onClick: () => void;
-  icono: ReactNode;
-  insignia?: number;
-  children: ReactNode;
-}) {
+// ─── Barra lateral ───────────────────────────────────────────────────────────
+
+function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) => void }) {
+  const { data: temas } = useQuery({ queryKey: ['temas'], queryFn: clienteApi.temas });
+  const { data: casos } = useQuery({ queryKey: ['mis-casos'], queryFn: clienteApi.misCasos });
+  const pendientes = (casos ?? []).filter((c) => c.estado !== 'resuelto').length;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={activa ? 'page' : undefined}
-      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-colors ${
-        activa ? 'bg-(--accent) text-white shadow-sm' : 'text-(--ink-700) hover:bg-white/70'
-      } [&_svg]:size-4`}
-    >
-      {icono}
-      <span className="hidden sm:inline">{children}</span>
-      {insignia !== undefined && (
-        <span
-          className={`rounded-full px-1.5 text-[11px] font-semibold ${
-            activa ? 'bg-white/25' : 'bg-amber-100 text-amber-700'
-          }`}
-        >
-          {insignia}
-        </span>
+    <aside className="space-y-4 rounded-2xl border border-(--line) bg-white/60 p-3 lg:sticky lg:top-5">
+      <button
+        type="button"
+        onClick={() => onElegir({ tipo: 'buscar' })}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-white/80'
+        }`}
+      >
+        <MessageSquarePlus className="size-4" />
+        Mi problema
+      </button>
+
+      <Grupo titulo="Temas de ayuda">
+        {temas?.length ? (
+          temas.map((t) => (
+            <Categoria
+              key={t.categoria}
+              nombre={t.categoria}
+              articulos={t.articulos}
+              activo={vista.tipo === 'articulo' ? vista.id : null}
+              onElegir={(id) => onElegir({ tipo: 'articulo', id })}
+            />
+          ))
+        ) : (
+          <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Sin temas todavía.</p>
+        )}
+      </Grupo>
+
+      <Grupo titulo="Mis casos" insignia={pendientes || undefined}>
+        {casos?.length ? (
+          casos.map((c) => {
+            const activo = vista.tipo === 'caso' && vista.numero === c.numero;
+            const resuelto = c.con_solucion || c.estado === 'resuelto';
+            return (
+              <button
+                key={c.numero}
+                type="button"
+                onClick={() => onElegir({ tipo: 'caso', numero: c.numero })}
+                className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
+                  activo ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-white/80'
+                }`}
+              >
+                {resuelto ? (
+                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                ) : (
+                  <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                )}
+                <span className="line-clamp-2">{c.titulo}</span>
+              </button>
+            );
+          })
+        ) : (
+          <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Aún no ha reportado nada.</p>
+        )}
+      </Grupo>
+    </aside>
+  );
+}
+
+function Grupo({ titulo, insignia, children }: { titulo: string; insignia?: number; children: ReactNode }) {
+  return (
+    <div>
+      <p className="flex items-center gap-2 px-3 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
+        {titulo}
+        {insignia !== undefined && (
+          <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">{insignia}</span>
+        )}
+      </p>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function Categoria({
+  nombre,
+  articulos,
+  activo,
+  onElegir,
+}: {
+  nombre: string;
+  articulos: { id: string; titulo: string }[];
+  activo: string | null;
+  onElegir: (id: string) => void;
+}) {
+  // Abierta si el artículo que se está viendo es suyo: al entrar por un enlace, la
+  // rama correspondiente aparece desplegada en vez de haber que buscarla.
+  const [abierta, setAbierta] = useState(() => articulos.some((a) => a.id === activo));
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setAbierta((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-(--ink-900) transition-colors hover:bg-white/80"
+        aria-expanded={abierta}
+      >
+        <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${abierta ? '' : '-rotate-90'}`} />
+        <span className="min-w-0 flex-1 truncate">{nombre}</span>
+        <span className="text-[11px] text-(--ink-500)">{articulos.length}</span>
+      </button>
+      {abierta && (
+        <div className="ml-4 space-y-0.5 border-l border-(--line) pl-2">
+          {articulos.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onElegir(a.id)}
+              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
+                activo === a.id ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-white/80'
+              }`}
+            >
+              <span className="line-clamp-2">{a.titulo}</span>
+            </button>
+          ))}
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
 // ─── Mi problema ─────────────────────────────────────────────────────────────
 
-function Buscar() {
+function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState<PrecedentePublico[] | null>(null);
   const [reportado, setReportado] = useState<CasoPropio | null>(null);
@@ -131,24 +206,33 @@ function Buscar() {
 
   if (reportado) {
     return (
-      <section className="rounded-2xl border border-(--line) bg-white/80 px-6 py-10 text-center">
+      <div className="py-8 text-center">
         <CheckCircle2 className="mx-auto size-10 text-emerald-600" />
         <h2 className="mt-4 text-lg font-semibold text-(--ink-900)">Su caso quedó registrado</h2>
         <p className="mt-1 font-mono text-[13px] text-(--ink-700)">{reportado.numero}</p>
         <p className="mx-auto mt-3 max-w-md text-[14px] text-(--ink-700)">
-          Soporte lo revisa y la respuesta aparece en «Mis casos». No hace falta que escriba a nadie más.
+          Soporte lo revisa y la respuesta aparece en «Mis casos», aquí al lado.
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            setTexto('');
-            setReportado(null);
-          }}
-          className="mt-6 inline-flex h-10 items-center rounded-lg border border-(--line) bg-white px-4 text-[13.5px] font-semibold text-(--ink-900)"
-        >
-          Reportar otro problema
-        </button>
-      </section>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => onVerCaso(reportado.numero)}
+            className="inline-flex h-10 items-center rounded-lg bg-(--accent) px-4 text-[13.5px] font-semibold text-white"
+          >
+            Ver mi caso
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTexto('');
+              setReportado(null);
+            }}
+            className="inline-flex h-10 items-center rounded-lg border border-(--line) bg-white px-4 text-[13.5px] font-semibold text-(--ink-900)"
+          >
+            Reportar otro
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -169,7 +253,7 @@ function Buscar() {
           rows={4}
           autoFocus
           placeholder="Por ejemplo: entro al módulo de aprobaciones y la tabla se queda vacía, no carga nada desde ayer."
-          className="mt-4 w-full resize-none rounded-xl border border-(--line) bg-white/80 px-4 py-3.5 text-[15px] leading-relaxed outline-none focus:border-(--accent)"
+          className="mt-4 w-full resize-none rounded-xl border border-(--line) bg-white px-4 py-3.5 text-[15px] leading-relaxed outline-none focus:border-(--accent)"
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -196,30 +280,17 @@ function Buscar() {
                 Esto se parece a lo suyo
               </h2>
               {resultados.map((p) => (
-                <Desplegable
-                  key={`${p.tipo}-${p.id}`}
-                  icono={p.tipo === 'ticket' ? <History /> : <BookOpen />}
-                  titulo={p.titulo}
-                  resumen={p.solucion || p.detalle}
-                >
-                  {p.solucion || p.detalle ? (
-                    <Markdown contenido={p.solucion || p.detalle} />
-                  ) : (
-                    <p className="text-[13.5px] text-(--ink-700)">
-                      Este caso no dejó una explicación escrita. Repórtelo y soporte lo revisa.
-                    </p>
-                  )}
-                </Desplegable>
+                <Resultado key={`${p.tipo}-${p.id}`} precedente={p} />
               ))}
             </>
           ) : (
-            <p className="rounded-xl border border-(--line) bg-white/70 px-4 py-6 text-center text-[14px] text-(--ink-700)">
+            <p className="rounded-xl border border-(--line) bg-white px-4 py-6 text-center text-[14px] text-(--ink-700)">
               No encontramos nada parecido todavía.
             </p>
           )}
 
-          {/* Aparece también cuando hubo resultados: que salgan no significa que alguno sirva. */}
-          <div className="rounded-xl border border-(--line) bg-white/70 px-4 py-4">
+          {/* Aparece también cuando hubo resultados: que salgan no significa que sirvan. */}
+          <div className="rounded-xl border border-(--line) bg-white px-4 py-4">
             <p className="text-[14px] font-medium text-(--ink-900)">
               {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo reportamos al equipo?'}
             </p>
@@ -247,263 +318,143 @@ function Buscar() {
   );
 }
 
-// ─── Temas de ayuda ──────────────────────────────────────────────────────────
-
-/**
- * El árbol de temas, a pantalla completa.
- *
- * Dos pasos y no uno: primero las categorías, y al elegir una se entra a sus
- * artículos. Anidar categoría dentro de categoría dentro de artículo dejaba el texto
- * en una columna de cuatro centímetros.
- */
-function Temas() {
-  const [abierta, setAbierta] = useState<Tema | null>(null);
-  const { data: temas, isLoading } = useQuery({ queryKey: ['temas'], queryFn: clienteApi.temas });
-
-  if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando temas…</p>;
-  if (!temas?.length) return <p className="text-[14px] text-(--ink-700)">Todavía no hay temas publicados.</p>;
-
-  if (abierta) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => setAbierta(null)}
-          className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-(--accent)"
-        >
-          <ArrowLeft className="size-4" />
-          Todos los temas
-        </button>
-        <h1 className="mt-3 text-xl font-semibold tracking-tight text-(--ink-900)">{abierta.categoria}</h1>
-        <p className="mt-1 text-[13.5px] text-(--ink-700)">
-          {abierta.articulos.length} tema{abierta.articulos.length === 1 ? '' : 's'}
-        </p>
-        <div className="mt-4 space-y-3">
-          {abierta.articulos.map((a) => (
-            <Articulo key={a.id} id={a.id} titulo={a.titulo} descripcion={a.descripcion} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">Temas de ayuda</h1>
-      <p className="mt-1 text-[14px] text-(--ink-700)">Elija un tema si no sabe cómo describir su problema.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {temas.map((t) => (
-          <button
-            key={t.categoria}
-            type="button"
-            onClick={() => setAbierta(t)}
-            className="flex items-center gap-3 rounded-xl border border-(--line) bg-white/70 px-4 py-3.5 text-left transition hover:border-(--accent)/40 hover:bg-white"
-          >
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-(--accent)/10 text-(--accent)">
-              <BookOpen className="size-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-medium text-(--ink-900)">{t.categoria}</span>
-              <span className="block text-[12.5px] text-(--ink-500)">
-                {t.articulos.length} tema{t.articulos.length === 1 ? '' : 's'}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Articulo({ id, titulo, descripcion }: { id: string; titulo: string; descripcion: string | null }) {
+function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
   const [abierto, setAbierto] = useState(false);
-  const [comentariosPlegados, setComentariosPlegados] = useState(true);
-  const usuario = leerUsuario();
-  const { data, isLoading } = useQuery({
-    queryKey: ['tema', id],
-    queryFn: () => clienteApi.tema(id),
-    enabled: abierto,
-  });
+  const cuerpo = p.solucion || p.detalle;
 
   return (
-    <Desplegable
-      icono={<BookOpen />}
-      titulo={titulo}
-      resumen={descripcion ?? ''}
-      abierto={abierto}
-      onAlternar={() => setAbierto((v) => !v)}
-    >
-      {isLoading && <p className="text-[13.5px] text-(--ink-500)">Cargando…</p>}
-      {data && (
-        <>
-          {data.contenido ? (
-            <Markdown contenido={data.contenido} />
-          ) : (
-            <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
-          )}
-
-          {/*
-            Los mismos comentarios que ve el administrador. Aquí valen más todavía:
-            quien tiene el problema es el que sabe si la solución le funcionó, y sin
-            un sitio donde decirlo esa información se pierde.
-          */}
-          <div className="mt-5 border-t border-(--line) pt-4">
-            <CommentsSection
-              articleId={data.id}
-              articleTitle={data.titulo}
-              currentUser={usuario ? { username: usuario.username ?? '', role: usuario.role ?? 'user' } : null}
-              collapsed={comentariosPlegados}
-              onToggleCollapse={() => setComentariosPlegados((v) => !v)}
-            />
-          </div>
-        </>
-      )}
-    </Desplegable>
-  );
-}
-
-// ─── Mis casos ───────────────────────────────────────────────────────────────
-
-function MisCasos({ casos, onBuscar }: { casos: CasoPropio[]; onBuscar: () => void }) {
-  if (casos.length === 0) {
-    return (
-      <section className="rounded-2xl border border-(--line) bg-white/70 px-6 py-10 text-center">
-        <Clock className="mx-auto size-8 text-(--ink-500)" />
-        <h2 className="mt-3 text-[15px] font-semibold text-(--ink-900)">Todavía no ha reportado nada</h2>
-        <p className="mx-auto mt-1 max-w-sm text-[13.5px] text-(--ink-700)">
-          Cuando reporte un problema, aparecerá aquí con su respuesta.
-        </p>
-        <button
-          type="button"
-          onClick={onBuscar}
-          className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-(--accent) px-4 text-[13.5px] font-semibold text-white"
-        >
-          <MessageSquarePlus className="size-4" />
-          Reportar un problema
-        </button>
-      </section>
-    );
-  }
-
-  return (
-    <div>
-      <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">Mis casos</h1>
-      <div className="mt-4 space-y-3">
-        {casos.map((c) => (
-          <Caso key={c.numero} caso={c} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Caso({ caso }: { caso: CasoPropio }) {
-  const [abierto, setAbierto] = useState(false);
-  const resuelto = caso.con_solucion || caso.estado === 'resuelto';
-  const { data } = useQuery({
-    queryKey: ['mi-caso', caso.numero],
-    queryFn: () => clienteApi.caso(caso.numero),
-    enabled: abierto,
-  });
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-(--line) bg-white/80">
+    <div className="overflow-hidden rounded-xl border border-(--line) bg-white">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
         className="flex w-full items-start gap-3 px-4 py-3.5 text-left"
         aria-expanded={abierto}
       >
-        <span
-          className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg ${
-            resuelto ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-          }`}
-        >
-          {resuelto ? <CheckCircle2 className="size-4" /> : <Clock className="size-4" />}
+        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-(--accent)/10 text-(--accent)">
+          {p.tipo === 'ticket' ? <History className="size-4" /> : <BookOpen className="size-4" />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-medium text-(--ink-900)">{caso.titulo}</span>
-          <span className="block text-[12px] text-(--ink-500)">
-            {caso.numero} · {resuelto ? 'resuelto' : 'en revisión'}
-          </span>
+          <span className="block text-[14px] font-medium text-(--ink-900)">{p.titulo}</span>
+          {!abierto && cuerpo && (
+            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
+          )}
         </span>
       </button>
-
       {abierto && (
-        <div className="space-y-4 border-t border-(--line) px-4 py-4">
-          {data?.solucion ? (
-            <Bloque titulo="Solución" texto={data.solucion} />
+        <div className="border-t border-(--line) px-4 py-4">
+          {cuerpo ? (
+            <Markdown contenido={cuerpo} />
           ) : (
             <p className="text-[13.5px] text-(--ink-700)">
-              Todavía en revisión. Cuando soporte lo resuelva, la respuesta aparece aquí.
+              Este caso no dejó una explicación escrita. Repórtelo y soporte lo revisa.
             </p>
           )}
-          {data?.causa_raiz && <Bloque titulo="Por qué pasó" texto={data.causa_raiz} />}
         </div>
       )}
     </div>
   );
 }
 
+// ─── Un tema ─────────────────────────────────────────────────────────────────
+
+function Articulo({ id }: { id: string }) {
+  const [comentariosPlegados, setComentariosPlegados] = useState(true);
+  const usuario = leerUsuario();
+  const { data, isLoading } = useQuery({ queryKey: ['tema', id], queryFn: () => clienteApi.tema(id) });
+
+  if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
+  if (!data) return <p className="text-[14px] text-(--ink-700)">No se encontró ese tema.</p>;
+
+  return (
+    <article>
+      {data.categoria && (
+        <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
+      )}
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-(--ink-900)">{data.titulo}</h1>
+
+      <div className="mt-4">
+        {data.contenido ? (
+          <Markdown contenido={data.contenido} />
+        ) : (
+          <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
+        )}
+      </div>
+
+      {/*
+        Los mismos comentarios que ve el administrador. Aquí valen más todavía: quien
+        tiene el problema es el que sabe si la solución le funcionó.
+      */}
+      <div className="mt-6 border-t border-(--line) pt-5">
+        <CommentsSection
+          articleId={data.id}
+          articleTitle={data.titulo}
+          currentUser={usuario ? { username: usuario.username ?? '', role: usuario.role ?? 'user' } : null}
+          collapsed={comentariosPlegados}
+          onToggleCollapse={() => setComentariosPlegados((v) => !v)}
+        />
+      </div>
+    </article>
+  );
+}
+
+// ─── Un caso propio ──────────────────────────────────────────────────────────
+
+function Caso({ numero }: { numero: string }) {
+  const { data, isLoading } = useQuery({ queryKey: ['mi-caso', numero], queryFn: () => clienteApi.caso(numero) });
+
+  if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
+  if (!data) return <p className="text-[14px] text-(--ink-700)">No se encontró ese caso.</p>;
+
+  const resuelto = Boolean(data.solucion) || data.estado === 'resuelto';
+
+  return (
+    <article>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${
+            resuelto ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+          }`}
+        >
+          {resuelto ? <CheckCircle2 className="size-3.5" /> : <Clock className="size-3.5" />}
+          {resuelto ? 'Resuelto' : 'En revisión'}
+        </span>
+        <span className="font-mono text-[12px] text-(--ink-500)">{data.numero}</span>
+      </div>
+
+      <h1 className="mt-3 text-xl font-semibold tracking-tight text-(--ink-900)">{data.titulo}</h1>
+
+      {data.descripcion && (
+        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-(--ink-700)">{data.descripcion}</p>
+      )}
+
+      <div className="mt-6 space-y-5 border-t border-(--line) pt-5">
+        {data.solucion ? (
+          <Bloque titulo="Solución" texto={data.solucion} />
+        ) : (
+          <p className="text-[13.5px] text-(--ink-700)">
+            Todavía en revisión. Cuando soporte lo resuelva, la respuesta aparece aquí.
+          </p>
+        )}
+        {data.causa_raiz && <Bloque titulo="Por qué pasó" texto={data.causa_raiz} />}
+      </div>
+    </article>
+  );
+}
+
 function Bloque({ titulo, texto }: { titulo: string; texto: string }) {
   return (
     <div>
-      <p className="mb-1 text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{titulo}</p>
+      <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{titulo}</p>
       <Markdown contenido={texto} />
     </div>
   );
 }
 
-// ─── Piezas compartidas ──────────────────────────────────────────────────────
-
-/** Tarjeta que se abre para mostrar su contenido. La usan resultados y artículos. */
-function Desplegable({
-  icono,
-  titulo,
-  resumen,
-  children,
-  abierto: abiertoExterno,
-  onAlternar,
-}: {
-  icono: ReactNode;
-  titulo: string;
-  resumen: string;
-  children: ReactNode;
-  abierto?: boolean;
-  onAlternar?: () => void;
-}) {
-  const [propio, setPropio] = useState(false);
-  const abierto = abiertoExterno ?? propio;
-  const alternar = onAlternar ?? (() => setPropio((v) => !v));
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-(--line) bg-white/80">
-      <button
-        type="button"
-        onClick={alternar}
-        className="flex w-full items-start gap-3 px-4 py-3.5 text-left"
-        aria-expanded={abierto}
-      >
-        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-(--accent)/10 text-(--accent) [&_svg]:size-4">
-          {icono}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-medium text-(--ink-900)">{titulo}</span>
-          {!abierto && resumen && (
-            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(resumen)}</span>
-          )}
-        </span>
-      </button>
-      {abierto && <div className="border-t border-(--line) px-4 py-4">{children}</div>}
-    </div>
-  );
-}
+// ─── Cabecera ────────────────────────────────────────────────────────────────
 
 /**
- * Cabecera propia, más liviana que la del panel.
- *
- * No hereda la del administrador porque aquella trae acciones que aquí no existen, y
- * una barra con botones que no llevan a ningún sitio es peor que no tenerla.
+ * Más liviana que la del panel: aquella trae acciones que aquí no existen, y una
+ * barra con botones que no llevan a ningún sitio es peor que no tenerla.
  */
 function Cabecera() {
   const { theme } = useTheme();

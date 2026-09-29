@@ -3,8 +3,7 @@
 import { BookOpen, LayoutDashboard, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/soporte/lib/api';
+import { useEffect, useState } from 'react';
 import { useTheme } from './ThemeProvider';
 
 /**
@@ -13,6 +12,16 @@ import { useTheme } from './ThemeProvider';
  * Comparte el lenguaje visual del panel —vidrio, tipografía y tokens `--ink-*`—
  * porque es la misma barra: arriba el soporte, debajo las categorías de artículos.
  */
+/** Las mismas cabeceras que usa el resto del panel para hablar con el backend. */
+function cabeceras(): Record<string, string> {
+  try {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 const SECCIONES = [
   { ruta: '/admin/resumen', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
   // La búsqueda por conocimiento va arriba: es lo que responde siempre, con o sin
@@ -38,9 +47,22 @@ export default function NavegacionSoporte({
   const ruta = usePathname();
   const { theme } = useTheme();
   const claro = theme === 'light';
-  const { data: estado } = useQuery({ queryKey: ['estado'], queryFn: api.estado, staleTime: 60_000 });
-  // `baseDiagnosticos` viene en null cuando no hay ninguna base configurada.
-  const sinBase = estado !== undefined && !estado.baseDiagnosticos;
+  // Se consulta a mano y no con useQuery: esta barra también se monta en /admin, que
+  // no tiene QueryClientProvider, y un hook de react-query ahí revienta la página
+  // entera. `baseDiagnosticos` viene en null cuando no hay base configurada.
+  const [sinBase, setSinBase] = useState(false);
+  useEffect(() => {
+    let vigente = true;
+    fetch('/api/soporte/estado', { headers: cabeceras() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((estado) => {
+        if (vigente && estado) setSinBase(!estado.baseDiagnosticos);
+      })
+      .catch(() => undefined);
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   return (
     <nav className={colapsado ? 'flex flex-col items-center gap-1' : 'space-y-0.5'}>

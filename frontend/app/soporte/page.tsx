@@ -3,6 +3,7 @@
 import { BookOpen, CheckCircle2, ChevronDown, Clock, History, Search, Send } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
@@ -51,14 +52,16 @@ function SoportePage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
         <Cabecera />
 
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
         {reportado ? (
           <Confirmacion caso={reportado} onNuevo={empezarDeNuevo} />
         ) : (
           <>
-            <section className="mt-6">
+            <section>
               <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">¿Qué problema tiene?</h1>
               <p className="mt-1 text-[13.5px] text-(--ink-700)">
                 Descríbalo con sus palabras. Primero buscamos si ya se resolvió antes.
@@ -93,7 +96,7 @@ function SoportePage() {
             </section>
 
             {resultados !== null && (
-              <section className="mt-8">
+              <section>
                 {resultados.length > 0 ? (
                   <>
                     <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">
@@ -140,9 +143,13 @@ function SoportePage() {
           </>
         )}
 
-        {!reportado && <Temas />}
+          </div>
 
-        {misCasos && misCasos.length > 0 && <MisCasos casos={misCasos} />}
+          <aside className="space-y-4 lg:sticky lg:top-6">
+            {!reportado && <Temas />}
+            {misCasos && misCasos.length > 0 && <MisCasos casos={misCasos} />}
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -225,7 +232,7 @@ function Temas() {
   });
 
   return (
-    <section className="mt-8">
+    <section>
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
@@ -289,21 +296,98 @@ function Articulo({ id, titulo, descripcion }: { id: string; titulo: string; des
       >
         <span className="block text-[13.5px] text-(--ink-900)">{titulo}</span>
         {!abierto && descripcion && (
-          <span className="mt-0.5 line-clamp-1 block text-[12px] text-(--ink-700)">{descripcion}</span>
+          <span className="mt-0.5 line-clamp-1 block text-[12px] text-(--ink-700)">{resumenPlano(descripcion)}</span>
         )}
       </button>
       {abierto && (
         <div className="px-4 pb-3">
           {isLoading && <p className="text-[13px] text-(--ink-500)">Cargando…</p>}
-          {data && (
-            <p className="text-[13.5px] leading-relaxed whitespace-pre-line text-(--ink-800)">
-              {data.contenido ?? 'Este tema no tiene contenido escrito.'}
-            </p>
-          )}
+          {data &&
+            (data.contenido ? (
+              <Texto contenido={data.contenido} />
+            ) : (
+              <p className="text-[13px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
+            ))}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Contenido de un artículo, que viene en Markdown.
+ *
+ * Antes se pintaba tal cual y los `##` de los títulos salían en pantalla. Se
+ * estilan aquí y no con una hoja global porque esta vista tiene su propia escala
+ * tipográfica, más chica que la del panel.
+ */
+function Texto({ contenido }: { contenido: string }) {
+  return (
+    <div className="text-[13.5px] leading-relaxed text-(--ink-800)">
+      <ReactMarkdown
+        components={{
+          h1: ({ children }) => (
+            <h3 className="mt-3 mb-1.5 text-[14.5px] font-semibold text-(--ink-900) first:mt-0">{children}</h3>
+          ),
+          h2: ({ children }) => (
+            <h4 className="mt-3 mb-1 text-[13.5px] font-semibold text-(--ink-900) first:mt-0">{children}</h4>
+          ),
+          h3: ({ children }) => (
+            <h5 className="mt-2.5 mb-1 text-[13px] font-semibold text-(--ink-900) first:mt-0">{children}</h5>
+          ),
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>,
+          strong: ({ children }) => <strong className="font-semibold text-(--ink-900)">{children}</strong>,
+          a: ({ children, href }) => (
+            <a href={href} className="text-(--accent) underline">
+              {children}
+            </a>
+          ),
+          code: ({ children }) => (
+            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">{children}</code>
+          ),
+          pre: ({ children }) => (
+            <pre className="mb-2 overflow-x-auto rounded-lg bg-slate-900 p-3 font-mono text-[12px] text-slate-100">
+              {children}
+            </pre>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="mb-2 border-l-2 border-(--line) pl-3 text-(--ink-700)">{children}</blockquote>
+          ),
+          hr: () => <hr className="my-3 border-(--line)" />,
+          table: ({ children }) => (
+            <div className="mb-2 overflow-x-auto">
+              <table className="w-full text-left text-[12.5px]">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => <th className="border-b border-(--line) py-1 pr-3 font-medium">{children}</th>,
+          td: ({ children }) => <td className="border-b border-(--line) py-1 pr-3">{children}</td>,
+        }}
+      >
+        {contenido}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+/**
+ * Deja un resumen de una línea, sin marcas de Markdown.
+ *
+ * Varios artículos traen la descripción en Markdown —hay uno cuyo resumen empieza
+ * con «## Ranking salarial»— y en una vista previa de una línea esas marcas solo
+ * estorban. Renderizarlas tampoco sirve: un título dentro de una línea de resumen
+ * se ve peor todavía.
+ */
+function resumenPlano(texto: string): string {
+  return texto
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*|__|\*|_/g, '')
+    .replace(new RegExp('`', 'g'), '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^>\s*/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** El título del caso sale de la primera frase, para no pedir dos veces lo mismo. */
@@ -332,7 +416,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-(--ink-900)">{p.titulo}</span>
           {!abierto && cuerpo && (
-            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{cuerpo}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
           )}
         </span>
       </button>
@@ -340,7 +424,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
       {abierto && (
         <div className="border-t border-(--line) px-4 py-3">
           {cuerpo ? (
-            <p className="text-[13.5px] leading-relaxed whitespace-pre-line text-(--ink-800)">{cuerpo}</p>
+            <Texto contenido={cuerpo} />
           ) : (
             <p className="text-[13px] text-(--ink-700)">
               Este caso no dejó una explicación escrita. Repórtelo y soporte lo revisa.
@@ -354,7 +438,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
 
 function Confirmacion({ caso, onNuevo }: { caso: CasoPropio; onNuevo: () => void }) {
   return (
-    <section className="mt-8 rounded-xl border border-(--line) bg-white/80 px-5 py-6 text-center">
+    <section className="rounded-xl border border-(--line) bg-white/80 px-5 py-6 text-center">
       <CheckCircle2 className="mx-auto size-8 text-emerald-600" />
       <h1 className="mt-3 text-lg font-semibold text-(--ink-900)">Su caso quedó registrado</h1>
       <p className="mt-1 font-mono text-[13px] text-(--ink-700)">{caso.numero}</p>
@@ -374,7 +458,7 @@ function Confirmacion({ caso, onNuevo }: { caso: CasoPropio; onNuevo: () => void
 
 function MisCasos({ casos }: { casos: CasoPropio[] }) {
   return (
-    <section className="mt-10">
+    <section>
       <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">Sus casos</h2>
       <div className="mt-3 space-y-2">
         {casos.map((c) => (

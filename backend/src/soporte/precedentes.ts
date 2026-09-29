@@ -72,6 +72,22 @@ const VACIAS = new Set([
 
 const LIMITE = 5;
 
+/**
+ * Puntaje mínimo para considerar que un resultado se parece de verdad.
+ *
+ * Las palabras se unen con OR, así que casi cualquier texto casa con algo: un caso
+ * sobre adjuntar un PDF devolvía «Error en reimpresión de comprobante» al 100 %,
+ * porque compartían «solicitud» y «adjunto». Como el porcentaje se normaliza contra
+ * el mejor, el primero siempre salía al 100 % aunque no tuviera nada que ver.
+ *
+ * Los umbrales salen de medir casos buenos y malos contra esta base: un acierto
+ * ronda 0,033 en tickets y 0,4 en artículos; un falso positivo, 0,018 y menos de
+ * 0,05. Son de esta base y habrá que revisarlos cuando crezca — el calibrador de
+ * `herramientas/` es el sitio donde comprobarlo.
+ */
+const PISO_TICKET = 0.022;
+const PISO_ARTICULO = 0.05;
+
 /** Expuesto solo para las pruebas: es la pieza que decide qué se busca. */
 export const aConsultaParaPruebas = aConsulta;
 
@@ -128,7 +144,7 @@ export async function buscarPrecedentes(
     ]);
 
     const salida: Precedente[] = [
-      ...tickets.map((t) => ({
+      ...tickets.filter((t) => Number(t.relevancia) >= PISO_TICKET).map((t) => ({
         tipo: 'ticket' as const,
         id: t.numero,
         titulo: t.titulo,
@@ -139,7 +155,7 @@ export async function buscarPrecedentes(
         sql: null,
         enlace: `/admin/tickets/${encodeURIComponent(t.numero)}`,
       })),
-      ...articulos.map((a) => ({
+      ...articulos.filter((a) => Number(a.relevancia) >= PISO_ARTICULO).map((a) => ({
         tipo: 'articulo' as const,
         id: a.id,
         titulo: a.titulo,

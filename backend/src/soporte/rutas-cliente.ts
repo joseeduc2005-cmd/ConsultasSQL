@@ -73,6 +73,60 @@ function comoLoVeQuienReporta(t: Ticket) {
   };
 }
 
+/**
+ * Un argumento de Mongo, tal como se escribiría.
+ *
+ * Los pipelines y filtros están guardados unas veces como objeto y otras como el texto
+ * JSON de ese objeto. Pasar el texto por `JSON.stringify` lo dejaba escapado y lleno de
+ * comillas invertidas, ilegible. Y algunos llevan marcadores como `{{departamento}}`,
+ * que no son JSON válido: esos se muestran tal cual, que es como se entienden.
+ */
+function comoArgumento(valor: unknown): string {
+  if (typeof valor === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(valor), null, 2);
+    } catch {
+      return valor;
+    }
+  }
+  return JSON.stringify(valor, null, 2);
+}
+
+/** Las claves de `script_json` que son plomería del panel y no dicen nada al leerlas. */
+const PLOMERIA = new Set(['modo', 'origen', 'databaseId', 'database_id', 'target_database']);
+
+/**
+ * Convierte el script guardado en algo que se pueda leer en pantalla.
+ *
+ * No todos son SQL. Los de Mongo llevan `operation`, `collection` y un `pipeline` o un
+ * `filter`, y hay artículos con formas que todavía no existen. Por eso lo que no se
+ * reconoce no se descarta: se muestra como JSON, que es peor que una sentencia bien
+ * formateada pero infinitamente mejor que un artículo que aparenta no traer nada.
+ */
+function comoSeLee(script: Record<string, unknown> | null): { lenguaje: string; texto: string } | null {
+  if (!script || typeof script !== 'object') return null;
+
+  if (typeof script.sql === 'string' && script.sql.trim()) {
+    return { lenguaje: 'sql', texto: script.sql.trim() };
+  }
+
+  const util = Object.fromEntries(Object.entries(script).filter(([k, v]) => !PLOMERIA.has(k) && v != null));
+  if (Object.keys(util).length === 0) return null;
+
+  // Mongo se arma como se escribiría en su consola, que es como lo va a reconocer
+  // quien lo lea; lo demás cae al JSON de más abajo.
+  const { operation, collection, pipeline, filter, sort, limit, ...sobrante } = util as Record<string, unknown>;
+  if (typeof collection === 'string' && typeof operation === 'string') {
+    const extras = [sort ? `.sort(${comoArgumento(sort)})` : '', limit ? `.limit(${limit})` : ''].join('');
+    return {
+      lenguaje: 'javascript',
+      texto: `db.${collection}.${operation}(${comoArgumento(pipeline ?? filter ?? {})})${extras}`,
+    };
+  }
+
+  return { lenguaje: 'json', texto: JSON.stringify({ ...util, ...sobrante }, null, 2) };
+}
+
 export function crearSoporteClienteRouter(
   { log }: { log?: (datos: object, mensaje: string) => void } = {},
 ): Router {
@@ -180,20 +234,25 @@ export function crearSoporteClienteRouter(
   router.get(
     '/temas/:id',
     h(async (req, res) => {
-      // El SQL se devuelve para poder leerlo, no para ejecutarlo. Si el artículo está
-      // marcado para todos, alguien ya decidió que su contenido —sentencia incluida—
-      // se puede mostrar; ocultarlo igual dejaba la autorización sin efecto visible.
-      // Ejecutar sigue siendo del panel: aquí no hay ningún endpoint que lo haga.
+      // El script se devuelve para poder leerlo, no para ejecutarlo. Si el artículo
+      // está marcado para todos, alguien ya decidió que su contenido —la sentencia
+      // incluida— se puede mostrar; ocultarlo igual dejaba la autorización sin efecto
+      // visible. Ejecutar sigue siendo del panel: aquí no hay endpoint que lo haga.
+      //
+      // Va el objeto entero y no solo `sql` porque no todos son SQL: los de Mongo
+      // llevan `operation`, `collection` y un `pipeline` o un `filter`, y quedarse
+      // con la clave `sql` dejaba esos artículos mostrando nada.
       const [articulo] = await filas<{
         id: string;
         titulo: string;
         contenido: string | null;
         categoria: string | null;
-        sql: string | null;
+        script: Record<string, unknown> | null;
         base: string | null;
       }>(
         `SELECT id::text, titulo, coalesce(contenido_md, contenido) AS contenido, categoria,
-                script_json->>'sql' AS sql, script_json->>'databaseId' AS base
+                script_json AS script,
+                coalesce(script_json->>'databaseId', script_json->>'target_database') AS base
          FROM knowledge_base
          WHERE id::text = $1 AND coalesce(visible_para, 'todos') = 'todos'`,
         [req.params.id],
@@ -202,7 +261,8 @@ export function crearSoporteClienteRouter(
         res.status(404);
         return { error: 'No se encontró ese tema.' };
       }
-      return articulo;
+      const { script, ...resto } = articulo;
+      return { ...resto, sentencia: comoSeLee(script) };
     }),
   );
 

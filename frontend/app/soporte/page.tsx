@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Copy,
   Database,
   History,
   Lightbulb,
@@ -40,43 +41,51 @@ type Vista =
  */
 function SoportePage() {
   const [vista, setVista] = useState<Vista>({ tipo: 'buscar' });
-  const [comentarios, setComentarios] = useState(false);
+  // Abiertos de entrada. Plegados había que descubrirlos —una flecha suelta en el
+  // borde— y la mitad de lo que aporta un tema está en lo que comentó el que ya pasó
+  // por ahí. Quien no los quiera, los cierra y se queda cerrado mientras navega.
+  const [comentarios, setComentarios] = useState(true);
 
   return (
-    <div className="app-shell min-h-screen">
-      <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">
-        <Cabecera />
+    // Alto fijo con scroll por columna, como el panel: así la página no crece por
+    // debajo del pliegue dejando una franja vacía cuando el contenido es corto, y el
+    // índice de la izquierda no se va de la pantalla al bajar por un artículo largo.
+    <div className="app-shell flex h-screen flex-col overflow-hidden px-3 py-3 sm:px-4 sm:py-4">
+      <Cabecera />
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[264px_minmax(0,1fr)]">
-          <BarraLateral vista={vista} onElegir={setVista} />
+      <div className="mt-3 grid min-h-0 flex-1 gap-3 lg:grid-cols-[264px_minmax(0,1fr)]">
+        <BarraLateral vista={vista} onElegir={setVista} />
 
-          <div className="flex min-w-0 gap-4">
-            <main className="min-w-0 flex-1 glass-panel-strong rounded-2xl px-5 py-5 sm:px-6">
+        <div className="flex min-h-0 min-w-0 gap-3">
+          <main className="glass-panel-strong min-w-0 flex-1 overflow-y-auto scroll-fino rounded-2xl px-5 py-5 sm:px-7">
+            {/* El contenido no se estira a lo ancho sin límite: una línea de texto de
+                punta a punta de un monitor ancho no hay quien la lea. */}
+            <div className="mx-auto w-full max-w-3xl">
               {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
               {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
               {vista.tipo === 'caso' && <Caso numero={vista.numero} onAportar={setVista} />}
               {vista.tipo === 'aportar' && <Aportar caso={vista.caso} titulo={vista.titulo} />}
-            </main>
+            </div>
+          </main>
 
-            {/*
-              Los comentarios van en su propia columna, como en el panel: dentro del
-              artículo quedaban al final de un texto largo, y el botón de plegar se
-              veía suelto en medio de la nada.
-            */}
-            {vista.tipo === 'articulo' && (
-              <section
-                className={`hidden shrink-0 glass-panel-strong rounded-2xl p-3 transition-[width] duration-300 lg:block ${
-                  comentarios ? 'w-[300px]' : 'w-[52px]'
-                }`}
-              >
-                <PanelComentarios
-                  id={vista.id}
-                  plegado={!comentarios}
-                  onAlternar={() => setComentarios((v) => !v)}
-                />
-              </section>
-            )}
-          </div>
+          {/*
+            Los comentarios van en su propia columna, como en el panel: dentro del
+            artículo quedaban al final de un texto largo, y el botón de plegar se
+            veía suelto en medio de la nada.
+          */}
+          {vista.tipo === 'articulo' && (
+            <section
+              className={`glass-panel-strong hidden shrink-0 overflow-y-auto scroll-fino rounded-2xl p-3 transition-[width] duration-300 lg:block ${
+                comentarios ? 'w-[320px]' : 'w-[52px]'
+              }`}
+            >
+              <PanelComentarios
+                id={vista.id}
+                plegado={!comentarios}
+                onAlternar={() => setComentarios((v) => !v)}
+              />
+            </section>
+          )}
         </div>
       </div>
     </div>
@@ -91,33 +100,35 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
   const pendientes = (casos ?? []).filter((c) => c.estado !== 'resuelto').length;
 
   return (
-    <aside className="space-y-4 glass-panel-strong rounded-2xl p-3 lg:sticky lg:top-5">
-      <button
-        type="button"
-        onClick={() => onElegir({ tipo: 'buscar' })}
-        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
-          vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
-        }`}
-      >
-        <MessageSquarePlus className="size-4" />
-        Mi problema
-      </button>
-
+    <aside className="glass-panel-strong min-h-0 space-y-4 overflow-y-auto scroll-fino rounded-2xl p-3">
       {/*
-        Segundo botón y no una pestaña dentro del primero: son dos intenciones
-        distintas —vengo a que me ayuden, vengo a contar cómo lo arreglé— y quien
-        entra a lo segundo ya sabe lo que busca.
+        Dos botones y no uno con pestañas: son dos intenciones distintas —vengo a que
+        me ayuden, vengo a contar cómo lo arreglé— y quien entra a la segunda ya sabe
+        lo que busca. Van juntos y arriba del todo, antes del árbol de temas.
       */}
-      <button
-        type="button"
-        onClick={() => onElegir({ tipo: 'aportar' })}
-        className={`-mt-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
-          vista.tipo === 'aportar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
-        }`}
-      >
-        <Lightbulb className="size-4" />
-        Yo lo resolví
-      </button>
+      <div className="space-y-0.5">
+        <button
+          type="button"
+          onClick={() => onElegir({ tipo: 'buscar' })}
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+            vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
+          }`}
+        >
+          <MessageSquarePlus className="size-4" />
+          Mi problema
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onElegir({ tipo: 'aportar' })}
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+            vista.tipo === 'aportar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
+          }`}
+        >
+          <Lightbulb className="size-4" />
+          Yo lo resolví
+        </button>
+      </div>
 
       <Grupo titulo="Temas de ayuda">
         {temas?.length ? (
@@ -432,19 +443,29 @@ function Articulo({ id }: { id: string }) {
         se hace dejaba esa decisión sin efecto. Se muestra para leerla — copiarla y
         llevarla a soporte — no para correrla: aquí no hay con qué.
       */}
-      {data.sql && (
+      {data.sentencia && (
         <section className="mt-6 border-t border-(--line) pt-5">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">Sentencia</p>
+            <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">
+              {data.sentencia.lenguaje === 'sql' ? 'Sentencia' : 'Instrucción'}
+            </p>
             {data.base && (
               <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
                 <Database className="size-3" />
                 {data.base}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(data.sentencia!.texto)}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[11.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+            >
+              <Copy className="size-3" />
+              Copiar
+            </button>
           </div>
           <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[12.5px] leading-relaxed text-(--ink-900)">
-            <code>{data.sql}</code>
+            <code>{data.sentencia.texto}</code>
           </pre>
           <p className="mt-2 text-[12.5px] text-(--ink-500)">
             Solo para consultarla. Quien la ejecuta es el equipo de soporte.

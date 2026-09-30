@@ -107,8 +107,12 @@ export const clienteApi = {
       titulo: string;
       contenido: string | null;
       categoria: string | null;
-      /** Viene para leerla. Ejecutarla es cosa del panel: aquí no hay con qué. */
-      sql: string | null;
+      /**
+       * Viene ya formateada para leerla —SQL, la instrucción de Mongo, o JSON si es
+       * una forma que todavía no se reconoce—. Ejecutarla es cosa del panel: aquí no
+       * hay con qué.
+       */
+      sentencia: { lenguaje: string; texto: string } | null;
       base: string | null;
     }>(`/temas/${encodeURIComponent(id)}`),
 

@@ -13,8 +13,10 @@
  *     nombres de tablas, y no son para cualquiera aunque sea personal interno.
  *   - Un caso solo lo ve quien lo reportó. El listado y el detalle filtran por autor,
  *     no por lo que mande el navegador.
+ *   - Lo que se propone como solución no se publica: queda pendiente de revisión.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { aportesDe, crearAporte, type AporteNuevo } from './aportes.ts';
 import { solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
 import { filas } from './knowledge/db.ts';
 import { guardarTicket, obtenerTicket, type Ticket } from './knowledge/tickets.ts';
@@ -178,8 +180,20 @@ export function crearSoporteClienteRouter(
   router.get(
     '/temas/:id',
     h(async (req, res) => {
-      const [articulo] = await filas<{ id: string; titulo: string; contenido: string | null; categoria: string | null }>(
-        `SELECT id::text, titulo, coalesce(contenido_md, contenido) AS contenido, categoria
+      // El SQL se devuelve para poder leerlo, no para ejecutarlo. Si el artículo está
+      // marcado para todos, alguien ya decidió que su contenido —sentencia incluida—
+      // se puede mostrar; ocultarlo igual dejaba la autorización sin efecto visible.
+      // Ejecutar sigue siendo del panel: aquí no hay ningún endpoint que lo haga.
+      const [articulo] = await filas<{
+        id: string;
+        titulo: string;
+        contenido: string | null;
+        categoria: string | null;
+        sql: string | null;
+        base: string | null;
+      }>(
+        `SELECT id::text, titulo, coalesce(contenido_md, contenido) AS contenido, categoria,
+                script_json->>'sql' AS sql, script_json->>'databaseId' AS base
          FROM knowledge_base
          WHERE id::text = $1 AND coalesce(visible_para, 'todos') = 'todos'`,
         [req.params.id],
@@ -190,6 +204,30 @@ export function crearSoporteClienteRouter(
       }
       return articulo;
     }),
+  );
+
+  /**
+   * Proponer una solución.
+   *
+   * No publica nada: queda pendiente hasta que alguien de soporte la revise. Eso es
+   * intencional —lo que se escriba aquí termina siendo un tema que otros van a
+   * seguir— y por eso la respuesta lo dice con todas sus letras.
+   */
+  router.post(
+    '/aportes',
+    h(async (req, res) => {
+      const usuario = quien(req);
+      const aporte = await crearAporte((req.body ?? {}) as AporteNuevo, usuario.username);
+      registrar({ id: aporte.id, autor: usuario.username }, 'aporte propuesto');
+      res.status(201);
+      return aporte;
+    }),
+  );
+
+  /** Los aportes propios, con el resultado de la revisión. */
+  router.get(
+    '/aportes',
+    h(async (req) => aportesDe(quien(req).username)),
   );
 
   return router;

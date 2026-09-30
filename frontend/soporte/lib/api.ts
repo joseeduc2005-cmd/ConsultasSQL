@@ -1,11 +1,13 @@
 import type {
   Alerta,
+  Aporte,
   BaseRegistrada,
   BaseTickets,
   ConsultaBiblioteca,
   DiagnosticoResumen,
   EjecucionMonitor,
   EstadoAlerta,
+  EstadoAporte,
   EstadoSistema,
   Interpretacion,
   MonitorInfo,
@@ -15,6 +17,7 @@ import type {
   ResultadoDiagnostico,
   ResultadoExploracion,
   Resumen,
+  RevisionAporte,
   SolucionPublicada,
   Ticket,
   TicketDetalle,
@@ -151,6 +154,22 @@ export const api = {
     solicitar<Alerta>(`/alertas/${id}`, { method: 'PATCH', body: json({ estado }) }),
 
   interpretar: (texto: string) => solicitar<Interpretacion>('/interpretar', { method: 'POST', body: json({ texto }) }),
+
+  /**
+   * Soluciones que propuso quien reporta, a la espera de que alguien las lea.
+   *
+   * Aceptar es lo único que publica: crea el tema de ayuda con lo que se revisó.
+   * Rechazar pide motivo a propósito — el autor lo ve, y un rechazo sin explicación
+   * es la forma más rápida de que nadie vuelva a aportar nada.
+   */
+  aportes: (estado?: EstadoAporte | 'todos') => solicitar<Aporte[]>(`/aportes${consulta({ estado })}`),
+  aceptarAporte: (id: string, revision: RevisionAporte) =>
+    solicitar<{ aporte: Aporte; articulo: string }>(`/aportes/${id}/aceptar`, {
+      method: 'POST',
+      body: json(revision),
+    }),
+  rechazarAporte: (id: string, nota: string) =>
+    solicitar<Aporte>(`/aportes/${id}/rechazar`, { method: 'POST', body: json({ nota }) }),
 
   /**
    * Bases registradas en el motor de consultas. No cuelga de /api/soporte: es un

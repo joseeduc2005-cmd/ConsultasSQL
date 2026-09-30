@@ -313,3 +313,39 @@ export interface Interpretacion {
   } | null;
   similares: TicketSimilar[];
 }
+
+// ─── Aportes de quien reporta ────────────────────────────────────────────────
+
+export type EstadoAporte = 'pendiente' | 'aceptado' | 'rechazado';
+
+/**
+ * Una solución que mandó un usuario y todavía no es artículo.
+ *
+ * Vive aparte de `knowledge_base` justamente porque no está publicada: entra ahí
+ * recién cuando alguien la revisa y la acepta.
+ */
+export interface Aporte {
+  id: string;
+  autor: string;
+  titulo: string;
+  problema: string | null;
+  pasos: string;
+  sql_sugerido: string | null;
+  base: string | null;
+  caso: string | null;
+  estado: EstadoAporte;
+  nota: string | null;
+  revisado_por: string | null;
+  revisado_en: string | null;
+  articulo: string | null;
+  creado_en: string;
+}
+
+/** Lo que el revisor puede corregir antes de publicar. Todo opcional. */
+export interface RevisionAporte {
+  titulo?: string;
+  pasos?: string;
+  categoria?: string;
+  visible?: 'todos' | 'admin';
+  nota?: string;
+}

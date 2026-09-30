@@ -5,10 +5,13 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Database,
   History,
+  Lightbulb,
   MessageSquarePlus,
   Search,
   Send,
+  XCircle,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
@@ -18,10 +21,15 @@ import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
 import { Markdown, resumenPlano } from './markdown';
-import { clienteApi, type CasoPropio, type PrecedentePublico } from './api';
+import { clienteApi, type Aporte, type CasoPropio, type PrecedentePublico } from './api';
 
 /** Qué se está mirando en el panel de la derecha. */
-type Vista = { tipo: 'buscar' } | { tipo: 'articulo'; id: string } | { tipo: 'caso'; numero: string };
+type Vista =
+  | { tipo: 'buscar' }
+  | { tipo: 'articulo'; id: string }
+  | { tipo: 'caso'; numero: string }
+  /** Compartir una solución propia. Puede venir desde un caso, y entonces lo arrastra. */
+  | { tipo: 'aportar'; caso?: string; titulo?: string };
 
 /**
  * Lo que ve quien tiene el problema.
@@ -46,7 +54,8 @@ function SoportePage() {
             <main className="min-w-0 flex-1 glass-panel-strong rounded-2xl px-5 py-5 sm:px-6">
               {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
               {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
-              {vista.tipo === 'caso' && <Caso numero={vista.numero} />}
+              {vista.tipo === 'caso' && <Caso numero={vista.numero} onAportar={setVista} />}
+              {vista.tipo === 'aportar' && <Aportar caso={vista.caso} titulo={vista.titulo} />}
             </main>
 
             {/*
@@ -92,6 +101,22 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
       >
         <MessageSquarePlus className="size-4" />
         Mi problema
+      </button>
+
+      {/*
+        Segundo botón y no una pestaña dentro del primero: son dos intenciones
+        distintas —vengo a que me ayuden, vengo a contar cómo lo arreglé— y quien
+        entra a lo segundo ya sabe lo que busca.
+      */}
+      <button
+        type="button"
+        onClick={() => onElegir({ tipo: 'aportar' })}
+        className={`-mt-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          vista.tipo === 'aportar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
+        }`}
+      >
+        <Lightbulb className="size-4" />
+        Yo lo resolví
       </button>
 
       <Grupo titulo="Temas de ayuda">
@@ -400,6 +425,32 @@ function Articulo({ id }: { id: string }) {
         )}
       </div>
 
+      {/*
+        La sentencia del tema, cuando lo tiene.
+        Que el tema esté marcado para todos ya es la autorización: alguien decidió
+        que su contenido se puede mostrar, y ocultar justo la parte que explica qué
+        se hace dejaba esa decisión sin efecto. Se muestra para leerla — copiarla y
+        llevarla a soporte — no para correrla: aquí no hay con qué.
+      */}
+      {data.sql && (
+        <section className="mt-6 border-t border-(--line) pt-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">Sentencia</p>
+            {data.base && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
+                <Database className="size-3" />
+                {data.base}
+              </span>
+            )}
+          </div>
+          <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[12.5px] leading-relaxed text-(--ink-900)">
+            <code>{data.sql}</code>
+          </pre>
+          <p className="mt-2 text-[12.5px] text-(--ink-500)">
+            Solo para consultarla. Quien la ejecuta es el equipo de soporte.
+          </p>
+        </section>
+      )}
     </article>
   );
 }
@@ -423,7 +474,7 @@ function PanelComentarios({ id, plegado, onAlternar }: { id: string; plegado: bo
 
 // ─── Un caso propio ──────────────────────────────────────────────────────────
 
-function Caso({ numero }: { numero: string }) {
+function Caso({ numero, onAportar }: { numero: string; onAportar: (v: Vista) => void }) {
   const { data, isLoading } = useQuery({ queryKey: ['mi-caso', numero], queryFn: () => clienteApi.caso(numero) });
 
   if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
@@ -461,6 +512,19 @@ function Caso({ numero }: { numero: string }) {
         )}
         {data.causa_raiz && <Bloque titulo="Por qué pasó" texto={data.causa_raiz} />}
       </div>
+
+      {/*
+        Aparece aunque el caso ya esté resuelto: a veces la salida la encuentra uno
+        antes de que llegue la respuesta, y esa es justamente la que se pierde.
+      */}
+      <button
+        type="button"
+        onClick={() => onAportar({ tipo: 'aportar', caso: data.numero, titulo: data.titulo })}
+        className="mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
+      >
+        <Lightbulb className="size-4" />
+        Lo resolví yo — contar cómo
+      </button>
     </article>
   );
 }
@@ -470,6 +534,193 @@ function Bloque({ titulo, texto }: { titulo: string; texto: string }) {
     <div>
       <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{titulo}</p>
       <Markdown contenido={texto} />
+    </div>
+  );
+}
+
+// ─── Compartir una solución ──────────────────────────────────────────────────
+
+/**
+ * Lo que uno resolvió por su cuenta, para que no se pierda.
+ *
+ * No se publica al enviarlo. Queda pendiente hasta que alguien de soporte lo lea, y el
+ * formulario lo dice antes de mandar, no después: prometer que quedó publicado y que
+ * no aparezca por ningún lado sería peor que avisar.
+ */
+function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: string }) {
+  const [titulo, setTitulo] = useState(tituloInicial ?? '');
+  const [problema, setProblema] = useState('');
+  const [pasos, setPasos] = useState('');
+  const [sql, setSql] = useState('');
+  const [base, setBase] = useState('');
+  const [enviado, setEnviado] = useState(false);
+  const qc = useQueryClient();
+
+  const { data: mios } = useQuery({ queryKey: ['mis-aportes'], queryFn: clienteApi.misAportes });
+
+  const enviar = useMutation({
+    mutationFn: () =>
+      clienteApi.aportar({
+        titulo: titulo.trim(),
+        problema: problema.trim() || undefined,
+        pasos: pasos.trim(),
+        sql: sql.trim() || undefined,
+        base: base.trim() || undefined,
+        caso,
+      }),
+    onSuccess: () => {
+      setEnviado(true);
+      setTitulo('');
+      setProblema('');
+      setPasos('');
+      setSql('');
+      setBase('');
+      qc.invalidateQueries({ queryKey: ['mis-aportes'] });
+    },
+  });
+
+  const listo = titulo.trim().length >= 5 && pasos.trim().length >= 20;
+
+  return (
+    <div className="space-y-8">
+      <section>
+        <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">¿Lo resolvió usted?</h1>
+        <p className="mt-1 text-[14px] text-(--ink-700)">
+          Cuéntelo y soporte lo revisa. Si está bien, queda como tema de ayuda para el que tropiece con lo mismo.
+        </p>
+
+        {enviado && (
+          <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <p className="text-[13.5px] text-(--ink-900)">
+              Enviado. Queda pendiente de revisión — abajo puede ver en qué va.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-4">
+          {caso && (
+            <p className="text-[12.5px] text-(--ink-500)">
+              Queda ligado a su caso <span className="font-mono">{caso}</span>.
+            </p>
+          )}
+
+          <Campo etiqueta="¿Qué problema era?" ayuda="En una línea, como lo buscaría otro.">
+            <input
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="La tabla de aprobaciones sale vacía al filtrar por fecha"
+              className="w-full rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2.5 text-[14px] outline-none focus:border-(--accent)"
+            />
+          </Campo>
+
+          <Campo etiqueta="Detalle del problema" ayuda="Opcional. Cuándo pasaba, qué se veía.">
+            <textarea
+              value={problema}
+              onChange={(e) => setProblema(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2.5 text-[14px] leading-relaxed outline-none focus:border-(--accent)"
+            />
+          </Campo>
+
+          <Campo etiqueta="Qué hizo para resolverlo" ayuda="Los pasos, en orden. Es lo que va a seguir el siguiente.">
+            <textarea
+              value={pasos}
+              onChange={(e) => setPasos(e.target.value)}
+              rows={6}
+              placeholder={'1. Entré a Configuración → Periodos\n2. El periodo del mes estaba cerrado\n3. Lo reabrí y la tabla volvió a cargar'}
+              className="w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[14px] leading-relaxed outline-none focus:border-(--accent)"
+            />
+          </Campo>
+
+          <Campo
+            etiqueta="Sentencia que usó"
+            ayuda="Opcional. Va como texto: nadie la ejecuta desde aquí, soporte la revisa antes."
+          >
+            <textarea
+              value={sql}
+              onChange={(e) => setSql(e.target.value)}
+              rows={3}
+              spellCheck={false}
+              className="w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2.5 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
+            />
+            {sql.trim() && (
+              <input
+                value={base}
+                onChange={(e) => setBase(e.target.value)}
+                placeholder="¿Sobre qué base? (opcional)"
+                className="mt-2 w-full rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2 text-[13px] outline-none focus:border-(--accent)"
+              />
+            )}
+          </Campo>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => enviar.mutate()}
+              disabled={!listo || enviar.isPending}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-(--accent) px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+            >
+              <Send className="size-4" />
+              {enviar.isPending ? 'Enviando…' : 'Enviar para revisión'}
+            </button>
+            <span className="text-[12.5px] text-(--ink-500)">
+              {listo ? 'No se publica hasta que soporte lo apruebe.' : 'Falta el título o los pasos.'}
+            </span>
+          </div>
+
+          {enviar.isError && (
+            <p className="text-[12.5px] text-rose-600">No se pudo enviar: {(enviar.error as Error).message}</p>
+          )}
+        </div>
+      </section>
+
+      {mios && mios.length > 0 && (
+        <section className="border-t border-(--line) pt-6">
+          <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">Lo que ha enviado</h2>
+          <div className="mt-3 space-y-2">
+            {mios.map((a) => (
+              <MiAporte key={a.id} aporte={a} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Campo({ etiqueta, ayuda, children }: { etiqueta: string; ayuda?: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[13px] font-medium text-(--ink-900)">{etiqueta}</span>
+      {ayuda && <span className="mt-0.5 block text-[12px] text-(--ink-500)">{ayuda}</span>}
+      <div className="mt-1.5">{children}</div>
+    </label>
+  );
+}
+
+/** En qué quedó un aporte. El motivo del rechazo se muestra: no se rechaza en silencio. */
+function MiAporte({ aporte }: { aporte: Aporte }) {
+  const estados = {
+    pendiente: { icono: Clock, color: 'text-amber-600', texto: 'En revisión' },
+    aceptado: { icono: CheckCircle2, color: 'text-emerald-600', texto: 'Publicado' },
+    rechazado: { icono: XCircle, color: 'text-rose-600', texto: 'No se publicó' },
+  } as const;
+  const { icono: Icono, color, texto } = estados[aporte.estado] ?? estados.pendiente;
+
+  return (
+    <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3">
+      <div className="flex items-start gap-2.5">
+        <Icono className={`mt-0.5 size-4 shrink-0 ${color}`} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] font-medium text-(--ink-900)">{aporte.titulo}</p>
+          <p className="mt-0.5 text-[12px] text-(--ink-500)">
+            {texto}
+            {aporte.revisado_por ? ` · revisó ${aporte.revisado_por}` : ''}
+          </p>
+          {aporte.nota && <p className="mt-1.5 text-[12.5px] text-(--ink-700)">{aporte.nota}</p>}
+        </div>
+      </div>
     </div>
   );
 }

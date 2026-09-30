@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, LayoutDashboard, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Lightbulb, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -33,6 +33,9 @@ const SECCIONES = [
   // nada. Se reactivan solos cuando la configuración tenga una base.
   { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch, requiereBase: true },
   { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket },
+  // Lo que mandan los usuarios espera aquí. Lleva contador porque es una bandeja: si
+  // no se ve que hay algo por revisar, se queda sin revisar.
+  { ruta: '/admin/aportes', etiqueta: 'Aportes', icono: Lightbulb, contador: true },
   { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL', icono: BookOpen },
   { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar, requiereBase: true },
 ];
@@ -51,12 +54,19 @@ export default function NavegacionSoporte({
   // no tiene QueryClientProvider, y un hook de react-query ahí revienta la página
   // entera. `baseDiagnosticos` viene en null cuando no hay base configurada.
   const [sinBase, setSinBase] = useState(false);
+  const [pendientes, setPendientes] = useState(0);
   useEffect(() => {
     let vigente = true;
     fetch('/api/soporte/estado', { headers: cabeceras() })
       .then((r) => (r.ok ? r.json() : null))
       .then((estado) => {
         if (vigente && estado) setSinBase(!estado.baseDiagnosticos);
+      })
+      .catch(() => undefined);
+    fetch('/api/soporte/aportes?estado=pendiente', { headers: cabeceras() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((lista) => {
+        if (vigente && Array.isArray(lista)) setPendientes(lista.length);
       })
       .catch(() => undefined);
     return () => {
@@ -72,7 +82,7 @@ export default function NavegacionSoporte({
         </p>
       )}
 
-      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, requiereBase }) => {
+      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, requiereBase, contador }) => {
         const activa = exacta ? ruta === destino : ruta.startsWith(destino);
         const apagada = Boolean(requiereBase) && sinBase;
 
@@ -121,6 +131,16 @@ export default function NavegacionSoporte({
               }`}
             />
             {!colapsado && <span className="truncate">{etiqueta}</span>}
+            {contador && pendientes > 0 && (
+              <span
+                title={`${pendientes} por revisar`}
+                className={`ml-auto rounded-full bg-amber-500/20 px-1.5 text-[10.5px] font-semibold text-amber-600 ${
+                  colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''
+                }`}
+              >
+                {pendientes}
+              </span>
+            )}
           </Link>
         );
       })}

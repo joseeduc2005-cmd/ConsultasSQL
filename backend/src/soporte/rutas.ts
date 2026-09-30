@@ -8,6 +8,7 @@
  * Pendiente a propósito: /interpretar, porque depende del modelo de lenguaje.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from './aportes.ts';
 import { config } from './config.ts';
 import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
 import { cambiarEstadoAlerta, contarAlertasAbiertas, listarAlertas, ultimaEjecucion, type EstadoAlerta } from './knowledge/alertas.ts';
@@ -633,6 +634,45 @@ export function crearSoporteRouter(
       const alerta = await cambiarEstadoAlerta(Number(req.params.id), estado);
       if (!alerta) throw noEncontrado('Alerta no encontrada.');
       return alerta;
+    }),
+  );
+
+  // ─── Aportes de quien reporta ─────────────────────────────────────────────
+  //
+  // Lo que manda un usuario no entra solo a la base de conocimiento. Llega aquí, se
+  // lee, y si está bien se publica como tema. Aceptar es lo único que escribe en
+  // `knowledge_base`; rechazar exige un motivo, que el autor sí ve.
+
+  router.get('/aportes', h(async (req) => listarAportes(texto(req.query.estado))));
+
+  router.get(
+    '/aportes/:id',
+    h(async (req) => {
+      const aporte = await obtenerAporte(req.params.id);
+      if (!aporte) throw noEncontrado('No se encontró ese aporte.');
+      return aporte;
+    }),
+  );
+
+  router.post(
+    '/aportes/:id/aceptar',
+    h(async (req) => {
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      const resultado = await aceptarAporte(req.params.id, (req.body ?? {}) as RevisionAporte, {
+        id: usuario?.id ?? null,
+        nombre: usuario?.username ?? 'soporte',
+      });
+      registrar({ aporte: req.params.id, articulo: resultado.articulo }, 'aporte publicado');
+      return resultado;
+    }),
+  );
+
+  router.post(
+    '/aportes/:id/rechazar',
+    h(async (req) => {
+      const usuario = (req as unknown as { usuarioSoporte?: { username: string } }).usuarioSoporte;
+      const nota = (req.body ?? {}).nota;
+      return rechazarAporte(req.params.id, nota, usuario?.username ?? 'soporte');
     }),
   );
 

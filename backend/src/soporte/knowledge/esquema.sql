@@ -187,3 +187,27 @@ CREATE INDEX IF NOT EXISTS idx_soporte_diag_fecha        ON soporte.diagnosticos
 CREATE INDEX IF NOT EXISTS idx_soporte_diag_ticket       ON soporte.diagnosticos (ticket);
 CREATE INDEX IF NOT EXISTS idx_soporte_alertas_estado    ON soporte.alertas (estado, severidad);
 CREATE INDEX IF NOT EXISTS idx_soporte_ejec_monitor      ON soporte.vigilancia_ejecuciones (monitor, id DESC);
+
+-- Soluciones que propone quien reporta.
+--
+-- No entran directo a la base de conocimiento: alguien tiene que leerlas antes. Aquí
+-- esperan, y al aceptarlas se crea el artículo y queda anotado cuál salió de cuál.
+CREATE TABLE IF NOT EXISTS soporte.aportes (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  autor        text NOT NULL,
+  titulo       text NOT NULL,
+  problema     text,
+  pasos        text NOT NULL,
+  sql_sugerido text,
+  base         text,
+  caso         text,
+  estado       text NOT NULL DEFAULT 'pendiente',
+  nota         text,
+  revisado_por text,
+  revisado_en  timestamptz,
+  articulo     text,
+  creado_en    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_soporte_aportes_estado ON soporte.aportes (estado, id DESC);
+CREATE INDEX IF NOT EXISTS idx_soporte_aportes_autor  ON soporte.aportes (autor, id DESC);

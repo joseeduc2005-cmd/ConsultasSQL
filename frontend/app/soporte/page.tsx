@@ -10,8 +10,10 @@ import {
   History,
   Lightbulb,
   MessageSquarePlus,
+  Plus,
   Search,
   Send,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,18 +24,22 @@ import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
 import { Markdown, resumenPlano } from './markdown';
-import { clienteApi, type Aporte, type CasoPropio, type PrecedentePublico } from './api';
+import { clienteApi, type Aporte, type PasoAporte, type PrecedentePublico } from './api';
 
 /** Qué se está mirando en el panel de la derecha. */
 type Vista =
   | { tipo: 'buscar' }
   | { tipo: 'articulo'; id: string }
-  | { tipo: 'caso'; numero: string }
-  /** Compartir una solución propia. Puede venir desde un caso, y entonces lo arrastra. */
-  | { tipo: 'aportar'; caso?: string; titulo?: string };
+  /** Compartir una solución propia, con el título que se venía escribiendo. */
+  | { tipo: 'aportar'; titulo?: string };
 
 /**
  * Lo que ve quien tiene el problema.
+ *
+ * Dos cosas, y nada más: buscar si ya se resolvió antes, y contar cómo lo resolvió uno
+ * para que el siguiente lo encuentre. Antes había una tercera —abrir un caso cuando la
+ * búsqueda no daba nada— y se quitó a propósito: lo que mantiene viva una base de
+ * conocimiento es lo que la gente escribe en ella, no una cola de tickets.
  *
  * Misma forma que el panel de administración —índice a la izquierda, contenido a la
  * derecha— porque es la que ya conoce quien usa el sistema, y porque el contenido de
@@ -61,10 +67,9 @@ function SoportePage() {
             {/* El contenido no se estira a lo ancho sin límite: una línea de texto de
                 punta a punta de un monitor ancho no hay quien la lea. */}
             <div className="mx-auto w-full max-w-3xl">
-              {vista.tipo === 'buscar' && <Buscar onVerCaso={(numero) => setVista({ tipo: 'caso', numero })} />}
+              {vista.tipo === 'buscar' && <Buscar onAportar={setVista} />}
               {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
-              {vista.tipo === 'caso' && <Caso numero={vista.numero} onAportar={setVista} />}
-              {vista.tipo === 'aportar' && <Aportar caso={vista.caso} titulo={vista.titulo} />}
+              {vista.tipo === 'aportar' && <Aportar titulo={vista.titulo} />}
             </div>
           </main>
 
@@ -79,11 +84,7 @@ function SoportePage() {
                 comentarios ? 'w-[320px]' : 'w-[52px]'
               }`}
             >
-              <PanelComentarios
-                id={vista.id}
-                plegado={!comentarios}
-                onAlternar={() => setComentarios((v) => !v)}
-              />
+              <PanelComentarios id={vista.id} plegado={!comentarios} onAlternar={() => setComentarios((v) => !v)} />
             </section>
           )}
         </div>
@@ -96,8 +97,8 @@ function SoportePage() {
 
 function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) => void }) {
   const { data: temas } = useQuery({ queryKey: ['temas'], queryFn: clienteApi.temas });
-  const { data: casos } = useQuery({ queryKey: ['mis-casos'], queryFn: clienteApi.misCasos });
-  const pendientes = (casos ?? []).filter((c) => c.estado !== 'resuelto').length;
+  const { data: aportes } = useQuery({ queryKey: ['mis-aportes'], queryFn: clienteApi.misAportes });
+  const enRevision = (aportes ?? []).filter((a) => a.estado === 'pendiente').length;
 
   return (
     <aside className="glass-panel-strong min-h-0 space-y-4 overflow-y-auto scroll-fino rounded-2xl p-3">
@@ -127,6 +128,16 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
         >
           <Lightbulb className="size-4" />
           Yo lo resolví
+          {enRevision > 0 && (
+            <span
+              title={`${enRevision} esperando revisión`}
+              className={`ml-auto rounded-full px-1.5 text-[10.5px] font-semibold ${
+                vista.tipo === 'aportar' ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-600'
+              }`}
+            >
+              {enRevision}
+            </span>
+          )}
         </button>
       </div>
 
@@ -145,46 +156,15 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
           <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Sin temas todavía.</p>
         )}
       </Grupo>
-
-      <Grupo titulo="Mis casos" insignia={pendientes || undefined}>
-        {casos?.length ? (
-          casos.map((c) => {
-            const activo = vista.tipo === 'caso' && vista.numero === c.numero;
-            const resuelto = c.con_solucion || c.estado === 'resuelto';
-            return (
-              <button
-                key={c.numero}
-                type="button"
-                onClick={() => onElegir({ tipo: 'caso', numero: c.numero })}
-                className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
-                  activo ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-(--surface-2)'
-                }`}
-              >
-                {resuelto ? (
-                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                ) : (
-                  <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
-                )}
-                <span className="line-clamp-2">{c.titulo}</span>
-              </button>
-            );
-          })
-        ) : (
-          <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Aún no ha reportado nada.</p>
-        )}
-      </Grupo>
     </aside>
   );
 }
 
-function Grupo({ titulo, insignia, children }: { titulo: string; insignia?: number; children: ReactNode }) {
+function Grupo({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div>
-      <p className="flex items-center gap-2 px-3 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
+      <p className="px-3 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
         {titulo}
-        {insignia !== undefined && (
-          <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">{insignia}</span>
-        )}
       </p>
       <div className="space-y-0.5">{children}</div>
     </div>
@@ -240,66 +220,23 @@ function Categoria({
 
 // ─── Mi problema ─────────────────────────────────────────────────────────────
 
-function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
+function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState<PrecedentePublico[] | null>(null);
-  const [reportado, setReportado] = useState<CasoPropio | null>(null);
-  const qc = useQueryClient();
 
   const buscar = useMutation({
     mutationFn: () => clienteApi.solucionar(texto),
     onSuccess: (r) => setResultados(r.precedentes),
   });
 
-  const reportar = useMutation({
-    mutationFn: () => clienteApi.reportar({ titulo: primeraLinea(texto), descripcion: texto }),
-    onSuccess: (caso) => {
-      setReportado(caso);
-      setResultados(null);
-      qc.invalidateQueries({ queryKey: ['mis-casos'] });
-    },
-  });
-
   const listo = texto.trim().length >= 10;
-
-  if (reportado) {
-    return (
-      <div className="py-8 text-center">
-        <CheckCircle2 className="mx-auto size-10 text-emerald-600" />
-        <h2 className="mt-4 text-lg font-semibold text-(--ink-900)">Su caso quedó registrado</h2>
-        <p className="mt-1 font-mono text-[13px] text-(--ink-700)">{reportado.numero}</p>
-        <p className="mx-auto mt-3 max-w-md text-[14px] text-(--ink-700)">
-          Soporte lo revisa y la respuesta aparece en «Mis casos», aquí al lado.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onVerCaso(reportado.numero)}
-            className="inline-flex h-10 items-center rounded-lg bg-(--accent) px-4 text-[13.5px] font-semibold text-white"
-          >
-            Ver mi caso
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTexto('');
-              setReportado(null);
-            }}
-            className="inline-flex h-10 items-center rounded-lg border border-(--line) bg-(--surface-2) px-4 text-[13.5px] font-semibold text-(--ink-900)"
-          >
-            Reportar otro
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
       <section>
         <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">¿Qué problema tiene?</h1>
         <p className="mt-1 text-[14px] text-(--ink-700)">
-          Descríbalo con sus palabras. Primero buscamos si ya se resolvió antes.
+          Descríbalo con sus palabras. Buscamos si ya se resolvió antes.
         </p>
 
         <textarea
@@ -347,28 +284,27 @@ function Buscar({ onVerCaso }: { onVerCaso: (numero: string) => void }) {
             </p>
           )}
 
-          {/* Aparece también cuando hubo resultados: que salgan no significa que sirvan. */}
+          {/*
+            Aparece también cuando hubo resultados: que salgan no significa que sirvan.
+            Y lleva a aportar, no a abrir un caso — si lo acaba resolviendo, eso es lo
+            que falta en la base de conocimiento, y el texto que ya escribió se arrastra
+            como título para no pedírselo dos veces.
+          */}
           <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-4">
             <p className="text-[14px] font-medium text-(--ink-900)">
-              {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo reportamos al equipo?'}
+              {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo resolvió por su cuenta?'}
             </p>
             <p className="mt-0.5 text-[13px] text-(--ink-700)">
-              Se crea un caso con lo que escribió y soporte lo revisa.
+              Si da con la solución, cuéntela aquí y queda como tema de ayuda para el que venga detrás.
             </p>
             <button
               type="button"
-              onClick={() => reportar.mutate()}
-              disabled={reportar.isPending}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) disabled:opacity-40"
+              onClick={() => onAportar({ tipo: 'aportar', titulo: primeraLinea(texto) })}
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
             >
-              <Send className="size-4" />
-              {reportar.isPending ? 'Enviando…' : 'Reportar el problema'}
+              <Lightbulb className="size-4" />
+              Aportar mi solución
             </button>
-            {reportar.isError && (
-              <p className="mt-2 text-[12.5px] text-rose-600">
-                No se pudo enviar: {(reportar.error as Error).message}
-              </p>
-            )}
           </div>
         </section>
       )}
@@ -403,9 +339,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
           {cuerpo ? (
             <Markdown contenido={cuerpo} />
           ) : (
-            <p className="text-[13.5px] text-(--ink-700)">
-              Este caso no dejó una explicación escrita. Repórtelo y soporte lo revisa.
-            </p>
+            <p className="text-[13.5px] text-(--ink-700)">Este caso no dejó una explicación escrita.</p>
           )}
         </div>
       )}
@@ -493,121 +427,71 @@ function PanelComentarios({ id, plegado, onAlternar }: { id: string; plegado: bo
   );
 }
 
-// ─── Un caso propio ──────────────────────────────────────────────────────────
-
-function Caso({ numero, onAportar }: { numero: string; onAportar: (v: Vista) => void }) {
-  const { data, isLoading } = useQuery({ queryKey: ['mi-caso', numero], queryFn: () => clienteApi.caso(numero) });
-
-  if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
-  if (!data) return <p className="text-[14px] text-(--ink-700)">No se encontró ese caso.</p>;
-
-  const resuelto = Boolean(data.solucion) || data.estado === 'resuelto';
-
-  return (
-    <article>
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${
-            resuelto ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-          }`}
-        >
-          {resuelto ? <CheckCircle2 className="size-3.5" /> : <Clock className="size-3.5" />}
-          {resuelto ? 'Resuelto' : 'En revisión'}
-        </span>
-        <span className="font-mono text-[12px] text-(--ink-500)">{data.numero}</span>
-      </div>
-
-      <h1 className="mt-3 text-xl font-semibold tracking-tight text-(--ink-900)">{data.titulo}</h1>
-
-      {data.descripcion && (
-        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-(--ink-700)">{data.descripcion}</p>
-      )}
-
-      <div className="mt-6 space-y-5 border-t border-(--line) pt-5">
-        {data.solucion ? (
-          <Bloque titulo="Solución" texto={data.solucion} />
-        ) : (
-          <p className="text-[13.5px] text-(--ink-700)">
-            Todavía en revisión. Cuando soporte lo resuelva, la respuesta aparece aquí.
-          </p>
-        )}
-        {data.causa_raiz && <Bloque titulo="Por qué pasó" texto={data.causa_raiz} />}
-      </div>
-
-      {/*
-        Aparece aunque el caso ya esté resuelto: a veces la salida la encuentra uno
-        antes de que llegue la respuesta, y esa es justamente la que se pierde.
-      */}
-      <button
-        type="button"
-        onClick={() => onAportar({ tipo: 'aportar', caso: data.numero, titulo: data.titulo })}
-        className="mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
-      >
-        <Lightbulb className="size-4" />
-        Lo resolví yo — contar cómo
-      </button>
-    </article>
-  );
-}
-
-function Bloque({ titulo, texto }: { titulo: string; texto: string }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{titulo}</p>
-      <Markdown contenido={texto} />
-    </div>
-  );
-}
-
 // ─── Compartir una solución ──────────────────────────────────────────────────
+
+const PASO_VACIO: PasoAporte = { descripcion: '', script: null, efecto: null };
 
 /**
  * Lo que uno resolvió por su cuenta, para que no se pierda.
  *
+ * Va por pasos y no como un texto corrido porque así es como se arregla algo: una cosa
+ * después de otra, y a veces con un script en medio. Cada paso dice si su script solo
+ * mira o si cambia datos — lo declara quien lo escribe, no se adivina del SQL, porque
+ * una consulta puede llamar a algo que escribe y un `UPDATE` puede acabar en rollback.
+ *
  * No se publica al enviarlo. Queda pendiente hasta que alguien de soporte lo lea, y el
- * formulario lo dice antes de mandar, no después: prometer que quedó publicado y que
- * no aparezca por ningún lado sería peor que avisar.
+ * formulario lo dice antes de mandar, no después.
  */
-function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: string }) {
+function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
   const [titulo, setTitulo] = useState(tituloInicial ?? '');
   const [problema, setProblema] = useState('');
-  const [pasos, setPasos] = useState('');
-  const [sql, setSql] = useState('');
+  const [pasos, setPasos] = useState<PasoAporte[]>([{ ...PASO_VACIO }]);
   const [base, setBase] = useState('');
   const [enviado, setEnviado] = useState(false);
   const qc = useQueryClient();
 
   const { data: mios } = useQuery({ queryKey: ['mis-aportes'], queryFn: clienteApi.misAportes });
+  const { data: bases } = useQuery({ queryKey: ['bases'], queryFn: clienteApi.bases });
+
+  const conScript = pasos.some((p) => p.script?.trim());
+
+  const cambiar = (i: number, cambios: Partial<PasoAporte>) =>
+    setPasos((previos) => previos.map((p, j) => (j === i ? { ...p, ...cambios } : p)));
 
   const enviar = useMutation({
     mutationFn: () =>
       clienteApi.aportar({
         titulo: titulo.trim(),
         problema: problema.trim() || undefined,
-        pasos: pasos.trim(),
-        sql: sql.trim() || undefined,
-        base: base.trim() || undefined,
-        caso,
+        pasos: pasos
+          .map((p) => ({
+            descripcion: p.descripcion.trim(),
+            script: p.script?.trim() || null,
+            efecto: p.script?.trim() ? (p.efecto ?? 'consulta') : null,
+          }))
+          .filter((p) => p.descripcion || p.script),
+        base: conScript ? base || undefined : undefined,
       }),
     onSuccess: () => {
       setEnviado(true);
       setTitulo('');
       setProblema('');
-      setPasos('');
-      setSql('');
+      setPasos([{ ...PASO_VACIO }]);
       setBase('');
       qc.invalidateQueries({ queryKey: ['mis-aportes'] });
     },
   });
 
-  const listo = titulo.trim().length >= 5 && pasos.trim().length >= 20;
+  const escrito = pasos.map((p) => p.descripcion).join(' ').trim();
+  const listo = titulo.trim().length >= 5 && escrito.length >= 20;
 
   return (
     <div className="space-y-8">
       <section>
         <h1 className="text-xl font-semibold tracking-tight text-(--ink-900)">¿Lo resolvió usted?</h1>
         <p className="mt-1 text-[14px] text-(--ink-700)">
-          Cuéntelo y soporte lo revisa. Si está bien, queda como tema de ayuda para el que tropiece con lo mismo.
+          Cuéntelo paso a paso y soporte lo revisa. Si está bien, queda como tema de ayuda para el que
+          tropiece con lo mismo.
         </p>
 
         {enviado && (
@@ -619,13 +503,7 @@ function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: stri
           </div>
         )}
 
-        <div className="mt-5 space-y-4">
-          {caso && (
-            <p className="text-[12.5px] text-(--ink-500)">
-              Queda ligado a su caso <span className="font-mono">{caso}</span>.
-            </p>
-          )}
-
+        <div className="mt-5 space-y-5">
           <Campo etiqueta="¿Qué problema era?" ayuda="En una línea, como lo buscaría otro.">
             <input
               value={titulo}
@@ -644,38 +522,65 @@ function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: stri
             />
           </Campo>
 
-          <Campo etiqueta="Qué hizo para resolverlo" ayuda="Los pasos, en orden. Es lo que va a seguir el siguiente.">
-            <textarea
-              value={pasos}
-              onChange={(e) => setPasos(e.target.value)}
-              rows={6}
-              placeholder={'1. Entré a Configuración → Periodos\n2. El periodo del mes estaba cerrado\n3. Lo reabrí y la tabla volvió a cargar'}
-              className="w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[14px] leading-relaxed outline-none focus:border-(--accent)"
-            />
-          </Campo>
+          <div>
+            <p className="text-[13px] font-medium text-(--ink-900)">Qué hizo, paso a paso</p>
+            <p className="mt-0.5 text-[12px] text-(--ink-500)">
+              Añada un paso por cada cosa que hizo. Si en alguno usó un script, péguelo ahí mismo.
+            </p>
 
-          <Campo
-            etiqueta="Sentencia que usó"
-            ayuda="Opcional. Va como texto: nadie la ejecuta desde aquí, soporte la revisa antes."
-          >
-            <textarea
-              value={sql}
-              onChange={(e) => setSql(e.target.value)}
-              rows={3}
-              spellCheck={false}
-              className="w-full resize-none rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2.5 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
-            />
-            {sql.trim() && (
-              <input
-                value={base}
-                onChange={(e) => setBase(e.target.value)}
-                placeholder="¿Sobre qué base? (opcional)"
-                className="mt-2 w-full rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2 text-[13px] outline-none focus:border-(--accent)"
-              />
-            )}
-          </Campo>
+            <div className="mt-3 space-y-3">
+              {pasos.map((paso, i) => (
+                <Paso
+                  key={i}
+                  numero={i + 1}
+                  paso={paso}
+                  sePuedeQuitar={pasos.length > 1}
+                  onCambiar={(cambios) => cambiar(i, cambios)}
+                  onQuitar={() => setPasos((previos) => previos.filter((_, j) => j !== i))}
+                />
+              ))}
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setPasos((previos) => [...previos, { ...PASO_VACIO }])}
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-dashed border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-700) transition-colors hover:border-(--accent) hover:text-(--ink-900)"
+            >
+              <Plus className="size-4" />
+              Agregar paso
+            </button>
+          </div>
+
+          {/*
+            La base solo se pregunta si hay algún script: sin script no hay base contra
+            la que se hizo nada. Y se elige de una lista, no se escribe — quien reporta
+            muchas veces no sabe cómo se llama por dentro.
+          */}
+          {conScript && (
+            <Campo etiqueta="¿Sobre qué base?" ayuda="Solo salen las bases a las que el sistema llegó.">
+              {bases?.length ? (
+                <select
+                  value={base}
+                  onChange={(e) => setBase(e.target.value)}
+                  className="w-full rounded-xl border border-(--line) bg-(--surface-2) px-4 py-2.5 text-[14px] outline-none focus:border-(--accent) sm:w-80"
+                >
+                  <option value="">Sin especificar</option>
+                  {bases.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.etiqueta}
+                      {b.motor ? ` — ${b.motor}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-[12.5px] text-(--ink-500)">
+                  Ahora mismo el sistema no alcanza ninguna base. Mándelo igual y soporte lo completa.
+                </p>
+              )}
+            </Campo>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-(--line) pt-4">
             <button
               type="button"
               onClick={() => enviar.mutate()}
@@ -686,7 +591,7 @@ function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: stri
               {enviar.isPending ? 'Enviando…' : 'Enviar para revisión'}
             </button>
             <span className="text-[12.5px] text-(--ink-500)">
-              {listo ? 'No se publica hasta que soporte lo apruebe.' : 'Falta el título o los pasos.'}
+              {listo ? 'No se publica hasta que soporte lo apruebe.' : 'Falta el título o describir los pasos.'}
             </span>
           </div>
 
@@ -710,6 +615,115 @@ function Aportar({ caso, titulo: tituloInicial }: { caso?: string; titulo?: stri
   );
 }
 
+function Paso({
+  numero,
+  paso,
+  sePuedeQuitar,
+  onCambiar,
+  onQuitar,
+}: {
+  numero: number;
+  paso: PasoAporte;
+  sePuedeQuitar: boolean;
+  onCambiar: (cambios: Partial<PasoAporte>) => void;
+  onQuitar: () => void;
+}) {
+  const tieneScript = paso.script !== null;
+
+  return (
+    <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3.5">
+      <div className="flex items-center gap-2">
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[11.5px] font-semibold text-(--accent)">
+          {numero}
+        </span>
+        <span className="text-[12px] text-(--ink-500)">Paso {numero}</span>
+        {sePuedeQuitar && (
+          <button
+            type="button"
+            onClick={onQuitar}
+            title="Quitar este paso"
+            className="ml-auto rounded-lg p-1 text-(--ink-500) transition-colors hover:text-rose-600"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+      </div>
+
+      <textarea
+        value={paso.descripcion}
+        onChange={(e) => onCambiar({ descripcion: e.target.value })}
+        rows={2}
+        placeholder="Qué hizo en este paso"
+        className="mt-2 w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 text-[13.5px] leading-relaxed outline-none focus:border-(--accent)"
+      />
+
+      {!tieneScript ? (
+        <button
+          type="button"
+          onClick={() => onCambiar({ script: '', efecto: 'consulta' })}
+          className="mt-2 text-[12.5px] font-medium text-(--accent) hover:underline"
+        >
+          + Añadir un script a este paso
+        </button>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <textarea
+            value={paso.script ?? ''}
+            onChange={(e) => onCambiar({ script: e.target.value })}
+            rows={3}
+            spellCheck={false}
+            placeholder="SELECT … / UPDATE …"
+            className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
+          />
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[12px] text-(--ink-500)">Este script</span>
+            <Opcion activo={paso.efecto !== 'cambio'} onClick={() => onCambiar({ efecto: 'consulta' })}>
+              solo consulta
+            </Opcion>
+            <Opcion activo={paso.efecto === 'cambio'} onClick={() => onCambiar({ efecto: 'cambio' })} peligro>
+              cambia datos
+            </Opcion>
+            <button
+              type="button"
+              onClick={() => onCambiar({ script: null, efecto: null })}
+              className="ml-auto text-[12px] text-(--ink-500) hover:text-rose-600"
+            >
+              Quitar script
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Opcion({
+  activo,
+  peligro,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  peligro?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const encendido = peligro ? 'border-amber-500/40 bg-amber-500/15 text-amber-600' : 'border-(--accent)/40 bg-(--accent)/10 text-(--accent)';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors ${
+        activo ? encendido : 'border-(--line) text-(--ink-500) hover:text-(--ink-700)'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Campo({ etiqueta, ayuda, children }: { etiqueta: string; ayuda?: string; children: ReactNode }) {
   return (
     <label className="block">
@@ -728,6 +742,7 @@ function MiAporte({ aporte }: { aporte: Aporte }) {
     rechazado: { icono: XCircle, color: 'text-rose-600', texto: 'No se publicó' },
   } as const;
   const { icono: Icono, color, texto } = estados[aporte.estado] ?? estados.pendiente;
+  const pasos = aporte.pasos_json?.length ?? 0;
 
   return (
     <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3">
@@ -737,6 +752,7 @@ function MiAporte({ aporte }: { aporte: Aporte }) {
           <p className="text-[13.5px] font-medium text-(--ink-900)">{aporte.titulo}</p>
           <p className="mt-0.5 text-[12px] text-(--ink-500)">
             {texto}
+            {pasos > 0 ? ` · ${pasos} paso${pasos === 1 ? '' : 's'}` : ''}
             {aporte.revisado_por ? ` · revisó ${aporte.revisado_por}` : ''}
           </p>
           {aporte.nota && <p className="mt-1.5 text-[12.5px] text-(--ink-700)">{aporte.nota}</p>}
@@ -776,7 +792,9 @@ function Cabecera() {
       </div>
       <div className="min-w-0">
         <p className="truncate text-[16px] leading-tight font-semibold tracking-tight text-(--ink-900)">Soporte</p>
-        <p className="truncate text-[12px] leading-tight text-(--ink-700)">Busque su problema o repórtelo al equipo.</p>
+        <p className="truncate text-[12px] leading-tight text-(--ink-700)">
+          Busque su problema, o cuente cómo lo resolvió.
+        </p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeToggle />
@@ -801,7 +819,7 @@ function leerUsuario(): { username?: string; role?: string } | null {
   }
 }
 
-/** El título del caso sale de la primera frase, para no pedir dos veces lo mismo. */
+/** El título sale de la primera frase de lo que ya escribió, para no pedirlo dos veces. */
 function primeraLinea(texto: string): string {
   const limpio = texto.trim().replace(/\s+/g, ' ');
   const corte = limpio.search(/[.\n]/);

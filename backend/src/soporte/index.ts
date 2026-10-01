@@ -11,6 +11,7 @@
 import { config } from './config.ts';
 import { aplicarEsquema, configurarPool, type Pool } from './knowledge/db.ts';
 import { sembrarSiVacio } from './knowledge/semillas.ts';
+import { configurarMotor, type RegistroMotor } from './motor-puente.ts';
 import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import { precalentarEstadoOracle } from './rutas.ts';
@@ -26,6 +27,11 @@ export interface OpcionesSoporte {
   log?: (mensaje: string) => void;
   /** Puente con el motor de consultas, para sembrar el vocabulario de la Biblioteca. */
   motor?: { obtenerHuella: () => string; refrescar: () => Promise<unknown> };
+  /**
+   * El registro de bases del motor. Con él, el módulo sabe qué bases hay y a cuáles
+   * se llegó de verdad; sin él sigue funcionando, solo que esas listas van vacías.
+   */
+  registro?: RegistroMotor;
 }
 
 /**
@@ -35,9 +41,10 @@ export interface OpcionesSoporte {
  * No lanza: un fallo aquí deja el módulo de soporte inutilizable pero no impide que
  * el resto del backend arranque.
  */
-export async function iniciarSoporte({ obtenerPool, log, motor }: OpcionesSoporte): Promise<boolean> {
+export async function iniciarSoporte({ obtenerPool, log, motor, registro }: OpcionesSoporte): Promise<boolean> {
   const registrar = log ?? ((m: string) => console.log(m));
   configurarPool(obtenerPool);
+  if (registro) configurarMotor(registro);
 
   try {
     await aplicarEsquema();

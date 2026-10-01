@@ -21,12 +21,30 @@ import { fila, filas } from './knowledge/db.ts';
 
 export type EstadoAporte = 'pendiente' | 'aceptado' | 'rechazado';
 
+/**
+ * Un paso de lo que alguien hizo para resolverlo.
+ *
+ * `efecto` lo declara quien lo escribe, y no se adivina del SQL: una consulta puede
+ * llamar a algo que escribe, y un `UPDATE` puede estar dentro de un bloque que al final
+ * hace rollback. Quien lo vivió sabe qué pasó; el sistema no, y fingir que sí sería
+ * peor que preguntarlo.
+ */
+export interface PasoAporte {
+  descripcion: string;
+  script: string | null;
+  /** 'consulta' solo mira; 'cambio' modifica la base. */
+  efecto: 'consulta' | 'cambio' | null;
+}
+
 export interface Aporte {
   id: string;
   autor: string;
   titulo: string;
   problema: string | null;
+  /** Los pasos ya redactados, que es lo que indexa la búsqueda. */
   pasos: string;
+  /** Los mismos pasos, uno a uno, para poder mostrarlos y editarlos. */
+  pasos_json: PasoAporte[] | null;
   sql_sugerido: string | null;
   base: string | null;
   caso: string | null;
@@ -38,36 +56,83 @@ export interface Aporte {
   creado_en: string;
 }
 
-const COLUMNAS = `id::text, autor, titulo, problema, pasos, sql_sugerido, base, caso,
+const COLUMNAS = `id::text, autor, titulo, problema, pasos, pasos_json, sql_sugerido, base, caso,
                   estado, nota, revisado_por, revisado_en, articulo, creado_en`;
 
 export interface AporteNuevo {
   titulo?: unknown;
   problema?: unknown;
+  /** Una lista de pasos. Se acepta también un texto suelto, de cuando no los había. */
   pasos?: unknown;
-  sql?: unknown;
   base?: unknown;
   caso?: unknown;
+}
+
+/**
+ * Normaliza los pasos que llegan del navegador.
+ *
+ * Se aceptan las dos formas: la lista de pasos de ahora y el texto corrido de antes.
+ * Los pasos vacíos se descartan en vez de rechazar el envío entero — quien añadió una
+ * casilla de más y no la llenó no tiene por qué perder lo que escribió.
+ */
+function normalizarPasos(valor: unknown): PasoAporte[] {
+  if (typeof valor === 'string') {
+    const texto = valor.trim();
+    return texto ? [{ descripcion: texto, script: null, efecto: null }] : [];
+  }
+  if (!Array.isArray(valor)) return [];
+
+  return valor
+    .map((bruto) => {
+      const p = (bruto ?? {}) as Record<string, unknown>;
+      const descripcion = textoOpcional(p.descripcion) ?? '';
+      const script = textoOpcional(p.script);
+      const efecto = p.efecto === 'cambio' ? 'cambio' : p.efecto === 'consulta' ? 'consulta' : null;
+      return { descripcion, script, efecto: script ? (efecto ?? 'consulta') : null };
+    })
+    .filter((p) => p.descripcion || p.script);
+}
+
+/** Los pasos como texto, que es lo que lee la búsqueda y lo que queda en el artículo. */
+function redactarPasos(pasos: PasoAporte[]): string {
+  return pasos
+    .map((p, i) => {
+      const cabecera = `${i + 1}. ${p.descripcion || '(sin descripción)'}`;
+      if (!p.script) return cabecera;
+      const marca = p.efecto === 'cambio' ? 'Cambia datos' : 'Solo consulta';
+      return `${cabecera}\n\n   _${marca}_\n\n\`\`\`sql\n${p.script}\n\`\`\``;
+    })
+    .join('\n\n');
 }
 
 /** Registra un aporte. El autor sale de la sesión, nunca del cuerpo de la petición. */
 export async function crearAporte(datos: AporteNuevo, autor: string): Promise<Aporte> {
   const titulo = textoRequerido(datos.titulo, 'titulo');
-  const pasos = textoRequerido(datos.pasos, 'pasos');
-  if (pasos.trim().length < 20) {
-    throw solicitudInvalida('Cuente con un poco más de detalle qué hizo para resolverlo.');
+  const pasos = normalizarPasos(datos.pasos);
+  if (pasos.length === 0) throw solicitudInvalida('Falta contar qué hizo para resolverlo.');
+
+  // La medida es sobre lo escrito, no sobre el SQL pegado: un script sin una línea que
+  // explique cuándo aplicarlo no le sirve al que venga después.
+  const escrito = pasos.map((p) => p.descripcion).join(' ').trim();
+  if (escrito.length < 20) {
+    throw solicitudInvalida('Describa los pasos con un poco más de detalle.');
   }
 
+  // El primer script que cambia algo es el que vale como «la sentencia» del aporte; si
+  // ninguno cambia nada, el primero que haya. Es lo que mira el revisor de un vistazo.
+  const principal = pasos.find((p) => p.efecto === 'cambio' && p.script) ?? pasos.find((p) => p.script);
+
   const creado = await fila<Aporte>(
-    `INSERT INTO soporte.aportes (autor, titulo, problema, pasos, sql_sugerido, base, caso)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO soporte.aportes (autor, titulo, problema, pasos, pasos_json, sql_sugerido, base, caso)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING ${COLUMNAS}`,
     [
       autor,
       titulo,
       textoOpcional(datos.problema),
-      pasos,
-      textoOpcional(datos.sql),
+      redactarPasos(pasos),
+      JSON.stringify(pasos),
+      principal?.script ?? null,
       textoOpcional(datos.base),
       textoOpcional(datos.caso),
     ],
@@ -110,19 +175,13 @@ export async function contarAportesPendientes(): Promise<number> {
 function contenidoDelAporte(a: Aporte): string {
   const partes = [`# ${a.titulo}`, ''];
   if (a.problema) partes.push('## El problema', '', a.problema, '');
+  // Los pasos ya vienen redactados con sus scripts dentro, en orden: así se lee como
+  // lo que es —lo que alguien hizo, una cosa después de otra— y no como un texto y
+  // aparte un bloque de SQL suelto al final que no se sabe en qué momento va.
   partes.push('## Cómo se resolvió', '', a.pasos, '');
+  if (a.base) partes.push(`Sobre la base **${a.base}**.`, '');
   if (a.sql_sugerido) {
-    partes.push(
-      '## Sentencia usada',
-      '',
-      '```sql',
-      a.sql_sugerido,
-      '```',
-      '',
-      a.base ? `Sobre la base **${a.base}**.` : '',
-      '> Está aquí para consultarla. Quien la ejecuta es el equipo de soporte.',
-      '',
-    );
+    partes.push('> Los scripts están aquí para consultarlos. Quien los ejecuta es el equipo de soporte.', '');
   }
   partes.push('---', '', `Lo aportó **${a.autor}**${a.caso ? ` a partir del caso ${a.caso}` : ''}.`);
   return partes.filter((linea) => linea !== '').join('\n');

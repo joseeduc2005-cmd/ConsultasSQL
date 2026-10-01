@@ -324,12 +324,22 @@ export type EstadoAporte = 'pendiente' | 'aceptado' | 'rechazado';
  * Vive aparte de `knowledge_base` justamente porque no está publicada: entra ahí
  * recién cuando alguien la revisa y la acepta.
  */
+/** Un paso de lo que hizo quien aporta. El efecto lo declara él, no se adivina. */
+export interface PasoAporte {
+  descripcion: string;
+  script: string | null;
+  efecto: 'consulta' | 'cambio' | null;
+}
+
 export interface Aporte {
   id: string;
   autor: string;
   titulo: string;
   problema: string | null;
+  /** Los pasos ya redactados. Es lo que se publica y lo que indexa la búsqueda. */
   pasos: string;
+  /** Los mismos, uno a uno, para poder revisarlos por separado. */
+  pasos_json: PasoAporte[] | null;
   sql_sugerido: string | null;
   base: string | null;
   caso: string | null;

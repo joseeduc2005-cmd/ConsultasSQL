@@ -2,8 +2,8 @@
  * Cliente de la API de quien reporta.
  *
  * Aparte del cliente de `/soporte`, que es el del panel de administración y exige rol
- * admin. Aquí solo hay cuatro cosas: buscar, reportar, ver lo propio, y proponer una
- * solución para que soporte la revise.
+ * admin. Aquí solo hay dos cosas: buscar en lo que ya se resolvió, y aportar la
+ * solución propia para que soporte la revise.
  */
 export interface PrecedentePublico {
   tipo: 'ticket' | 'articulo';
@@ -14,19 +14,6 @@ export interface PrecedentePublico {
   relevancia: number;
   categoria: string | null;
   enlace: string;
-}
-
-export interface CasoPropio {
-  numero: string;
-  titulo: string;
-  descripcion?: string | null;
-  estado: string;
-  sistema?: string | null;
-  creado_en?: string | null;
-  resuelto_en?: string | null;
-  causa_raiz?: string | null;
-  solucion?: string | null;
-  con_solucion?: boolean;
 }
 
 function cabeceras(): Record<string, string> {
@@ -66,18 +53,26 @@ export interface Tema {
   articulos: TemaArticulo[];
 }
 
+/** Un paso de lo que se hizo. El script es opcional; el efecto solo aplica si lo hay. */
+export interface PasoAporte {
+  descripcion: string;
+  script: string | null;
+  efecto: 'consulta' | 'cambio' | null;
+}
+
 export interface AporteNuevo {
   titulo: string;
   problema?: string;
-  pasos: string;
-  sql?: string;
+  pasos: PasoAporte[];
   base?: string;
   caso?: string;
 }
 
-export interface Aporte extends AporteNuevo {
+export interface Aporte extends Omit<AporteNuevo, 'pasos'> {
   id: string;
   autor: string;
+  pasos: string;
+  pasos_json: PasoAporte[] | null;
   sql_sugerido: string | null;
   estado: 'pendiente' | 'aceptado' | 'rechazado';
   /** Por qué se rechazó, o la observación con que se aceptó. */
@@ -96,10 +91,6 @@ export const clienteApi = {
       body: JSON.stringify({ texto }),
     }),
 
-  /** El autor no viaja: lo pone el backend desde la sesión. */
-  reportar: (datos: { titulo: string; descripcion?: string; sistema?: string }) =>
-    pedir<CasoPropio>('/casos', { method: 'POST', body: JSON.stringify(datos) }),
-
   temas: () => pedir<Tema[]>('/temas'),
   tema: (id: string) =>
     pedir<{
@@ -116,11 +107,11 @@ export const clienteApi = {
       base: string | null;
     }>(`/temas/${encodeURIComponent(id)}`),
 
-  misCasos: () => pedir<CasoPropio[]>('/casos'),
-  caso: (numero: string) => pedir<CasoPropio>(`/casos/${encodeURIComponent(numero)}`),
-
   /** No publica: queda pendiente de que soporte lo revise. */
   aportar: (datos: AporteNuevo) =>
     pedir<Aporte>('/aportes', { method: 'POST', body: JSON.stringify(datos) }),
   misAportes: () => pedir<Aporte[]>('/aportes'),
+
+  /** Solo las bases a las que el backend llegó de verdad, para elegir sin escribir. */
+  bases: () => pedir<{ id: string; etiqueta: string; motor: string }[]>('/bases'),
 };

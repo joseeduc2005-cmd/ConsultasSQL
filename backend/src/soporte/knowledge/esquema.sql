@@ -211,3 +211,9 @@ CREATE TABLE IF NOT EXISTS soporte.aportes (
 
 CREATE INDEX IF NOT EXISTS idx_soporte_aportes_estado ON soporte.aportes (estado, id DESC);
 CREATE INDEX IF NOT EXISTS idx_soporte_aportes_autor  ON soporte.aportes (autor, id DESC);
+
+-- Los aportes pasaron de ser un texto corrido a una lista de pasos, cada uno con su
+-- descripción y, si lo hubo, el script que se usó y si ese script solo consultaba o
+-- cambiaba algo. `pasos` se conserva con la versión legible: es lo que indexa la
+-- búsqueda y lo que ya tenían los aportes anteriores.
+ALTER TABLE soporte.aportes ADD COLUMN IF NOT EXISTS pasos_json jsonb;

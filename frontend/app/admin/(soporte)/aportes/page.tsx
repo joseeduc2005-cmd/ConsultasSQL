@@ -118,7 +118,8 @@ function Ficha({ aporte }: { aporte: Aporte }) {
           <span className="mt-0.5 block text-[12px] text-muted-foreground">
             {texto} · lo mandó {aporte.autor}
             {aporte.caso ? ` · caso ${aporte.caso}` : ''}
-            {aporte.sql_sugerido ? ' · trae sentencia' : ''}
+            {aporte.pasos_json?.length ? ` · ${aporte.pasos_json.length} pasos` : ''}
+            {aporte.sql_sugerido ? ' · trae script' : ''}
           </span>
         </span>
       </button>
@@ -132,31 +133,55 @@ function Ficha({ aporte }: { aporte: Aporte }) {
           )}
 
           <Seccion titulo="Qué hizo">
-            <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{aporte.pasos}</p>
+            {/*
+              Paso a paso, con el script de cada uno donde iba. Los scripts se muestran,
+              no se ofrecen para ejecutar: esto lo escribió alguien de fuera del equipo
+              y nadie lo ha revisado todavía — leerlo es justamente el trabajo de esta
+              pantalla. Si al final hay que dejar alguno ejecutable, se arma en la
+              Biblioteca SQL, que es donde están las validaciones.
+            */}
+            {aporte.pasos_json?.length ? (
+              <div className="space-y-2.5">
+                {aporte.base && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
+                    <Database className="size-3" />
+                    {aporte.base}
+                  </span>
+                )}
+                {aporte.pasos_json.map((paso, i) => (
+                  <div key={i} className="flex gap-2.5">
+                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[11px] font-semibold text-(--accent)">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{paso.descripcion}</p>
+                      {paso.script && (
+                        <>
+                          <span
+                            className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              paso.efecto === 'cambio'
+                                ? 'bg-amber-500/15 text-amber-600'
+                                : 'bg-(--surface-2) text-(--ink-700)'
+                            }`}
+                          >
+                            {paso.efecto === 'cambio' ? 'Cambia datos' : 'Solo consulta'}
+                          </span>
+                          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2.5 text-[12.5px] leading-relaxed">
+                            <code>{paso.script}</code>
+                          </pre>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[12px] text-amber-600">
+                  Revise los scripts antes de publicar. No se ejecutan desde aquí.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{aporte.pasos}</p>
+            )}
           </Seccion>
-
-          {aporte.sql_sugerido && (
-            <Seccion titulo="Sentencia que dice haber usado">
-              {/*
-                Se muestra, no se ofrece ejecutar. Esto lo escribió alguien de fuera del
-                equipo y nadie la ha revisado todavía: leerla es justamente el trabajo
-                de esta pantalla. Si al final hay que dejarla ejecutable, se arma en la
-                Biblioteca SQL, que es donde están las validaciones.
-              */}
-              {aporte.base && (
-                <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
-                  <Database className="size-3" />
-                  {aporte.base}
-                </span>
-              )}
-              <pre className="overflow-x-auto rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2.5 text-[12.5px] leading-relaxed">
-                <code>{aporte.sql_sugerido}</code>
-              </pre>
-              <p className="mt-1.5 text-[12px] text-amber-600">
-                Revísela antes de publicar. No se ejecuta desde aquí.
-              </p>
-            </Seccion>
-          )}
 
           {!pendiente && aporte.nota && (
             <p className="rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[12.5px]">

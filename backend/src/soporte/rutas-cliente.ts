@@ -17,6 +17,7 @@
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { aportesDe, crearAporte, type AporteNuevo } from './aportes.ts';
+import { basesConectadas } from './motor-puente.ts';
 import { solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
 import { filas } from './knowledge/db.ts';
 import { guardarTicket, obtenerTicket, type Ticket } from './knowledge/tickets.ts';
@@ -289,6 +290,15 @@ export function crearSoporteClienteRouter(
     '/aportes',
     h(async (req) => aportesDe(quien(req).username)),
   );
+
+  /**
+   * Las bases a las que el backend llegó, para elegir en vez de escribir.
+   *
+   * Quien reporta muchas veces no sabe cómo se llama la base por dentro, y escribirla a
+   * mano producía nombres que no existen. Van solo el id, la etiqueta y el motor: nada
+   * de hosts ni de credenciales, que esto lo ve cualquiera con sesión.
+   */
+  router.get('/bases', h(async () => basesConectadas()));
 
   return router;
 }

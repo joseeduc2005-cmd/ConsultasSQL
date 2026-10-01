@@ -20,6 +20,14 @@ export interface RegistroMotor {
   getDatabaseById(id: string): { id: string; type?: string; label?: string } | null | undefined;
   getSchemaTables(id: string): TablaEsquema[] | undefined;
   executeCompiledQuery(consulta: { databaseId: string; sql: string; params?: unknown[] | Record<string, unknown> }): Promise<Record<string, unknown>[]>;
+  getDatabaseSummaries?(): { id: string; label?: string; type?: string; connected?: boolean }[];
+}
+
+/** Lo que se le ofrece a alguien para que diga sobre qué base trabajó. */
+export interface BaseVisible {
+  id: string;
+  etiqueta: string;
+  motor: string;
 }
 
 let registro: RegistroMotor | null = null;
@@ -38,6 +46,26 @@ export function esquemaDe(databaseId: string): TablaEsquema[] {
   if (!registro) return [];
   try {
     return registro.getSchemaTables(databaseId) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Las bases a las que el backend llegó de verdad.
+ *
+ * Se filtran por `connected` y no se devuelven todas las configuradas a propósito: el
+ * desplegable es para que alguien que no se sabe los nombres elija el suyo, y ofrecerle
+ * una base que el sistema no alcanzó es ofrecerle una respuesta que nadie va a poder
+ * comprobar. Sin motor configurado la lista va vacía, y la pantalla lo dice.
+ */
+export function basesConectadas(): BaseVisible[] {
+  if (!registro?.getDatabaseSummaries) return [];
+  try {
+    return registro
+      .getDatabaseSummaries()
+      .filter((b) => b.connected === true)
+      .map((b) => ({ id: b.id, etiqueta: b.label?.trim() || b.id, motor: (b.type ?? '').toLowerCase() }));
   } catch {
     return [];
   }

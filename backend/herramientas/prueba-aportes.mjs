@@ -68,8 +68,11 @@ try {
   const creado = await cliente('/aportes', 'POST', {
     titulo,
     problema: 'Al filtrar por fecha la tabla queda en blanco, sin error.',
-    pasos: '1. Entré a Configuración - Periodos\n2. El periodo del mes estaba cerrado\n3. Lo reabrí y volvió a cargar',
-    sql: 'SELECT * FROM periodos WHERE estado = 1;',
+    pasos: [
+      { descripcion: 'Entré a Configuración - Periodos y busqué el mes', script: null, efecto: null },
+      { descripcion: 'Comprobé cuáles estaban abiertos', script: 'SELECT * FROM periodos WHERE estado = 1;', efecto: 'consulta' },
+      { descripcion: 'Lo reabrí y la tabla volvió a cargar', script: 'UPDATE periodos SET estado = 1 WHERE id = 42;', efecto: 'cambio' },
+    ],
     base: 'pg_main',
   });
   comprobar(creado.estado === 201 && creado.cuerpo.estado === 'pendiente', 'se registra como pendiente, no publicado');
@@ -112,7 +115,13 @@ try {
   // 7. El texto del aporte llegó entero al artículo, sentencia incluida.
   const tema = await cliente(`/temas/${aceptado.cuerpo.articulo}`);
   comprobar(tema.cuerpo.contenido?.includes('Lo reabrí'), 'el artículo conserva los pasos');
-  comprobar(tema.cuerpo.contenido?.includes('SELECT * FROM periodos'), 'el artículo conserva la sentencia');
+  comprobar(/1\..*2\..*3\./s.test(tema.cuerpo.contenido ?? ''), 'los pasos quedan numerados y en orden');
+  comprobar(tema.cuerpo.contenido?.includes('Cambia datos'), 'se ve cuál de los pasos cambia datos');
+  comprobar(tema.cuerpo.contenido?.includes('SELECT * FROM periodos'), 'el artículo conserva los scripts');
+  comprobar(
+    creado.cuerpo.sql_sugerido?.startsWith('UPDATE'),
+    'la sentencia principal es la que cambia datos, no la primera que haya',
+  );
   comprobar(tema.cuerpo.contenido?.includes('ana.prueba'), 'queda dicho quién lo aportó');
 
   // 8. El autor ve en qué quedó.
@@ -126,12 +135,9 @@ try {
   await pool.query('DELETE FROM soporte.aportes WHERE titulo LIKE $1', [`${MARCA}%`]);
   await pool.query('DELETE FROM knowledge_base WHERE titulo LIKE $1', [`${MARCA}%`]);
   // Cerrar el servidor antes que el pool, y esperar a que termine: al revés, Node
-  // aborta en Windows con sockets todavía abiertos.
-  // Cerrar el servidor antes que el pool, y esperar a que termine. `closeAllConnections`
-  // es lo que hace falta en Windows: sin eso quedan sockets del keep-alive de fetch y
-  // Node aborta al salir, con las comprobaciones ya en verde.
-  // Un respiro antes de cerrar: sin él, en Windows quedan sockets del keep-alive de
-  // fetch a medio soltar y Node aborta al salir, con las comprobaciones ya en verde.
+  // Un respiro, cerrar el servidor y recién después el pool. En Windows, sin eso
+  // quedan sockets del keep-alive de fetch a medio soltar y Node aborta al salir,
+  // con las comprobaciones ya en verde.
   await new Promise((listo) => setTimeout(listo, 100));
   servidor.closeAllConnections();
   await new Promise((listo) => servidor.close(listo));
@@ -139,4 +145,4 @@ try {
 }
 
 console.log(fallos === 0 ? '\nCIRCUITO CORRECTO' : `\n${fallos} comprobacion(es) fallaron`);
-process.exit(fallos === 0 ? 0 : 1);
+process.exitCode = fallos === 0 ? 0 : 1;

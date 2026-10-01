@@ -7636,6 +7636,8 @@ async function startServer() {
     await iniciarSoporte({
       obtenerPool: () => pool,
       log: (m) => console.log(m),
+      // El registro de bases, para que el módulo sepa a cuáles se llegó de verdad.
+      registro: multiDbRegistry,
       motor: {
         obtenerHuella: () => schemaDetector.getConnectionFingerprint(),
         refrescar: () => refreshSemanticLearningCache(true),

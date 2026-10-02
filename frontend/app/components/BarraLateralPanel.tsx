@@ -66,6 +66,9 @@ export default function BarraLateralPanel({
   const router = useRouter();
   const autonoma = articles === undefined;
   const [propios, setPropios] = useState<KnowledgeArticle[]>([]);
+  // Hasta que la petición termine no se sabe si hay categorías o no, y decir «no hay»
+  // mientras se están pidiendo es afirmar algo que todavía no es cierto.
+  const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     if (!autonoma) return;
@@ -84,6 +87,8 @@ export default function BarraLateralPanel({
         if (vigente) setPropios(lista);
       } catch {
         /* sin artículos la barra sigue siendo útil por los accesos de soporte */
+      } finally {
+        if (vigente) setCargando(false);
       }
     })();
     return () => { vigente = false; };
@@ -112,6 +117,13 @@ export default function BarraLateralPanel({
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}
         {mostrarSoporte && !collapsed && <div className="mx-3 my-3 border-t border-(--line)" />}
+        {autonoma && cargando && grupos.length === 0 ? (
+          <div className="space-y-1.5 px-1" aria-busy="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-9 animate-pulse rounded-lg bg-(--surface-2)" />
+            ))}
+          </div>
+        ) : (
         <Sidebar
           categories={grupos}
           articles={lista}
@@ -126,6 +138,7 @@ export default function BarraLateralPanel({
           selectedSubcategory={selectedSubcategory}
           collapsed={collapsed}
         />
+        )}
       </div>
     </div>
   );

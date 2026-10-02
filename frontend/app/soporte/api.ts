@@ -12,6 +12,8 @@ export interface PrecedentePublico {
   detalle: string;
   solucion?: string | null;
   relevancia: number;
+  /** Cuánto fiarse. Se mide sobre la puntuación real, no sobre el primer puesto. */
+  confianza: 'alta' | 'media' | 'baja';
   categoria: string | null;
   enlace: string;
 }

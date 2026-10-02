@@ -300,8 +300,13 @@ function Buscar({
         <section className="space-y-3">
           {resultados.length > 0 ? (
             <>
+              {/*
+                El encabezado dice la verdad en vez de prometer siempre lo mismo: si lo
+                mejor que hay es un parecido flojo, anunciarlo como «esto es lo suyo»
+                hace perder más tiempo que no devolver nada.
+              */}
               <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">
-                Esto se parece a lo suyo
+                {resultados[0].confianza === 'baja' ? 'Quizá tenga que ver, revíselo' : 'Esto se parece a lo suyo'}
               </h2>
               {resultados.map((p) => (
                 <Resultado

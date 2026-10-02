@@ -34,6 +34,8 @@ export interface Precedente {
   detalle: string;
   /** 0..1, comparable entre las dos fuentes. */
   relevancia: number;
+  /** Cuánto fiarse, medido sobre la puntuación real y no sobre el primer puesto. */
+  confianza: 'alta' | 'media' | 'baja';
   categoria: string | null;
   /** SQL del artículo, si lo trae. */
   sql: string | null;
@@ -93,8 +95,79 @@ const LIMITE = 5;
 const PISO_TICKET = 0.022;
 const PISO_ARTICULO = 0.05;
 
+/**
+ * Cuánto fiarse de un resultado, a partir de su puntuación sin normalizar.
+ *
+ * Los cortes salen de medir contra casos reales: los aciertos claros rondaban 0,20 y
+ * los parecidos razonables 0,09, mientras las coincidencias por una palabra suelta se
+ * quedaban por debajo de 0,08. No separan perfectamente —un buscador por palabras no
+ * sabe que «pago» en «módulo de nómina» es incidental— pero dicho así, quien lee sabe
+ * cuándo mirar con cuidado en vez de encontrarse siempre un 100 %.
+ */
+function confianzaDe(bruta: number): 'alta' | 'media' | 'baja' {
+  if (bruta >= 0.15) return 'alta';
+  return bruta >= 0.085 ? 'media' : 'baja';
+}
+
 /** Expuesto solo para las pruebas: es la pieza que decide qué se busca. */
 export const aConsultaParaPruebas = aConsulta;
+
+/**
+ * Por encima de esta proporción de artículos, un término no distingue nada.
+ *
+ * En una base de corresponsales, «corresponsal» sale en casi todos los títulos. Vale
+ * tanto como «sistema» o «usuario», que ya estaban en la lista de palabras vacías —
+ * solo que esa lista está escrita a mano y no puede saber de qué va cada instalación.
+ */
+const CUOTA_DEMASIADO_COMUN = 0.5;
+/** Por debajo de esto no hay con qué medir: con 6 artículos todo parece frecuente. */
+const MINIMO_PARA_MEDIR = 10;
+
+/**
+ * La consulta, quitando los términos que aparecen en casi todo.
+ *
+ * PostgreSQL no penaliza lo frecuente: `ts_rank` cuenta igual un término que está en
+ * los quince documentos que uno que está en uno solo. Así, «el corresponsal de Gualaceo
+ * hizo una recarga y no entró el saldo» casaba con cualquier artículo que dijera
+ * «corresponsal», y la recarga —lo único que de verdad identificaba el caso— se perdía
+ * entre el ruido.
+ *
+ * Se mide contra los datos en vez de mantener otra lista a mano: así funciona igual en
+ * una base de corresponsales que en una de nómina, sin que nadie la actualice.
+ *
+ * Si quitando los comunes no queda nada, se devuelve null: significa que la frase no
+ * tenía ningún término propio, y responder algo sería inventarlo.
+ */
+async function aConsultaDiscriminante(texto: string): Promise<string | null> {
+  const base = aConsulta(texto);
+  if (!base) return null;
+
+  const terminos = base.split(' | ');
+  if (terminos.length < 2) return base;
+
+  try {
+    const [{ total } = { total: 0 }] = await filas<{ total: number }>(
+      'SELECT count(*)::int AS total FROM knowledge_base',
+    );
+    if (total < MINIMO_PARA_MEDIR) return base;
+
+    // Una búsqueda por índice por término; son 24 como mucho y van por el GIN.
+    const frecuencias = await filas<{ termino: string; docs: number }>(
+      `SELECT t.termino,
+              (SELECT count(*)::int FROM knowledge_base k
+                WHERE k.busqueda @@ to_tsquery('spanish', t.termino)) AS docs
+         FROM unnest($1::text[]) AS t(termino)`,
+      [terminos],
+    );
+
+    const utiles = frecuencias.filter((f) => f.docs / total <= CUOTA_DEMASIADO_COMUN).map((f) => f.termino);
+    if (utiles.length === 0) return null;
+    return utiles.join(' | ');
+  } catch {
+    // Medir es una mejora, no un requisito: si falla, se busca como antes.
+    return base;
+  }
+}
 
 /**
  * Precedentes para un texto de ticket, de más a menos parecido.
@@ -116,9 +189,10 @@ export async function buscarPrecedentes(
     soloPublicos?: boolean;
   } = {},
 ): Promise<Precedente[]> {
-  const consulta = aConsulta(texto);
+  const consulta = await aConsultaDiscriminante(texto);
   if (!consulta) return [];
   const limite = opciones.limite ?? LIMITE;
+
 
   try {
     const [tickets, articulos] = await Promise.all([
@@ -173,11 +247,18 @@ export async function buscarPrecedentes(
       })),
     ];
 
-    // Se normaliza contra el mejor para que el porcentaje signifique «cuánto se parece
-    // al más parecido», que es lo que la persona interpreta al verlo.
+    // La relevancia se normaliza contra el mejor —eso ordena bien— pero por sí sola
+    // miente: dividir por el máximo deja siempre al primero en 1, sea un acierto o un
+    // disparate. `confianza` se mide sobre la puntuación cruda, que es la que distingue
+    // un parecido de verdad de una coincidencia suelta, para que la pantalla pueda
+    // decir «esto es lo suyo» o «mire con cuidado» en vez de afirmar siempre lo mismo.
     const mejor = Math.max(...salida.map((p) => p.relevancia), 0);
     return salida
-      .map((p) => ({ ...p, relevancia: mejor > 0 ? p.relevancia / mejor : 0 }))
+      .map((p) => ({
+        ...p,
+        confianza: confianzaDe(p.relevancia),
+        relevancia: mejor > 0 ? p.relevancia / mejor : 0,
+      }))
       .sort((a, b) => b.relevancia - a.relevancia)
       .slice(0, limite);
   } catch {

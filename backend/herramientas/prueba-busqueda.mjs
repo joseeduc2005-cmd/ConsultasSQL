@@ -112,16 +112,6 @@ const CASOS = [
     'el usuario se inhabilita solo despues de reactivarlo',
     'la MAC del POS esta duplicada con la de otro dispositivo',
   ]},
-  // 12 — Pantalla cambio de PIN
-  { espera: ['Pantalla Cambio de PIN'], frases: [
-    'solicitan una pantalla para que el tendero cambie su PIN',
-    'requerimiento de la pantalla de cambio de PIN para corresponsales',
-  ]},
-  // 13 — Puesta en producción
-  { espera: ['Puesta en producción'], frases: [
-    'hay que desplegar a produccion el admin de corresponsales',
-    'solicitud de puesta en produccion de una orden de trabajo',
-  ]},
   // 14 — Límite de 300
   { espera: ['300 transacciones'], frases: [
     'no me deja sacar el listado completo, se corta a las 300 filas',
@@ -135,6 +125,25 @@ const CASOS = [
     'al buscar a la socia para resetear sale usuario no encontrado',
     'no recuerda su clave ni su contraseña y no se puede resetear',
     'quiere recuperar el acceso pero el sistema no la encuentra',
+  ]},
+];
+
+/**
+ * Temas que existen pero no son para el cliente, y lo que se pregunta por ellos.
+ *
+ * Son peticiones de proyecto —una pantalla solicitada, un despliegue— no averías con
+ * solución, así que se pasaron a visibles solo para soporte. Lo que hay que comprobar
+ * no es que la búsqueda se quede muda: preguntar por el PIN y recibir el artículo del
+ * formato del PIN está bien. Lo que no puede pasar es que salga el tema oculto.
+ */
+const OCULTOS = [
+  { noDebeSalir: 'Pantalla Cambio de PIN', frases: [
+    'solicitan una pantalla para que el tendero cambie su PIN',
+    'requerimiento de la pantalla de cambio de PIN para corresponsales',
+  ]},
+  { noDebeSalir: 'Puesta en producción', frases: [
+    'hay que desplegar a produccion el admin de corresponsales',
+    'solicitud de puesta en produccion de una orden de trabajo',
   ]},
 ];
 
@@ -237,6 +246,27 @@ async function evaluar(frase, espera, etiqueta, variante) {
   }
 }
 
+/** Un tema oculto no puede aparecer en la lista del cliente, salga lo que salga. */
+async function evaluarOculto(frase, fragmento, variante) {
+  const r = await buscarPrecedentes(frase, { limite: 5, soloPublicos: true });
+  const asomo = r.find((x) => x.titulo.toLowerCase().includes(fragmento.toLowerCase()));
+
+  total++;
+  if (!asomo) {
+    bien++;
+    enLista++;
+  } else {
+    fallos.push({ frase, etiqueta: `(oculto) ${fragmento}`, variante, dio: `SE FILTRÓ: ${asomo.titulo}` });
+  }
+
+  for (const [mapa, clave] of [[porVariante, variante], [porCaso, '(no debe verlo el cliente)']]) {
+    const m = mapa.get(clave) ?? { total: 0, bien: 0 };
+    m.total++;
+    if (!asomo) m.bien++;
+    mapa.set(clave, m);
+  }
+}
+
 console.log('Corriendo…\n');
 for (const caso of CASOS) {
   for (const frase of caso.frases) {
@@ -245,6 +275,11 @@ for (const caso of CASOS) {
 }
 for (const frase of NEGATIVOS) {
   for (const [nombre, fn] of VARIANTES) await evaluar(fn(frase), null, '(no debe encontrar)', nombre);
+}
+for (const o of OCULTOS) {
+  for (const frase of o.frases) {
+    for (const [nombre, fn] of VARIANTES) await evaluarOculto(fn(frase), o.noDebeSalir, nombre);
+  }
 }
 
 const pct = (m) => `${((m.bien / m.total) * 100).toFixed(1)}%`.padStart(6);

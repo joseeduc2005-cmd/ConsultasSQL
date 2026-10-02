@@ -108,17 +108,17 @@ const PISO_TICKET = 0.022;
 const PISO_ARTICULO = 0.05;
 
 /**
- * Cuánto fiarse de un resultado, a partir de su puntuación sin normalizar.
+ * Cuánto fiarse, a partir de qué proporción de lo distintivo cubre el resultado.
  *
- * Los cortes salen de medir contra casos reales: los aciertos claros rondaban 0,20 y
- * los parecidos razonables 0,09, mientras las coincidencias por una palabra suelta se
- * quedaban por debajo de 0,08. No separan perfectamente —un buscador por palabras no
- * sabe que «pago» en «módulo de nómina» es incidental— pero dicho así, quien lee sabe
- * cuándo mirar con cuidado en vez de encontrarse siempre un 100 %.
+ * `cobertura` va de 0 a 1 y es interpretable: cuánto del peso de la pregunta —midiendo
+ * cada palabra por lo rara que es— aparece en este artículo. Cubrir «repetidos» y
+ * «duplicados» vale mucho; cubrir solo «usuarios», que está en la mitad de la base,
+ * vale poco. Sustituye a los umbrales sobre `ts_rank`, que había que recalibrar a mano
+ * cada vez que la base crecía porque dependían de cuántos documentos hubiera.
  */
-function confianzaDe(bruta: number): 'alta' | 'media' | 'baja' {
-  if (bruta >= 0.15) return 'alta';
-  return bruta >= 0.085 ? 'media' : 'baja';
+function confianzaDe(cobertura: number): 'alta' | 'media' | 'baja' {
+  if (cobertura >= 0.55) return 'alta';
+  return cobertura >= 0.3 ? 'media' : 'baja';
 }
 
 /** Expuesto solo para las pruebas: es la pieza que decide qué se busca. */
@@ -136,32 +136,33 @@ const CUOTA_DEMASIADO_COMUN = 0.5;
 const MINIMO_PARA_MEDIR = 10;
 
 /**
- * La consulta, quitando los términos que aparecen en casi todo.
+ * La consulta, con cada término pesado por lo raro que es.
  *
  * PostgreSQL no penaliza lo frecuente: `ts_rank` cuenta igual un término que está en
- * los quince documentos que uno que está en uno solo. Así, «el corresponsal de Gualaceo
- * hizo una recarga y no entró el saldo» casaba con cualquier artículo que dijera
- * «corresponsal», y la recarga —lo único que de verdad identificaba el caso— se perdía
- * entre el ruido.
+ * los quince artículos que uno que está en dos. Así «usuarios repetidos» encontraba
+ * «usuario no encontrado», porque «usuarios» —que sale en la mitad de la base— pesaba
+ * tanto como «repetidos», que es lo único que decía de qué iba la pregunta.
  *
- * Se mide contra los datos en vez de mantener otra lista a mano: así funciona igual en
- * una base de corresponsales que en una de nómina, sin que nadie la actualice.
- *
- * Si quitando los comunes no queda nada, se devuelve null: significa que la frase no
- * tenía ningún término propio, y responder algo sería inventarlo.
+ * La medida es la de toda la vida para esto: el logaritmo de cuántos documentos hay
+ * entre los que contienen el término. Lo que está en todos pesa cero y se cae solo, sin
+ * necesidad de un umbral; lo raro pesa mucho. Y se mide contra los datos, así que
+ * funciona igual en una base de corresponsales que en una de nómina sin que nadie
+ * mantenga una lista.
  */
-async function aConsultaDiscriminante(texto: string): Promise<string | null> {
+async function aConsultaDiscriminante(
+  texto: string,
+): Promise<{ consulta: string; terminos: string[]; pesos: number[] } | null> {
   const base = aConsulta(texto);
   if (!base) return null;
-
   const terminos = base.split(' | ');
-  if (terminos.length < 2) return base;
 
   try {
     const [{ total } = { total: 0 }] = await filas<{ total: number }>(
       'SELECT count(*)::int AS total FROM knowledge_base',
     );
-    if (total < MINIMO_PARA_MEDIR) return base;
+    if (total < MINIMO_PARA_MEDIR) {
+      return { consulta: base, terminos, pesos: terminos.map(() => 1) };
+    }
 
     // Una búsqueda por índice por término; son 24 como mucho y van por el GIN.
     const frecuencias = await filas<{ termino: string; docs: number }>(
@@ -172,12 +173,21 @@ async function aConsultaDiscriminante(texto: string): Promise<string | null> {
       [terminos],
     );
 
-    const utiles = frecuencias.filter((f) => f.docs / total <= CUOTA_DEMASIADO_COMUN).map((f) => f.termino);
+    const utiles = frecuencias
+      .map((f) => ({ termino: f.termino, peso: Math.log((total + 1) / (Number(f.docs) + 1)) }))
+      // Peso cero es un término que está en todas partes: no distingue, y dejarlo solo
+      // añade ruido a la consulta.
+      .filter((f) => f.peso > 0.01);
+
     if (utiles.length === 0) return null;
-    return utiles.join(' | ');
+    return {
+      consulta: utiles.map((u) => u.termino).join(' | '),
+      terminos: utiles.map((u) => u.termino),
+      pesos: utiles.map((u) => u.peso),
+    };
   } catch {
     // Medir es una mejora, no un requisito: si falla, se busca como antes.
-    return base;
+    return { consulta: base, terminos, pesos: terminos.map(() => 1) };
   }
 }
 
@@ -201,36 +211,46 @@ export async function buscarPrecedentes(
     soloPublicos?: boolean;
   } = {},
 ): Promise<Precedente[]> {
-  const consulta = await aConsultaDiscriminante(texto);
-  if (!consulta) return [];
+  const pregunta = await aConsultaDiscriminante(texto);
+  if (!pregunta) return [];
+  const { consulta, terminos, pesos } = pregunta;
   const limite = opciones.limite ?? LIMITE;
+  // Cuánto pesa la pregunta entera: la cobertura de cada resultado se mide contra esto.
+  const pesoTotal = pesos.reduce((a, b) => a + b, 0) || 1;
 
 
   try {
     const [tickets, articulos] = await Promise.all([
-      filas<{ numero: string; titulo: string; causa_raiz: string | null; solucion: string | null; sistema: string | null; relevancia: number }>(
-        `SELECT t.numero, t.titulo, t.causa_raiz, t.solucion, t.sistema,
-                ts_rank(t.busqueda, q) AS relevancia
+      filas<{ numero: string; titulo: string; causa_raiz: string | null; solucion: string | null; sistema: string | null; relevancia: number; cobertura: number }>(
+        `WITH p(termino, peso) AS (SELECT * FROM unnest($4::text[], $5::float8[]))
+         SELECT t.numero, t.titulo, t.causa_raiz, t.solucion, t.sistema,
+                ts_rank(t.busqueda, q) AS relevancia,
+                -- Qué parte del peso de la pregunta cubre este ticket.
+                (SELECT coalesce(sum(p.peso), 0) FROM p
+                  WHERE t.busqueda @@ to_tsquery('spanish', p.termino)) / $6 AS cobertura
          FROM soporte.tickets t, to_tsquery('spanish', $1) q
          WHERE t.busqueda @@ q
            AND t.numero <> $2
            AND t.estado = 'resuelto'
            AND (t.causa_raiz IS NOT NULL OR t.solucion IS NOT NULL)
-         ORDER BY relevancia DESC
+         ORDER BY cobertura DESC, relevancia DESC
          LIMIT $3`,
-        [consulta, opciones.excluirTicket ?? '', limite],
+        [consulta, opciones.excluirTicket ?? '', limite, terminos, pesos, pesoTotal],
       ),
-      filas<{ id: string; titulo: string; descripcion: string | null; categoria: string | null; tipo_solucion: string | null; sql: string | null; relevancia: number }>(
-        `SELECT k.id::text, k.titulo, k.descripcion, k.categoria, k.tipo_solucion,
+      filas<{ id: string; titulo: string; descripcion: string | null; categoria: string | null; tipo_solucion: string | null; sql: string | null; relevancia: number; cobertura: number }>(
+        `WITH p(termino, peso) AS (SELECT * FROM unnest($4::text[], $5::float8[]))
+         SELECT k.id::text, k.titulo, k.descripcion, k.categoria, k.tipo_solucion,
                 k.script_json->>'sql' AS sql,
+                (SELECT coalesce(sum(p.peso), 0) FROM p
+                  WHERE k.busqueda @@ to_tsquery('spanish', p.termino)) / $6 AS cobertura,
                 -- Un artículo con script vale más: además de explicar, trae el arreglo.
                 ts_rank(k.busqueda, q) * (CASE WHEN k.script_json IS NOT NULL THEN 1.4 ELSE 1 END) AS relevancia
          FROM knowledge_base k, to_tsquery('spanish', $1) q
          WHERE k.busqueda @@ q
            AND ($3 = false OR coalesce(k.visible_para, 'todos') = 'todos')
-         ORDER BY relevancia DESC
+         ORDER BY cobertura DESC, relevancia DESC
          LIMIT $2`,
-        [consulta, limite, opciones.soloPublicos === true],
+        [consulta, limite, opciones.soloPublicos === true, terminos, pesos, pesoTotal],
       ),
     ]);
 
@@ -242,6 +262,7 @@ export async function buscarPrecedentes(
         detalle: (t.causa_raiz ?? '').trim(),
         solucion: (t.solucion ?? '').trim() || null,
         relevancia: Number(t.relevancia),
+        cobertura: Number(t.cobertura),
         categoria: t.sistema,
         sql: null,
         enlace: `/admin/tickets/${encodeURIComponent(t.numero)}`,
@@ -253,6 +274,7 @@ export async function buscarPrecedentes(
         detalle: (a.descripcion ?? '').trim(),
         solucion: null,
         relevancia: Number(a.relevancia),
+        cobertura: Number(a.cobertura),
         categoria: a.categoria,
         sql: a.sql,
         enlace: `/admin?articulo=${encodeURIComponent(a.id)}`,
@@ -268,7 +290,7 @@ export async function buscarPrecedentes(
     return salida
       .map((p) => ({
         ...p,
-        confianza: confianzaDe(p.relevancia),
+        confianza: confianzaDe(p.cobertura),
         relevancia: mejor > 0 ? p.relevancia / mejor : 0,
       }))
       .sort((a, b) => b.relevancia - a.relevancia)

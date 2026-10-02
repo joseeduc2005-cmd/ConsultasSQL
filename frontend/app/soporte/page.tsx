@@ -4,6 +4,8 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Copy,
   Database,
@@ -51,6 +53,11 @@ function SoportePage() {
   // borde— y la mitad de lo que aporta un tema está en lo que comentó el que ya pasó
   // por ahí. Quien no los quiera, los cierra y se queda cerrado mientras navega.
   const [comentarios, setComentarios] = useState(true);
+  // La búsqueda vive aquí y no dentro de `Buscar`: al abrir un tema desde un resultado
+  // ese componente se desmonta, y volver obligaba a reescribir todo. Lo normal es mirar
+  // un resultado, ver que no sirve, y volver a la lista.
+  const [consulta, setConsulta] = useState('');
+  const [resultados, setResultados] = useState<PrecedentePublico[] | null>(null);
 
   return (
     // Alto fijo con scroll por columna, como el panel: así la página no crece por
@@ -67,8 +74,21 @@ function SoportePage() {
             {/* El contenido no se estira a lo ancho sin límite: una línea de texto de
                 punta a punta de un monitor ancho no hay quien la lea. */}
             <div className="mx-auto w-full max-w-3xl">
-              {vista.tipo === 'buscar' && <Buscar onAportar={setVista} />}
-              {vista.tipo === 'articulo' && <Articulo id={vista.id} />}
+              {vista.tipo === 'buscar' && (
+                <Buscar
+                  onAbrir={setVista}
+                  texto={consulta}
+                  onTexto={setConsulta}
+                  resultados={resultados}
+                  onResultados={setResultados}
+                />
+              )}
+              {vista.tipo === 'articulo' && (
+                <Articulo
+                  id={vista.id}
+                  onVolver={resultados ? () => setVista({ tipo: 'buscar' }) : undefined}
+                />
+              )}
               {vista.tipo === 'aportar' && <Aportar titulo={vista.titulo} />}
             </div>
           </main>
@@ -220,13 +240,22 @@ function Categoria({
 
 // ─── Mi problema ─────────────────────────────────────────────────────────────
 
-function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
-  const [texto, setTexto] = useState('');
-  const [resultados, setResultados] = useState<PrecedentePublico[] | null>(null);
-
+function Buscar({
+  onAbrir,
+  texto,
+  onTexto,
+  resultados,
+  onResultados,
+}: {
+  onAbrir: (v: Vista) => void;
+  texto: string;
+  onTexto: (v: string) => void;
+  resultados: PrecedentePublico[] | null;
+  onResultados: (v: PrecedentePublico[]) => void;
+}) {
   const buscar = useMutation({
     mutationFn: () => clienteApi.solucionar(texto),
-    onSuccess: (r) => setResultados(r.precedentes),
+    onSuccess: (r) => onResultados(r.precedentes),
   });
 
   const listo = texto.trim().length >= 10;
@@ -241,7 +270,7 @@ function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
 
         <textarea
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={(e) => onTexto(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && listo) buscar.mutate();
           }}
@@ -275,7 +304,11 @@ function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
                 Esto se parece a lo suyo
               </h2>
               {resultados.map((p) => (
-                <Resultado key={`${p.tipo}-${p.id}`} precedente={p} />
+                <Resultado
+                  key={`${p.tipo}-${p.id}`}
+                  precedente={p}
+                  onAbrir={p.tipo === 'articulo' ? () => onAbrir({ tipo: 'articulo', id: p.id }) : undefined}
+                />
               ))}
             </>
           ) : (
@@ -299,7 +332,7 @@ function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
             </p>
             <button
               type="button"
-              onClick={() => onAportar({ tipo: 'aportar', titulo: primeraLinea(texto) })}
+              onClick={() => onAbrir({ tipo: 'aportar', titulo: primeraLinea(texto) })}
               className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
             >
               <Lightbulb className="size-4" />
@@ -312,17 +345,31 @@ function Buscar({ onAportar }: { onAportar: (v: Vista) => void }) {
   );
 }
 
-function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
+/**
+ * Un resultado de la búsqueda.
+ *
+ * Si es un tema de ayuda, al pulsarlo se abre el tema entero: la tarjeta solo enseña un
+ * recorte, y lo que hace falta para resolver —los pasos completos, la sentencia con su
+ * botón de copiar, los comentarios de quien ya pasó por ahí— está en el tema.
+ *
+ * Si es un ticket viejo no hay a dónde ir desde aquí, así que se despliega en el sitio.
+ */
+function Resultado({ precedente: p, onAbrir }: { precedente: PrecedentePublico; onAbrir?: () => void }) {
   const [abierto, setAbierto] = useState(false);
   const cuerpo = p.solucion || p.detalle;
+  const navegable = Boolean(onAbrir);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-(--line) bg-(--surface-2)">
+    <div
+      className={`overflow-hidden rounded-xl border border-(--line) bg-(--surface-2) transition-colors ${
+        navegable ? 'hover:border-(--accent)' : ''
+      }`}
+    >
       <button
         type="button"
-        onClick={() => setAbierto((v) => !v)}
+        onClick={() => (onAbrir ? onAbrir() : setAbierto((v) => !v))}
         className="flex w-full items-start gap-3 px-4 py-3.5 text-left"
-        aria-expanded={abierto}
+        aria-expanded={navegable ? undefined : abierto}
       >
         <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-(--accent)/10 text-(--accent)">
           {p.tipo === 'ticket' ? <History className="size-4" /> : <BookOpen className="size-4" />}
@@ -332,9 +379,15 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
           {!abierto && cuerpo && (
             <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
           )}
+          {navegable && (
+            <span className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-(--accent)">
+              Ver el tema completo
+              <ChevronRight className="size-3.5" />
+            </span>
+          )}
         </span>
       </button>
-      {abierto && (
+      {abierto && !navegable && (
         <div className="border-t border-(--line) px-4 py-4">
           {cuerpo ? (
             <Markdown contenido={cuerpo} />
@@ -349,7 +402,7 @@ function Resultado({ precedente: p }: { precedente: PrecedentePublico }) {
 
 // ─── Un tema ─────────────────────────────────────────────────────────────────
 
-function Articulo({ id }: { id: string }) {
+function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
   const { data, isLoading } = useQuery({ queryKey: ['tema', id], queryFn: () => clienteApi.tema(id) });
 
   if (isLoading) return <p className="text-[14px] text-(--ink-500)">Cargando…</p>;
@@ -357,6 +410,17 @@ function Articulo({ id }: { id: string }) {
 
   return (
     <article>
+      {/* Solo cuando se llegó desde una búsqueda: si no, no hay a dónde volver. */}
+      {onVolver && (
+        <button
+          type="button"
+          onClick={onVolver}
+          className="mb-3 inline-flex items-center gap-1 text-[12.5px] font-medium text-(--ink-500) transition-colors hover:text-(--ink-900)"
+        >
+          <ChevronLeft className="size-3.5" />
+          Volver a los resultados
+        </button>
+      )}
       {data.categoria && (
         <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
       )}

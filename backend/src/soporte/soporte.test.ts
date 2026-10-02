@@ -240,6 +240,139 @@ describe('exploracion generica', () => {
   });
 });
 
+// ─── El grafo del esquema ────────────────────────────────────────────────────
+
+/**
+ * Una base inventada con relaciones: el usuario pertenece a una agencia y tiene un
+ * perfil, y de él cuelgan movimientos. Lo que se prueba es que la causa se encuentre en
+ * la agencia —una tabla que no nombra la cédula por ningún lado— y que el camino hasta
+ * ella quede escrito.
+ */
+describe('grafo del esquema', () => {
+  const ESQUEMA = [
+    {
+      name: 'usuarios',
+      columns: [{ name: 'id' }, { name: 'cedula' }, { name: 'estado' }, { name: 'agencia_id' }, { name: 'perfil_id' }],
+      foreignKeys: [
+        { column: 'agencia_id', referencedTable: 'agencias', referencedColumn: 'id' },
+        { column: 'perfil_id', referencedTable: 'perfiles', referencedColumn: 'id' },
+      ],
+    },
+    { name: 'agencias', columns: [{ name: 'id' }, { name: 'activa' }, { name: 'zona' }], foreignKeys: [] },
+    { name: 'perfiles', columns: [{ name: 'id' }, { name: 'vigente' }], foreignKeys: [] },
+    {
+      name: 'movimientos',
+      columns: [{ name: 'id' }, { name: 'usuario_id' }, { name: 'tipo' }],
+      foreignKeys: [{ column: 'usuario_id', referencedTable: 'usuarios', referencedColumn: 'id' }],
+    },
+  ];
+
+  it('lee las relaciones en las dos direcciones', async () => {
+    const { vecinas } = await import('./exploracion-generica.ts');
+    const v = vecinas(ESQUEMA, 'usuarios');
+
+    const padres = v.filter((a) => a.sentido === 'padre').map((a) => a.hacia).sort();
+    assert.deepEqual(padres, ['agencias', 'perfiles'], 'a lo que apunta el usuario');
+
+    const hijos = v.filter((a) => a.sentido === 'hijo').map((a) => a.hacia);
+    assert.deepEqual(hijos, ['movimientos'], 'lo que apunta al usuario');
+  });
+
+  it('encuentra la causa en una tabla que no menciona el identificador', async () => {
+    const { explorarVecindario } = await import('./exploracion-generica.ts');
+
+    // La agencia 9 está inactiva mientras el 98 % de las agencias están activas. El
+    // usuario en sí no tiene nada raro: la causa está un salto más allá.
+    const ejecutar = async (sql: string) => {
+      if (sql.includes('FROM "agencias" WHERE')) return [{ id: 9, activa: 0, zona: 'norte' }];
+      if (sql.includes('FROM "perfiles" WHERE')) return [{ id: 4, vigente: 1 }];
+      if (sql.includes('FROM "movimientos" WHERE')) return [{ id: 1, usuario_id: 7, tipo: 'A' }];
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 200 }];
+      if (sql.includes('"activa"')) return [{ valor: 1, veces: 196 }, { valor: 0, veces: 4 }];
+      if (sql.includes('"zona"')) return [{ valor: 'norte', veces: 180 }];
+      if (sql.includes('"vigente"')) return [{ valor: 1, veces: 199 }];
+      if (sql.includes('"tipo"')) return [{ valor: 'A', veces: 190 }];
+      return [];
+    };
+
+    const raiz = {
+      tabla: 'usuarios',
+      columna: 'cedula',
+      identificador: '0102030405',
+      diferencias: [],
+      poblacion: 200,
+      fila: { id: 7, cedula: '0102030405', estado: 1, agencia_id: 9, perfil_id: 4 },
+      camino: [],
+    };
+
+    const vecindario = await explorarVecindario(ejecutar, raiz, ESQUEMA);
+    const enAgencias = vecindario.find((h) => h.tabla === 'agencias');
+
+    assert.ok(enAgencias, 'deberia señalar la agencia');
+    assert.deepEqual(enAgencias!.diferencias.map((d) => d.columna), ['activa']);
+    assert.deepEqual(enAgencias!.camino, ['usuarios → agencias por agencia_id']);
+    assert.ok(!vecindario.some((h) => h.tabla === 'perfiles'), 'el perfil está normal, no debe salir');
+  });
+
+  it('no vuelve sobre la tabla de partida ni se repite', async () => {
+    const { explorarVecindario } = await import('./exploracion-generica.ts');
+    const visitadas: string[] = [];
+    const ejecutar = async (sql: string) => {
+      const m = /FROM "([^"]+)" WHERE/.exec(sql);
+      if (m) visitadas.push(m[1]);
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 200 }];
+      if (m) return [{ id: 1, usuario_id: 7, agencia_id: 9, perfil_id: 4 }];
+      return [];
+    };
+
+    await explorarVecindario(
+      ejecutar,
+      {
+        tabla: 'usuarios',
+        columna: 'cedula',
+        identificador: '1',
+        diferencias: [],
+        poblacion: 200,
+        fila: { id: 7, agencia_id: 9, perfil_id: 4 },
+        camino: [],
+      },
+      ESQUEMA,
+    );
+
+    assert.ok(!visitadas.includes('usuarios'), 'no debe volver a la tabla de partida');
+    assert.equal(new Set(visitadas).size, visitadas.length, 'ninguna tabla se visita dos veces');
+  });
+
+  it('sigue sin proponer ninguna escritura', async () => {
+    const { explorarVecindario } = await import('./exploracion-generica.ts');
+    const consultas: string[] = [];
+    const ejecutar = async (sql: string) => {
+      consultas.push(sql);
+      if (sql.includes('COUNT(*) AS total')) return [{ total: 200 }];
+      if (sql.includes('WHERE')) return [{ id: 9, activa: 0 }];
+      if (sql.includes('"activa"')) return [{ valor: 1, veces: 196 }];
+      return [];
+    };
+
+    const r = await explorarVecindario(
+      ejecutar,
+      {
+        tabla: 'usuarios',
+        columna: 'cedula',
+        identificador: '1',
+        diferencias: [],
+        poblacion: 200,
+        fila: { id: 7, agencia_id: 9 },
+        camino: [],
+      },
+      ESQUEMA,
+    );
+
+    assert.ok(consultas.every((s) => /^\s*SELECT/i.test(s)), 'solo debe leer');
+    assert.ok(!JSON.stringify(r).includes('UPDATE'), 'no debe redactar ninguna escritura');
+  });
+});
+
 // ─── Precedentes ─────────────────────────────────────────────────────────────
 
 describe('buscar precedentes', () => {

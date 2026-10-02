@@ -57,19 +57,31 @@ function aConsulta(texto: string): string | null {
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    // El mínimo de cuatro letras es para palabras: descarta «de», «la», «si». A los
-    // números no se les aplica —bastan dos cifras— porque suelen ser lo más distintivo
-    // de un reporte. «No muestra más de 300 transacciones» no se encontraba buscando
-    // «se corta a las 300 filas»: el único término que las unía era justo el que se
-    // estaba tirando.
-    .filter((p) => (p.length >= 4 || /^\d{2,}$/.test(p)) && !VACIAS.has(p));
+    // Dos caracteres, no cuatro. El mínimo alto estaba para quitar «de», «la», «si»,
+    // pero de eso ya se encarga el diccionario español de PostgreSQL, que las descarta
+    // al convertirlas en lexemas. Lo que sí se llevaba por delante era el vocabulario
+    // del dominio —`qr`, `pos`, `pin`, `mac`, `sms`, `otp`— y los números cortos: un
+    // pago con QR no encontraba el incidente de QR porque el término se tiraba antes
+    // de llegar a la consulta, igual que pasaba con «300».
+    .filter((p) => p.length >= 2 && !VACIAS.has(p));
 
   const unicas = [...new Set(palabras)].slice(0, 24);
   return unicas.length > 0 ? unicas.join(' | ') : null;
 }
 
-/** Palabras que aparecen en todos los tickets y no distinguen nada. */
+/**
+ * Palabras que no distinguen nada: las de relleno del español y las que salen en todos
+ * los tickets. Las cortas están aquí desde que el mínimo de longitud bajó a dos: hacía
+ * falta para no perder «qr», «pos» o «pin», pero dejaba entrar «de» y «la».
+ *
+ * El diccionario español de PostgreSQL también las descarta, así que esto es redundante
+ * a propósito: deja la garantía escrita donde se lee, y no dependiendo de qué haga por
+ * dentro un motor que puede cambiar de versión.
+ */
 const VACIAS = new Set([
+  'de', 'la', 'el', 'en', 'un', 'lo', 'al', 'se', 'su', 'mi', 'tu', 'es', 'ya', 'si',
+  'no', 'me', 'le', 'te', 'ha', 'he', 'va', 'yo', 'eso', 'ese', 'esa', 'ser', 'son',
+  'sus', 'mas', 'muy', 'hay', 'dos', 'tres',
   'para', 'pero', 'como', 'esta', 'este', 'esto', 'sobre', 'desde', 'hasta', 'cuando',
   'porque', 'tambien', 'favor', 'gracias', 'estimados', 'buenos', 'buenas', 'dias',
   'tardes', 'saludos', 'atentos', 'quedamos', 'adjunto', 'reporta', 'reportado',

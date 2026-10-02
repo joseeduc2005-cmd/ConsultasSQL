@@ -11,6 +11,8 @@ import {
   Database,
   History,
   Lightbulb,
+  Mic,
+  MicOff,
   MessageSquarePlus,
   Plus,
   Search,
@@ -19,7 +21,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import CommentsSection from '../components/CommentsSection';
 import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
@@ -238,6 +240,92 @@ function Categoria({
   );
 }
 
+// ─── Dictado ─────────────────────────────────────────────────────────────────
+
+/**
+ * Dictar el problema en vez de escribirlo.
+ *
+ * Usa el reconocimiento de voz del navegador, no una librería ni un servicio: ya viene
+ * con Chrome y Edge, no hay nada que instalar y el audio no pasa por nuestro backend.
+ * Donde no exista —Firefox, por ejemplo— el botón no se muestra en vez de salir roto.
+ *
+ * Lo dictado se añade a lo que ya hubiera escrito, no lo reemplaza: quien empieza a
+ * teclear y termina hablando no pierde lo del principio.
+ */
+function useDictado(alTexto: (fragmento: string) => void) {
+  const [grabando, setGrabando] = useState(false);
+  const [disponible, setDisponible] = useState(false);
+  const motor = useRef<any>(null);
+  // El callback cambia en cada render; la referencia evita rearmar el reconocedor.
+  const entregar = useRef(alTexto);
+  entregar.current = alTexto;
+
+  useEffect(() => {
+    const Reconocimiento =
+      (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!Reconocimiento) return;
+
+    const r = new Reconocimiento();
+    r.lang = 'es-EC';
+    r.continuous = true;
+    // Sin resultados intermedios la caja se queda muerta mientras uno habla, y parece
+    // que no está escuchando.
+    r.interimResults = false;
+    r.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) entregar.current(e.results[i][0].transcript.trim());
+      }
+    };
+    r.onend = () => setGrabando(false);
+    r.onerror = () => setGrabando(false);
+
+    motor.current = r;
+    setDisponible(true);
+    return () => {
+      try {
+        r.stop();
+      } catch {
+        /* ya estaba parado */
+      }
+    };
+  }, []);
+
+  const alternar = () => {
+    const r = motor.current;
+    if (!r) return;
+    try {
+      if (grabando) r.stop();
+      else {
+        r.start();
+        setGrabando(true);
+      }
+    } catch {
+      setGrabando(false);
+    }
+  };
+
+  return { grabando, disponible, alternar };
+}
+
+function BotonDictado({ grabando, alternar }: { grabando: boolean; alternar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={alternar}
+      title={grabando ? 'Dejar de dictar' : 'Dictar el problema'}
+      aria-pressed={grabando}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors ${
+        grabando
+          ? 'border-rose-500/40 bg-rose-500/10 text-rose-600'
+          : 'border-(--line) bg-(--surface-2) text-(--ink-900) hover:border-(--accent)'
+      }`}
+    >
+      {grabando ? <MicOff className="size-4 animate-pulse" /> : <Mic className="size-4" />}
+      {grabando ? 'Escuchando…' : 'Dictar'}
+    </button>
+  );
+}
+
 // ─── Mi problema ─────────────────────────────────────────────────────────────
 
 function Buscar({
@@ -257,6 +345,9 @@ function Buscar({
     mutationFn: () => clienteApi.solucionar(texto),
     onSuccess: (r) => onResultados(r.precedentes),
   });
+
+  // Lo dictado se añade a lo que haya, separado por un espacio.
+  const dictado = useDictado((fragmento) => onTexto(texto ? `${texto} ${fragmento}` : fragmento));
 
   const listo = texto.trim().length >= 10;
 
@@ -290,8 +381,13 @@ function Buscar({
             <Search className="size-4" />
             {buscar.isPending ? 'Buscando…' : 'Buscar solución'}
           </button>
+          {dictado.disponible && <BotonDictado grabando={dictado.grabando} alternar={dictado.alternar} />}
           <span className="text-[12.5px] text-(--ink-500)">
-            {listo ? 'Ctrl + Enter para buscar' : 'Escriba un poco más'}
+            {dictado.grabando
+              ? 'Hable con naturalidad; pulse otra vez para terminar'
+              : listo
+                ? 'Ctrl + Enter para buscar'
+                : 'Escriba o dicte su problema'}
           </span>
         </div>
       </section>

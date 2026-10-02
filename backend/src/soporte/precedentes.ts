@@ -55,7 +55,12 @@ function aConsulta(texto: string): string | null {
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((p) => p.length >= 4 && !VACIAS.has(p));
+    // El mínimo de cuatro letras es para palabras: descarta «de», «la», «si». A los
+    // números no se les aplica —bastan dos cifras— porque suelen ser lo más distintivo
+    // de un reporte. «No muestra más de 300 transacciones» no se encontraba buscando
+    // «se corta a las 300 filas»: el único término que las unía era justo el que se
+    // estaba tirando.
+    .filter((p) => (p.length >= 4 || /^\d{2,}$/.test(p)) && !VACIAS.has(p));
 
   const unicas = [...new Set(palabras)].slice(0, 24);
   return unicas.length > 0 ? unicas.join(' | ') : null;

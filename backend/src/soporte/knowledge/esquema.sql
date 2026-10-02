@@ -217,3 +217,20 @@ CREATE INDEX IF NOT EXISTS idx_soporte_aportes_autor  ON soporte.aportes (autor,
 -- cambiaba algo. `pasos` se conserva con la versión legible: es lo que indexa la
 -- búsqueda y lo que ya tenían los aportes anteriores.
 ALTER TABLE soporte.aportes ADD COLUMN IF NOT EXISTS pasos_json jsonb;
+
+-- Lo que la gente abre después de buscar.
+--
+-- Cuando alguien escribe su problema y entra en un tema, está respondiendo a una
+-- pregunta que ningún algoritmo contesta bien: «esta forma de decirlo se resuelve con
+-- este tema». Guardarlo hace que el sistema mejore con el uso en vez de depender de
+-- que alguien afine pesos a mano, y desempata justo donde la búsqueda por palabras se
+-- queda corta: entre dos temas que se parecen.
+CREATE TABLE IF NOT EXISTS soporte.aprendizaje (
+  termino    text NOT NULL,
+  articulo   text NOT NULL,
+  veces      integer NOT NULL DEFAULT 1,
+  ultima_vez timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (termino, articulo)
+);
+
+CREATE INDEX IF NOT EXISTS idx_soporte_aprendizaje_termino ON soporte.aprendizaje (termino);

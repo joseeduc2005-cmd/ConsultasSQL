@@ -114,6 +114,16 @@ export const clienteApi = {
     pedir<Aporte>('/aportes', { method: 'POST', body: JSON.stringify(datos) }),
   misAportes: () => pedir<Aporte[]>('/aportes'),
 
+  /**
+   * Apunta que, buscando esto, se abrió ese tema. Así el sistema aprende del uso.
+   * No se espera la respuesta ni importa si falla: es un apunte, no una acción.
+   */
+  temaAbierto: (id: string, consulta: string) =>
+    pedir<void>(`/temas/${encodeURIComponent(id)}/abierto`, {
+      method: 'POST',
+      body: JSON.stringify({ consulta }),
+    }).catch(() => undefined),
+
   /** Solo las bases a las que el backend llegó de verdad, para elegir sin escribir. */
   bases: () => pedir<{ id: string; etiqueta: string; motor: string }[]>('/bases'),
 };

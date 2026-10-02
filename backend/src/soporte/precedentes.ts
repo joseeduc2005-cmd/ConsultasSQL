@@ -21,7 +21,7 @@
  *     trabajo de documentar. Los que traen script pesan más: no solo explican, dan
  *     con qué arreglarlo.
  */
-import { filas } from './knowledge/db.ts';
+import { ejecutar, filas } from './knowledge/db.ts';
 
 export interface Precedente {
   tipo: 'ticket' | 'articulo';
@@ -123,6 +123,32 @@ function confianzaDe(cobertura: number): 'alta' | 'media' | 'baja' {
 
 /** Expuesto solo para las pruebas: es la pieza que decide qué se busca. */
 export const aConsultaParaPruebas = aConsulta;
+
+/**
+ * Apunta que, buscando esto, alguien abrió ese tema.
+ *
+ * Se guarda por término y no por la frase entera: nadie escribe dos veces igual, y
+ * guardar frases completas no serviría para la siguiente persona. Por términos, lo que
+ * aprende de «no sale el papel de la impresora» ayuda también a quien escriba «el papel
+ * no sale» o «no imprime el papel».
+ *
+ * Nunca lanza: esto mejora la búsqueda, no puede romper la navegación.
+ */
+export async function registrarAcierto(texto: string, articulo: string): Promise<void> {
+  try {
+    const consulta = aConsulta(texto);
+    if (!consulta) return;
+    await ejecutar(
+      `INSERT INTO soporte.aprendizaje (termino, articulo)
+       SELECT t, $2 FROM unnest($1::text[]) AS t
+       ON CONFLICT (termino, articulo)
+       DO UPDATE SET veces = soporte.aprendizaje.veces + 1, ultima_vez = now()`,
+      [consulta.split(' | '), articulo],
+    );
+  } catch {
+    /* que no se aprenda de una visita no le importa a nadie */
+  }
+}
 
 /**
  * Por encima de esta proporción de artículos, un término no distingue nada.
@@ -239,16 +265,24 @@ export async function buscarPrecedentes(
       ),
       filas<{ id: string; titulo: string; descripcion: string | null; categoria: string | null; tipo_solucion: string | null; sql: string | null; relevancia: number; cobertura: number }>(
         `WITH p(termino, peso) AS (SELECT * FROM unnest($4::text[], $5::float8[]))
-         SELECT k.id::text, k.titulo, k.descripcion, k.categoria, k.tipo_solucion,
-                k.script_json->>'sql' AS sql,
-                (SELECT coalesce(sum(p.peso), 0) FROM p
-                  WHERE k.busqueda @@ to_tsquery('spanish', p.termino)) / $6 AS cobertura,
-                -- Un artículo con script vale más: además de explicar, trae el arreglo.
-                ts_rank(k.busqueda, q) * (CASE WHEN k.script_json IS NOT NULL THEN 1.4 ELSE 1 END) AS relevancia
-         FROM knowledge_base k, to_tsquery('spanish', $1) q
-         WHERE k.busqueda @@ q
-           AND ($3 = false OR coalesce(k.visible_para, 'todos') = 'todos')
-         ORDER BY cobertura DESC, relevancia DESC
+         SELECT * FROM (
+           SELECT k.id::text, k.titulo, k.descripcion, k.categoria, k.tipo_solucion,
+                  k.script_json->>'sql' AS sql,
+                  (SELECT coalesce(sum(p.peso), 0) FROM p
+                    WHERE k.busqueda @@ to_tsquery('spanish', p.termino)) / $6 AS cobertura,
+                  -- Cuántas veces se abrió este tema tras buscar con estas palabras.
+                  (SELECT coalesce(sum(a.veces), 0) FROM soporte.aprendizaje a
+                    WHERE a.articulo = k.id::text AND a.termino = ANY($4::text[])) AS aprendido,
+                  -- Un artículo con script vale más: además de explicar, trae el arreglo.
+                  ts_rank(k.busqueda, q) * (CASE WHEN k.script_json IS NOT NULL THEN 1.4 ELSE 1 END) AS relevancia
+           FROM knowledge_base k, to_tsquery('spanish', $1) q
+           WHERE k.busqueda @@ q
+             AND ($3 = false OR coalesce(k.visible_para, 'todos') = 'todos')
+         ) s
+         -- Lo aprendido empuja, no manda: tope de 0,25 sobre una cobertura que va de 0
+         -- a 1, así que no puede subir un tema que no tenga nada que ver por mucho que
+         -- lo hayan abierto. Y lo que de verdad coincide sigue ganando sin ayuda.
+         ORDER BY cobertura + least(aprendido * 0.03, 0.25) DESC, relevancia DESC
          LIMIT $2`,
         [consulta, limite, opciones.soloPublicos === true, terminos, pesos, pesoTotal],
       ),

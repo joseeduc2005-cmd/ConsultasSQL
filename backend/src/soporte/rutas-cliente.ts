@@ -21,7 +21,7 @@ import { basesConectadas } from './motor-puente.ts';
 import { solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
 import { filas } from './knowledge/db.ts';
 import { guardarTicket, obtenerTicket, type Ticket } from './knowledge/tickets.ts';
-import { buscarPrecedentes } from './precedentes.ts';
+import { buscarPrecedentes, registrarAcierto } from './precedentes.ts';
 
 type Manejador = (req: Request, res: Response) => Promise<unknown>;
 

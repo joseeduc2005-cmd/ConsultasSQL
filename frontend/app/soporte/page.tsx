@@ -312,7 +312,17 @@ function Buscar({
                 <Resultado
                   key={`${p.tipo}-${p.id}`}
                   precedente={p}
-                  onAbrir={p.tipo === 'articulo' ? () => onAbrir({ tipo: 'articulo', id: p.id }) : undefined}
+                  onAbrir={
+                    p.tipo === 'articulo'
+                      ? () => {
+                          // Abrir un resultado es la mejor respuesta que hay a «esta
+                          // forma de decirlo, ¿con qué tema se resuelve?». Se apunta
+                          // antes de navegar, sin esperar: si falla, no se nota.
+                          void clienteApi.temaAbierto(p.id, texto);
+                          onAbrir({ tipo: 'articulo', id: p.id });
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </>

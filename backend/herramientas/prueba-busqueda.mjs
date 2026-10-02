@@ -28,16 +28,15 @@ const { buscarPrecedentes } = await import('../src/soporte/precedentes.ts');
 /**
  * Lo que se espera de cada frase.
  *
- * `espera` lleva fragmentos de título; vale cualquiera de ellos. Hay dos artículos sobre
- * lo mismo —«Error al generar reporte» y «Error en generar reporte»— y aceptar los dos
- * no es relajar la prueba: es que la base tiene un duplicado, y eso es un problema del
- * contenido, no del buscador.
+ * `espera` lleva fragmentos de título; vale cualquiera de ellos. Son fragmentos y no
+ * títulos enteros para que renombrar un tema —algo que pasa cada vez que alguien lo
+ * escribe mejor— no obligue a reescribir la batería entera.
  */
-const REPORTE = ['generar reporte'];
+const REPORTE = ['reporte de transacciones'];
 
 const CASOS = [
   // 1 — Auditoría de duplicados
-  { espera: ['Auditoría de datos duplicados'], frases: [
+  { espera: ['duplicados o huérfanos'], frases: [
     'necesito que revisen si hay usuarios repetidos en corresponsales',
     'hay representantes que quedaron sin su POS asociado, estan huerfanos',
     'quiero un listado de los registros duplicados de la base de corresponsales',
@@ -45,7 +44,7 @@ const CASOS = [
     'tenemos POS que apuntan a dos usuarios distintos, hay que auditarlo',
   ]},
   // 2 — Sucursal desactualizada
-  { espera: ['Mall Alto'], frases: [
+  { espera: ['Descuadre contable'], frases: [
     'la socia cambio de oficina pero en contabilidad le sigue saliendo la agencia vieja',
     'cambio de sucursal del corresponsal y los movimientos salen con la oficina anterior',
     'hay descuadre en cuentas por cobrar porque la sucursal no se actualizo',
@@ -53,7 +52,7 @@ const CASOS = [
     'las comisiones del corresponsal se contabilizan en la agencia equivocada',
   ]},
   // 3 — Acta y pago
-  { espera: ['acta y solicitud de pago'], frases: [
+  { espera: ['Comisión no pagada'], frases: [
     'el corresponsal reclama que no le han pagado su comision del mes',
     'en el acta no le aparece el valor completo al tendero',
     'hay un pago pendiente de varios meses a un corresponsal',
@@ -68,14 +67,14 @@ const CASOS = [
     'el tendero intenta generar su reporte y el sistema le bota error',
   ]},
   // 5 — Recaudación GAD Mejía
-  { espera: ['recaudacion Municipio GAD Mejia'], frases: [
+  { espera: ['GAD Mejía'], frases: [
     'error al procesar una recaudacion de un municipio en el POS',
     'la tendera no puede cobrar el servicio del municipio, le sale error',
     'falla la recaudacion del GAD en un POS Z90',
     'no se puede recaudar el agua del municipio desde el corresponsal',
   ]},
   // 7 — Recargas
-  { espera: ['recargas Claro'], frases: [
+  { espera: ['saldo no llega'], frases: [
     'la señora hizo una recarga de 5 dolares y nunca le entro el saldo al celular',
     'las recargas de claro estan presentando inconvenientes',
     'le descontaron el valor de la recarga pero el telefono no recibio nada',
@@ -83,7 +82,7 @@ const CASOS = [
     'no se pueden hacer recargas desde el corresponsal',
   ]},
   // 8 — Reimpresión de comprobante
-  { espera: ['reimpresion de comprobante'], frases: [
+  { espera: ['No imprime el comprobante'], frases: [
     'el POS no imprime el comprobante de la recaudacion local',
     'cobro bien pero no salio el documento de respaldo',
     'no puede reimprimir el comprobante despues de recaudar',
@@ -91,7 +90,7 @@ const CASOS = [
     'necesita el respaldo impreso de un cobro de recaudacion local',
   ]},
   // 9 — Formato de clave y PIN
-  { espera: ['Formato de contraseña y PIN'], frases: [
+  { espera: ['contraseña o PIN'], frases: [
     'quiero cambiar mi clave y me dice que no cumple el formato',
     'cual es la politica de claves y pines del corresponsal',
     'puse 2008 como PIN y el sistema no me deja',
@@ -99,7 +98,7 @@ const CASOS = [
     'que condiciones debe cumplir la contraseña del tendero',
   ]},
   // 10 — QR
-  { espera: ['QR Pagos Coral'], frases: [
+  { espera: ['Pagos con QR'], frases: [
     'un cliente pago con el codigo QR y el sistema no registro la transaccion',
     'estan fallando los pagos por QR en el comercio',
     'el cobro con QR no se refleja aunque al cliente si le debitaron',
@@ -131,7 +130,7 @@ const CASOS = [
     'necesito ver mas transacciones de las que me deja el reporte',
   ]},
   // 15 — Resetear clave
-  { espera: ['resetear clave'], frases: [
+  { espera: ['resetear la clave'], frases: [
     'la señora quiere que le reseteen la clave pero dice que el usuario no existe',
     'al buscar a la socia para resetear sale usuario no encontrado',
     'no recuerda su clave ni su contraseña y no se puede resetear',

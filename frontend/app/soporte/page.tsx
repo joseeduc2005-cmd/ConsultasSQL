@@ -786,7 +786,11 @@ function Cabecera() {
   };
 
   return (
-    <div className="glass-panel-strong flex items-center gap-4 rounded-2xl border px-4 py-3 sm:px-5">
+    // `relative z-30` no es decorativo: `glass-panel-strong` lleva backdrop-filter, que
+    // convierte esta cabecera en un contexto de apilado propio. El `z-80` del menú de
+    // usuario queda encerrado dentro, así que sin elevar la cabecera entera el panel de
+    // comentarios —que va después en el DOM— le pasaba por encima al desplegarlo.
+    <div className="glass-panel-strong relative z-30 flex items-center gap-4 rounded-2xl border px-4 py-3 sm:px-5">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#2363eb] to-[#1aa0c8] text-[15px] font-bold text-white shadow-sm">
         S
       </div>

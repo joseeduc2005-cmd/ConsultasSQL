@@ -16,6 +16,7 @@ import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
 import { precalentarEstadoOracle } from './adaptadores/http/rutas-admin.ts';
 import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
+import type { Auditoria } from './puertos/auditoria.ts';
 
 export { crearSoporteClienteRouter } from './adaptadores/http/rutas-cliente.ts';
 export { crearSoporteRouter } from './adaptadores/http/rutas-admin.ts';
@@ -32,6 +33,12 @@ export interface OpcionesSoporte {
    * se llegó de verdad; sin él sigue funcionando, solo que esas listas van vacías.
    */
   registro?: RegistroMotor;
+  /**
+   * Dónde deja rastro lo que el módulo hace por su cuenta. Las rutas ya las audita el
+   * middleware del backend; esto es para la vigilancia, que corre sola cada minuto y
+   * por tanto no pasa por ninguna petición.
+   */
+  auditoria?: Auditoria;
 }
 
 /**
@@ -41,7 +48,7 @@ export interface OpcionesSoporte {
  * No lanza: un fallo aquí deja el módulo de soporte inutilizable pero no impide que
  * el resto del backend arranque.
  */
-export async function iniciarSoporte({ obtenerPool, log, motor, registro }: OpcionesSoporte): Promise<boolean> {
+export async function iniciarSoporte({ obtenerPool, log, motor, registro, auditoria }: OpcionesSoporte): Promise<boolean> {
   const registrar = log ?? ((m: string) => console.log(m));
   configurarPool(obtenerPool);
   if (registro) configurarMotor(registro);
@@ -85,8 +92,10 @@ export async function iniciarSoporte({ obtenerPool, log, motor, registro }: Opci
   precalentarEstadoOracle();
 
   if (config.vigilancia.habilitada) {
-    iniciarVigilancia(fuente, (m) => registrar(`  ${m}`));
-    registrar('✓ [soporte] Vigilancia activada');
+    iniciarVigilancia(fuente, (m) => registrar(`  ${m}`), auditoria);
+    registrar(auditoria
+      ? '✓ [soporte] Vigilancia activada (auditada)'
+      : '⚠ [soporte] Vigilancia activada SIN auditoría: no se le pasó dónde registrar');
   }
   return true;
 }

@@ -130,12 +130,12 @@ export async function logArticleChange({ articleId, articleTitulo, accion, reali
  * no tenerla, así que si la escritura falla se queda en la consola y la petición
  * sigue su camino.
  */
-export async function logRequest({ metodo, ruta, usuario, rol, ip, userAgent, estado, duracionMs, cuerpo }) {
+export async function logRequest({ metodo, ruta, usuario, rol, ip, userAgent, estado, duracionMs, cuerpo, comoAcabo }) {
   try {
     await obtenerPool().query(
       `INSERT INTO auditoria_peticiones
-         (metodo, ruta, usuario, rol, ip, user_agent, estado, duracion_ms, cuerpo, fecha)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+         (metodo, ruta, usuario, rol, ip, user_agent, estado, duracion_ms, cuerpo, como_acabo, fecha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
       [
         String(metodo || '').slice(0, 10),
         String(ruta || '').slice(0, 300),
@@ -146,6 +146,7 @@ export async function logRequest({ metodo, ruta, usuario, rol, ip, userAgent, es
         Number.isFinite(Number(estado)) ? Number(estado) : null,
         Number.isFinite(Number(duracionMs)) ? Math.round(Number(duracionMs)) : null,
         cuerpo ? JSON.stringify(cuerpo) : null,
+        comoAcabo ? String(comoAcabo).slice(0, 12) : null,
       ]
     );
   } catch (error) {

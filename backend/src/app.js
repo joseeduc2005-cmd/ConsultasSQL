@@ -72,7 +72,7 @@ import { ALLOWED_WHERE_OPERATORS, DYNAMIC_SCRIPT_ALLOWED_TYPES, MANUAL_SQL_BLOCK
 import { buildHumanSqlExplanation, buildProductionSqlResponse, sanitizeProductionResultObject } from './dominio/presentacion/explicacion.js';
 import { applyCastToSqlPlaceholder, applyOptionalSqlFilterTransform, buildAnalyticSelectQuery, buildManualSqlQuery, collectManualSqlPlaceholderMetadata, countPositionalSqlPlaceholders, getValueByPath, inferManualPlaceholderCast, inferStructuredParamSemantic, isMissingParamValue, isOptionalUserPlaceholder, isWriteConfirmed, normalizeLimitValue, normalizeManualSqlParamsInput, resolveDynamicScriptNode, resolveValue, resolveValueMultiSource, resolveWorkflowContextPlaceholder, sanitizeStructuredParamValue, validateStructuredParamByName, MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, MANUAL_SQL_POSITIONAL_PLACEHOLDER_REGEX, STRUCTURED_PLACEHOLDER_REGEX } from './dominio/sql/construccion.js';
 import { configurarPool as configurarPoolAuditoria, logArticleChange, logError, logLoginEvent, logQueryHistory, logRequest, logSystemEvent } from './adaptadores/postgres/auditoria.js';
-import { crearAuditoriaDePeticiones } from './adaptadores/http/auditoria.js';
+import { capturarCuerpoParaAuditoria, crearAuditoriaDePeticiones } from './adaptadores/http/auditoria.js';
 import { registrarCicloDeVida } from './adaptadores/proceso/ciclo-de-vida.js';
 import {
   configurarEsquemas,
@@ -3947,6 +3947,18 @@ const apiLimiter = rateLimit({
 });
 
 // Middleware
+// Lo primero de la cadena, a propósito y sin ruta: cualquier petición deja fila
+// antes de que nada pueda rechazarla. Montado detrás del limitador, una petición
+// rechazada por exceso devolvía 429 sin dejar rastro; detrás del analizador de JSON,
+// un cuerpo mal formado tampoco. Sin ruta porque un 404 fuera de /api también es
+// alguien llamando a una puerta, y antes no constaba.
+//
+// Las lecturas se auditan igual que los cambios: en una cooperativa, quién consultó
+// el dato de qué socio es tan auditable como quién lo cambió. Cuesta una fila por
+// petición y se escribe después de responder, así que no añade espera. El sondeo de
+// salud y el OPTIONS previo de CORS quedan fuera para que no sea casi todo ruido.
+app.use(crearAuditoriaDePeticiones({ logRequest, auditarLecturas: true }));
+
 app.use(cors({
   origin: (origin, callback) => {
     if (isOriginAllowed(origin)) return callback(null, true);
@@ -3974,6 +3986,11 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// El cuerpo se añade a la fila aquí, donde ya está leído y antes de que ningún
+// manejador lo modifique. Si el JSON venía roto esto no corre y la fila queda sin
+// cuerpo, que es lo correcto: no había cuerpo que guardar.
+app.use(capturarCuerpoParaAuditoria);
 // Asigna X-Request-Id a cada request y crea req.logger con contexto
 app.use(correlationIdMiddleware);
 app.use('/api', apiLimiter);
@@ -3982,16 +3999,6 @@ app.use('/api', apiLimiter);
 // reinicio. Va antes que cualquier router que decida permisos.
 app.use('/api', adjuntarSesion);
 
-// Toda petición deja rastro, sin que haya que acordarse ruta por ruta. Va detrás de
-// adjuntarSesion porque necesita saber quién pide, y detrás de express.json porque
-// necesita el cuerpo.
-//
-// Las lecturas también se auditan: en una cooperativa, quién consultó el dato de qué
-// socio es tan auditable como quién lo cambió. Cuesta una fila por petición y el
-// sondeo de salud queda fuera para que no sea casi todo ruido. Si algún día el
-// volumen molesta, se apaga con auditarLecturas: false y los cambios siguen
-// registrándose igual.
-app.use('/api', crearAuditoriaDePeticiones({ logRequest, auditarLecturas: true }));
 app.use(createResponseSecurityMiddleware({
   sensitiveFields: ['password', 'users_password', 'token', 'secret'],
   maxRows: Math.max(1, Number(process.env.MAX_API_ROWS) || 100),
@@ -4416,6 +4423,18 @@ async function startServer() {
       motor: {
         obtenerHuella: () => schemaDetector.getConnectionFingerprint(),
         refrescar: () => refreshSemanticLearningCache(true),
+      },
+      // La vigilancia del módulo corre sola cada minuto, así que es lo único que no
+      // pasa por una petición y el middleware de auditoría no la ve. Se le pasa dónde
+      // registrar para que su arranque, su parada y sus fallos consten igual.
+      auditoria: {
+        registrarEvento: (e) => logSystemEvent({
+          evento: e.evento,
+          usuario: e.usuario || 'sistema',
+          rol: e.rol || 'sistema',
+          detalle: e.detalle || {},
+        }),
+        registrarError: (e) => logError(e),
       },
     });
   }

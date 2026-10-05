@@ -321,9 +321,12 @@ export async function ensureRequestAuditSchema() {
         estado INTEGER,
         duracion_ms INTEGER,
         cuerpo JSONB,
+        como_acabo VARCHAR(12),
         fecha TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
     `);
+    // Para las bases donde la tabla ya existía sin esta columna.
+    await obtenerPool().query(`ALTER TABLE auditoria_peticiones ADD COLUMN IF NOT EXISTS como_acabo VARCHAR(12)`);
     // Por fecha porque casi toda consulta a la auditoría es «qué pasó últimamente»;
     // por usuario porque la otra es «qué hizo esta persona».
     await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_auditoria_peticiones_fecha ON auditoria_peticiones (fecha DESC)`);

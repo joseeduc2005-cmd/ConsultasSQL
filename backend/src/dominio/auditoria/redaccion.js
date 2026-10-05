@@ -111,7 +111,17 @@ export const cambiaAlgo = (metodo) => METODOS_QUE_CAMBIAN.includes(String(metodo
  */
 export const RUTAS_SIN_AUDITORIA = ['/health', '/api/health', '/favicon.ico'];
 
+/**
+ * Tampoco se audita el sondeo previo de CORS.
+ *
+ * Un OPTIONS no lo manda nadie: lo manda el navegador por su cuenta antes de la
+ * petición de verdad, y esa sí se audita. Registrarlo duplicaría cada fila sin
+ * añadir un solo dato sobre quién hizo qué.
+ */
+export const METODOS_SIN_AUDITORIA = ['OPTIONS', 'HEAD'];
+
 export function seAudita(metodo, ruta) {
+  if (METODOS_SIN_AUDITORIA.includes(String(metodo || '').toUpperCase())) return false;
   const camino = String(ruta || '').split('?')[0];
   if (RUTAS_SIN_AUDITORIA.includes(camino)) return false;
   return true;

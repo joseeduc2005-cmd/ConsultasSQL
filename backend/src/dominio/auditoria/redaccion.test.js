@@ -103,6 +103,20 @@ describe('qué se audita', () => {
     assert.equal(seAudita('DELETE', '/api/history'), true);
   });
 
+  it('el sondeo previo de CORS no se audita', () => {
+    // Un OPTIONS no lo manda nadie: lo manda el navegador antes de la petición de
+    // verdad, y esa sí se audita. Registrarlo duplicaría cada fila sin añadir un dato.
+    assert.equal(seAudita('OPTIONS', '/api/comments'), false);
+    assert.equal(seAudita('HEAD', '/api/articles'), false);
+    assert.equal(seAudita('options', '/api/comments'), false, 'en minúscula también');
+  });
+
+  it('un 404 fuera de /api también se audita', () => {
+    // Alguien llamando a una puerta que no existe es justo lo que hay que poder ver.
+    assert.equal(seAudita('POST', '/ruta-que-no-existe'), true);
+    assert.equal(seAudita('GET', '/'), true);
+  });
+
   it('un intento denegado también se audita', () => {
     // Es el caso que más importa poder ver después, así que no hay regla que lo saque.
     assert.equal(seAudita('POST', '/api/databases'), true);

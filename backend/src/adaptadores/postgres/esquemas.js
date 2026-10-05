@@ -306,3 +306,31 @@ export async function ensureSemanticLearningSchema() {
     console.error('✗ Error asegurando esquema semantic_learning:', err.message || err);
   }
 }
+
+export async function ensureRequestAuditSchema() {
+  try {
+    await obtenerPool().query(`
+      CREATE TABLE IF NOT EXISTS auditoria_peticiones (
+        id BIGSERIAL PRIMARY KEY,
+        metodo VARCHAR(10) NOT NULL,
+        ruta VARCHAR(300) NOT NULL,
+        usuario VARCHAR(150),
+        rol VARCHAR(50),
+        ip VARCHAR(60),
+        user_agent VARCHAR(300),
+        estado INTEGER,
+        duracion_ms INTEGER,
+        cuerpo JSONB,
+        fecha TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    // Por fecha porque casi toda consulta a la auditoría es «qué pasó últimamente»;
+    // por usuario porque la otra es «qué hizo esta persona».
+    await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_auditoria_peticiones_fecha ON auditoria_peticiones (fecha DESC)`);
+    await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_auditoria_peticiones_usuario ON auditoria_peticiones (usuario)`);
+    await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_auditoria_peticiones_ruta ON auditoria_peticiones (ruta)`);
+    console.log('✓ Esquema auditoria_peticiones asegurado');
+  } catch (error) {
+    console.error('Error asegurando esquema auditoria_peticiones:', error.message);
+  }
+}

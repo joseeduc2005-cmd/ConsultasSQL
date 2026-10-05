@@ -117,3 +117,65 @@ export async function logArticleChange({ articleId, articleTitulo, accion, reali
     console.error('[ARTICLE_CHANGE_AUDIT] ❌ Error registrando cambio:', err.message || err);
   }
 }
+
+/**
+ * El rastro de una petición que cambió algo.
+ *
+ * A diferencia de las de arriba, a esta no la llama nadie a mano: la llama un
+ * middleware por cada petición. Esa es justamente la idea — antes auditar dependía
+ * de que quien escribía una ruta se acordara, y de treinta y tantas rutas que
+ * cambiaban algo, la mitad no se acordó.
+ *
+ * Nunca lanza. Una auditoría que tumba la petición que estaba auditando es peor que
+ * no tenerla, así que si la escritura falla se queda en la consola y la petición
+ * sigue su camino.
+ */
+export async function logRequest({ metodo, ruta, usuario, rol, ip, userAgent, estado, duracionMs, cuerpo }) {
+  try {
+    await obtenerPool().query(
+      `INSERT INTO auditoria_peticiones
+         (metodo, ruta, usuario, rol, ip, user_agent, estado, duracion_ms, cuerpo, fecha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+      [
+        String(metodo || '').slice(0, 10),
+        String(ruta || '').slice(0, 300),
+        usuario ? String(usuario).slice(0, 150) : null,
+        rol ? String(rol).slice(0, 50) : null,
+        ip ? String(ip).slice(0, 60) : null,
+        userAgent ? String(userAgent).slice(0, 300) : null,
+        Number.isFinite(Number(estado)) ? Number(estado) : null,
+        Number.isFinite(Number(duracionMs)) ? Math.round(Number(duracionMs)) : null,
+        cuerpo ? JSON.stringify(cuerpo) : null,
+      ]
+    );
+  } catch (error) {
+    console.error('[AUDITORIA] no se pudo registrar la petición:', error.message);
+  }
+}
+
+/**
+ * Un error, en la tabla que ya existía para ellos.
+ *
+ * La tabla error_logs se venía creando en cada arranque desde hacía tiempo y no
+ * escribía en ella nadie: estaba vacía. Esto la conecta al manejador de errores.
+ */
+export async function logError({ mensaje, stack, modulo, capa, contexto, archivo, linea, metadata }) {
+  try {
+    await obtenerPool().query(
+      `INSERT INTO error_logs (mensaje, stack, modulo, capa, contexto, archivo, linea, metadata, fecha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+      [
+        String(mensaje || 'error sin mensaje').slice(0, 2000),
+        stack ? String(stack).slice(0, 8000) : null,
+        modulo ? String(modulo).slice(0, 255) : null,
+        capa ? String(capa).slice(0, 120) : null,
+        contexto ? String(contexto).slice(0, 255) : null,
+        archivo ? String(archivo).slice(0, 255) : null,
+        Number.isFinite(Number(linea)) ? Number(linea) : null,
+        metadata ? JSON.stringify(metadata) : null,
+      ]
+    );
+  } catch (error) {
+    console.error('[AUDITORIA] no se pudo registrar el error:', error.message);
+  }
+}

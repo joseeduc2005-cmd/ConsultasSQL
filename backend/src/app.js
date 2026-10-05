@@ -71,7 +71,9 @@ import { crearRutasConsultas } from './adaptadores/http/consultas.js';
 import { ALLOWED_WHERE_OPERATORS, DYNAMIC_SCRIPT_ALLOWED_TYPES, MANUAL_SQL_BLOCKED_KEYWORDS, WORKFLOW_ALLOWED_STEP_TYPES, assertDynamicScriptAllowed, assertManualSqlAllowed, buildRelationKey, detectSqlOperation, ensureDynamicColumnAllowed, ensureDynamicJoinRelationAllowed, hasRelationBetweenFields, isPlainObject, normalizeBusinessStep, normalizeDynamicScriptType, parseQualifiedFieldRef, resolveWhereEntry, validateBusinessScriptDefinition, validateRelationalMutationScriptDefinition, validateRelationalScriptDefinition, validateWorkflowBuilderDefinition } from './dominio/scripts/validacion.js';
 import { buildHumanSqlExplanation, buildProductionSqlResponse, sanitizeProductionResultObject } from './dominio/presentacion/explicacion.js';
 import { applyCastToSqlPlaceholder, applyOptionalSqlFilterTransform, buildAnalyticSelectQuery, buildManualSqlQuery, collectManualSqlPlaceholderMetadata, countPositionalSqlPlaceholders, getValueByPath, inferManualPlaceholderCast, inferStructuredParamSemantic, isMissingParamValue, isOptionalUserPlaceholder, isWriteConfirmed, normalizeLimitValue, normalizeManualSqlParamsInput, resolveDynamicScriptNode, resolveValue, resolveValueMultiSource, resolveWorkflowContextPlaceholder, sanitizeStructuredParamValue, validateStructuredParamByName, MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, MANUAL_SQL_POSITIONAL_PLACEHOLDER_REGEX, STRUCTURED_PLACEHOLDER_REGEX } from './dominio/sql/construccion.js';
-import { configurarPool as configurarPoolAuditoria, logArticleChange, logLoginEvent, logQueryHistory, logSystemEvent } from './adaptadores/postgres/auditoria.js';
+import { configurarPool as configurarPoolAuditoria, logArticleChange, logError, logLoginEvent, logQueryHistory, logRequest, logSystemEvent } from './adaptadores/postgres/auditoria.js';
+import { crearAuditoriaDePeticiones } from './adaptadores/http/auditoria.js';
+import { registrarCicloDeVida } from './adaptadores/proceso/ciclo-de-vida.js';
 import {
   configurarEsquemas,
   ensureKnowledgeBaseSchema,
@@ -80,6 +82,7 @@ import {
   ensureQueryHistorySchema,
   ensureErrorLogsSchema,
   ensureSemanticLearningSchema,
+  ensureRequestAuditSchema,
 } from './adaptadores/postgres/esquemas.js';
 import {
   configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
@@ -345,6 +348,7 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
       ensureQueryHistorySchema(),
       ensureErrorLogsSchema(),
       ensureSemanticLearningSchema(),
+      ensureRequestAuditSchema(),
     ]);
     await refreshSemanticLearningCache(true);
     await queryBuilder.getFullSchema();
@@ -357,6 +361,15 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
       }
     }).catch(() => {});
     logger.info('Conexión activa recargada', { reason, ms: Date.now() - reloadStart });
+    // Recargar la configuración cambia a qué bases apunta el sistema entero. Es el
+    // cambio de más alcance que se puede hacer sin tocar código, y hasta ahora solo
+    // constaba en el log de texto.
+    void logSystemEvent({
+      evento: 'CONFIGURACION_RECARGADA',
+      usuario: 'sistema',
+      rol: 'sistema',
+      detalle: { motivo: reason, ms: Date.now() - reloadStart, bases: multiDbRegistry.getDatabases().length },
+    });
     if (previousPool && previousPool !== nextPool) {
       await previousPool.end().catch(() => {});
     }
@@ -372,6 +385,20 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
       await nextPool.end().catch(() => {});
     }
     logger.error('No se pudo recargar la conexión activa', { reason, error: error?.message || String(error) });
+    // La recarga fallida es más importante que la buena: el sistema se queda con la
+    // configuración anterior y desde fuera parece que el cambio se aplicó.
+    void logSystemEvent({
+      evento: 'CONFIGURACION_RECARGADA_FALLIDA',
+      usuario: 'sistema',
+      rol: 'sistema',
+      detalle: { motivo: reason, error: error?.message || String(error), seRevirtio: true },
+    });
+    void logError({
+      mensaje: error?.message || String(error),
+      stack: error?.stack || null,
+      capa: 'configuracion',
+      contexto: `reloadActiveDatabaseConnection:${reason}`,
+    });
     throw error;
   }
 }
@@ -3954,6 +3981,17 @@ app.use('/api', apiLimiter);
 // leen de forma síncrona ven al usuario aunque la caché en memoria esté fría tras un
 // reinicio. Va antes que cualquier router que decida permisos.
 app.use('/api', adjuntarSesion);
+
+// Toda petición deja rastro, sin que haya que acordarse ruta por ruta. Va detrás de
+// adjuntarSesion porque necesita saber quién pide, y detrás de express.json porque
+// necesita el cuerpo.
+//
+// Las lecturas también se auditan: en una cooperativa, quién consultó el dato de qué
+// socio es tan auditable como quién lo cambió. Cuesta una fila por petición y el
+// sondeo de salud queda fuera para que no sea casi todo ruido. Si algún día el
+// volumen molesta, se apaga con auditarLecturas: false y los cambios siguen
+// registrándose igual.
+app.use('/api', crearAuditoriaDePeticiones({ logRequest, auditarLecturas: true }));
 app.use(createResponseSecurityMiddleware({
   sensitiveFields: ['password', 'users_password', 'token', 'secret'],
   maxRows: Math.max(1, Number(process.env.MAX_API_ROWS) || 100),
@@ -4322,6 +4360,23 @@ app.use((err, req, res, next) => {
 
   console.error(`[${errorId}] ${requestMethod} ${requestPath}:`, err?.message || err);
 
+  // La tabla error_logs existía desde hacía tiempo y no escribía en ella nadie: se
+  // creaba en cada arranque y se quedaba vacía. Un error que solo sale por consola
+  // se pierde en cuanto el proceso se reinicia, que es justo cuando hace falta.
+  void logError({
+    mensaje: err?.message || String(err),
+    stack: err?.stack || null,
+    modulo: requestPath,
+    capa: 'http',
+    contexto: `${requestMethod} ${requestPath}`,
+    metadata: {
+      errorId,
+      estado: statusCode,
+      usuario: req?.usuarioSesion?.username || null,
+      ip: req?.ip || null,
+    },
+  });
+
   const safeMessage = statusCode >= 500
     ? 'Internal Server Error'
     : (err?.message || 'Request failed');
@@ -4349,6 +4404,7 @@ async function startServer() {
     await ensureQueryHistorySchema();
     await ensureErrorLogsSchema();
     await ensureSemanticLearningSchema();
+    await ensureRequestAuditSchema();
     await refreshSemanticLearningCache(true);
     // El módulo de soporte comparte el pool del backend; `pool` se reasigna cuando
     // cambia la configuración multi-DB, por eso se pasa un getter y no el valor.
@@ -4399,12 +4455,37 @@ async function startServer() {
   })();
 
   app.listen(PORT, () => {
+    // El arranque también es un movimiento del sistema: sin esto, un reinicio no
+    // planeado a las tres de la mañana no deja ni una línea en la base.
+    void logSystemEvent({
+      evento: 'SERVICIO_ARRANCADO',
+      usuario: 'sistema',
+      rol: 'sistema',
+      detalle: {
+        puerto: PORT,
+        entorno: nodeEnv,
+        postgresInterno: dbConnected ? 'conectado' : 'degradado',
+        bases: multiDbRegistry.getDatabases().length,
+        nodo: process.version,
+      },
+    });
     console.log(`\n╔════════════════════════════════════════╗\n║  BOTON PAGO API - Backend             ║\n╚════════════════════════════════════════╝\n\n📍 Server:   http://localhost:${PORT}\n🌍 API:      http://localhost:${PORT}/api\n💓 Health:   http://localhost:${PORT}/health\n🔧 Env:      ${nodeEnv}\n⏰ Started:   ${new Date().toLocaleTimeString()}\n\n✅ Ready to accept requests...\n`);
   });
 }
 
-startServer().catch((error) => {
+// Lo que le pasa al propio servicio: arranque, parada y caidas. Vive en su propio
+// modulo porque escrito aqui no se podia comprobar — en Windows process.kill con
+// SIGINT mata sin ejecutar el manejador.
+registrarCicloDeVida({ logSystemEvent, logError });
+
+startServer().catch(async (error) => {
   console.error('✗ Startup failed:', error?.message || error);
+  await logError({
+    mensaje: error?.message || String(error),
+    stack: error?.stack || null,
+    capa: 'arranque',
+    contexto: 'startServer',
+  }).catch(() => {});
   process.exit(1);
 });
 

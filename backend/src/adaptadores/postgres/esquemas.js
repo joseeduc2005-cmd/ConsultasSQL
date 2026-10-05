@@ -337,3 +337,58 @@ export async function ensureRequestAuditSchema() {
     console.error('Error asegurando esquema auditoria_peticiones:', error.message);
   }
 }
+
+export async function ensureAuditTimelineView() {
+  try {
+    // Una vista y no una tabla, a propósito.
+    //
+    // La pregunta que resuelve es «qué pasó, en orden, sin importar de qué tipo era»:
+    // hasta ahora había que mirar en ocho sitios distintos. Pero juntarlas en una
+    // tabla de verdad costaría caro: entre las ocho hay unas treinta columnas que solo
+    // usa una de ellas (el SQL generado, las filas devueltas, la pila de un error),
+    // así que esa tabla iría casi toda en NULL, o con todo metido en un JSONB que no
+    // se puede indexar ni preguntar «cuánto tardó de media».
+    //
+    // Con la vista cada tabla conserva su forma y sus índices, no hay que migrar nada
+    // y no se pierde un dato. Lo que se gana es un solo sitio donde preguntar.
+    await obtenerPool().query(`
+      CREATE OR REPLACE VIEW auditoria_unificada AS
+        SELECT fecha AS cuando, 'acceso' AS tipo, username AS quien, rol,
+               estado AS que, detalle::text AS detalle, ip, NULL::int AS duracion_ms,
+               'login_audit' AS origen
+          FROM login_audit
+        UNION ALL
+        SELECT created_at, 'consulta', username, user_role,
+               status, left(coalesce(query_text, generated_sql), 300), NULL, execution_ms,
+               'query_history'
+          FROM query_history
+        UNION ALL
+        SELECT ejecutado_en, 'ejecucion', ejecutado_por, ejecutado_rol,
+               estado, coalesce(article_titulo, '') || coalesce(' — ' || mensaje_error, ''),
+               NULL, duracion_ms, 'article_executions'
+          FROM article_executions
+        UNION ALL
+        SELECT realizado_en, 'contenido', realizado_por, realizado_rol,
+               accion, coalesce(article_titulo, '') || coalesce(' — ' || detalle::text, ''),
+               NULL, NULL, 'article_changes'
+          FROM article_changes
+        UNION ALL
+        SELECT fecha, 'sistema', usuario, rol,
+               evento, detalle::text, ip, NULL, 'system_events'
+          FROM system_events
+        UNION ALL
+        SELECT fecha, 'error', metadata->>'usuario', NULL,
+               coalesce(capa, 'error'), coalesce(contexto || ' — ', '') || left(mensaje, 300),
+               metadata->>'ip', NULL, 'error_logs'
+          FROM error_logs
+        UNION ALL
+        SELECT fecha, 'peticion', usuario, rol,
+               metodo || ' ' || ruta || ' → ' || coalesce(estado::text, '?'),
+               coalesce(cuerpo::text, ''), ip, duracion_ms, 'auditoria_peticiones'
+          FROM auditoria_peticiones
+    `);
+    console.log('✓ Vista auditoria_unificada asegurada');
+  } catch (error) {
+    console.error('Error asegurando la vista auditoria_unificada:', error.message);
+  }
+}

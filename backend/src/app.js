@@ -83,6 +83,7 @@ import {
   ensureErrorLogsSchema,
   ensureSemanticLearningSchema,
   ensureRequestAuditSchema,
+  ensureAuditTimelineView,
 } from './adaptadores/postgres/esquemas.js';
 import {
   columnasPermitidas, configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
@@ -356,6 +357,8 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
       ensureSemanticLearningSchema(),
       ensureRequestAuditSchema(),
     ]);
+    // La vista va después: necesita que las siete tablas existan.
+    await ensureAuditTimelineView();
     await refreshSemanticLearningCache(true);
     await queryBuilder.getFullSchema();
     await ensureMultiDbReady({ force: true, reason: `reload:${reason}` });
@@ -3711,6 +3714,7 @@ async function startServer() {
     await ensureErrorLogsSchema();
     await ensureSemanticLearningSchema();
     await ensureRequestAuditSchema();
+    await ensureAuditTimelineView();
     await refreshSemanticLearningCache(true);
     // El módulo de soporte comparte el pool del backend; `pool` se reasigna cuando
     // cambia la configuración multi-DB, por eso se pasa un getter y no el valor.

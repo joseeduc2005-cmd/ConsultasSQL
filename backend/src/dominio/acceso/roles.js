@@ -24,6 +24,17 @@ export function hasRequiredRole(userRole, requiredRole) {
   return current >= required;
 }
 
+/**
+ * El rol de quien hace la petición.
+ *
+ * Sale de la sesión y solo de la sesión. Antes se miraba primero la cabecera
+ * `x-user-role`, y eso era una escalada de privilegios: la cabecera la pone el
+ * navegador, así que una sesión de rol «user» obtenía 200 en rutas de administrador
+ * mandando «x-user-role: superadmin» — incluida la que ejecuta SQL manual.
+ *
+ * La cabecera se sigue aceptando en CORS porque el frontend la manda, pero aquí no
+ * decide nada. Lo único que vale es lo que el backend emitió al iniciar sesión.
+ */
 export function getRoleFromRequest(req, user) {
-  return normalizeRole(req.headers['x-user-role'] || user?.role || 'user');
+  return normalizeRole(user?.role || 'user');
 }

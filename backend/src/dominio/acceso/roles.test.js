@@ -64,22 +64,13 @@ describe('de dónde sale el rol de quien pide', () => {
     assert.equal(getRoleFromRequest(req, { role: 'admin' }), 'admin');
   });
 
-  it('OJO: hoy la cabecera del navegador gana sobre la sesión', () => {
-    // Esto NO es lo que debería pasar, y la prueba está aquí para que conste.
-    //
-    // `x-user-role` la pone el navegador: cualquiera puede escribir lo que quiera en
-    // ella. Hoy se prefiere a lo que dice la sesión, que es lo único que el backend
-    // emitió. Verificado contra el backend corriendo: una sesión de rol «user» recibe
-    // 403 en /api/query-history, y 200 mandando «x-user-role: superadmin».
-    //
-    // Afecta a toda ruta que decida con `getRoleFromRequest` + `hasRequiredRole`,
-    // incluida POST /api/sql/manual, que ejecuta SQL.
-    //
-    // El arreglo es quitar la cabecera de esa línea. No se hizo todavía porque el
-    // frontend la manda en varias peticiones y hay que comprobar que ninguna pantalla
-    // dependa de ella. Cuando se arregle, esta prueba se da la vuelta.
+  it('la cabecera del navegador no decide nada', () => {
+    // Esto era una escalada de privilegios: se miraba `x-user-role` antes que la
+    // sesión, y la cabecera la pone el navegador. Una sesión de rol «user» obtenía
+    // 200 en rutas de administrador mandando «x-user-role: superadmin», incluida la
+    // que ejecuta SQL manual.
     const req = { headers: { 'x-user-role': 'superadmin' } };
-    assert.equal(getRoleFromRequest(req, { role: 'user' }), 'superadmin');
+    assert.equal(getRoleFromRequest(req, { role: 'user' }), 'user');
   });
 
   it('sin cabecera ni sesión, el rol más bajo', () => {

@@ -7,10 +7,38 @@ export const sessions = new Map();
 let _pool = null;
 export function initSessionStore(pool) { _pool = pool; }
 
+/**
+ * El usuario de la petición, sin esperar.
+ *
+ * Mira primero lo que dejó `adjuntarSesion`, que sí pudo consultar la base. Sin eso
+ * solo queda la caché en memoria, y esa está vacía tras reiniciar el backend aunque la
+ * sesión siga siendo válida — que es como un administrador acababa recibiendo 403 en
+ * sus propias pantallas.
+ */
 export function getUserFromRequest(req) {
+  if (req?.usuarioSesion !== undefined) return req.usuarioSesion;
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '').trim();
   return sessions.get(token) || null;
+}
+
+/**
+ * Middleware que resuelve la sesión una vez por petición.
+ *
+ * Las rutas la leen de forma síncrona en veintiún sitios. Hacerlas asíncronas una por
+ * una era tocar ocho archivos para arreglar lo mismo; resolviéndola aquí, todas ven el
+ * usuario correcto sin cambiar ni una línea.
+ */
+export function adjuntarSesion(req, _res, next) {
+  getUserFromRequestAsync(req)
+    .then((usuario) => {
+      req.usuarioSesion = usuario;
+      next();
+    })
+    .catch(() => {
+      req.usuarioSesion = null;
+      next();
+    });
 }
 
 /**

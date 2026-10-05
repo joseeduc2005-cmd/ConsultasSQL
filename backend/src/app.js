@@ -47,7 +47,7 @@ import { connectDatabase as probeUniversalConnection, closeConnection as closeUn
 import { createQueryRouter } from './routes/QueryRoute.js';
 import { initDynamicRoutes } from './routes/DynamicRoutes.js';
 import { createResponseSecurityMiddleware } from './infrastructure/security/responseSecurity.js';
-import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore } from './lib/session.js';
+import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './lib/session.js';
 import { createAuthRouter } from './routes/authRoute.js';
 import { createContentRouter } from './routes/contentRoute.js';
 import { createExecuteRouter, createRepairRouter } from './routes/executeRoute.js';
@@ -6048,6 +6048,10 @@ app.use(express.urlencoded({ extended: true }));
 // Asigna X-Request-Id a cada request y crea req.logger con contexto
 app.use(correlationIdMiddleware);
 app.use('/api', apiLimiter);
+// La sesión se resuelve una vez por petición y queda en `req`: así las rutas que la
+// leen de forma síncrona ven al usuario aunque la caché en memoria esté fría tras un
+// reinicio. Va antes que cualquier router que decida permisos.
+app.use('/api', adjuntarSesion);
 app.use(createResponseSecurityMiddleware({
   sensitiveFields: ['password', 'users_password', 'token', 'secret'],
   maxRows: Math.max(1, Number(process.env.MAX_API_ROWS) || 100),

@@ -1,0 +1,3 @@
+
+# El modelo de voz se prepara por entorno (scripts/preparar-modelo-voz.mjs), no viaja en el repo
+public/vosk/*.tar.gz

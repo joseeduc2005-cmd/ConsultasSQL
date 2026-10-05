@@ -21,13 +21,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import CommentsSection from '../components/CommentsSection';
 import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
 import { Markdown, resumenPlano } from './markdown';
+import { useDictado, type Dictado } from './dictado';
 import { clienteApi, type Aporte, type PasoAporte, type PrecedentePublico } from './api';
 
 /** Qué se está mirando en el panel de la derecha. */
@@ -243,89 +244,17 @@ function Categoria({
 // ─── Dictado ─────────────────────────────────────────────────────────────────
 
 /**
- * Dictar el problema en vez de escribirlo.
+ * El botón de dictar, con lo que puede hacer cada navegador.
  *
- * Usa el reconocimiento de voz del navegador, no una librería ni un servicio: ya viene
- * con Chrome y Edge, no hay nada que instalar y el audio no pasa por nuestro backend.
- * Donde no exista —Firefox, por ejemplo— el botón no se muestra en vez de salir roto.
- *
- * Lo dictado se añade a lo que ya hubiera escrito, no lo reemplaza: quien empieza a
- * teclear y termina hablando no pierde lo del principio.
+ * Chrome y Edge dictan directo. Firefox y Brave no traen reconocimiento de voz, así que
+ * se les ofrece descargar el modelo que corre dentro del navegador — y se les dice el
+ * tamaño antes, porque cuarenta megas a espaldas de alguien no se descargan.
  */
-function useDictado(alTexto: (fragmento: string) => void) {
-  const [grabando, setGrabando] = useState(false);
-  const [disponible, setDisponible] = useState(false);
-  const motor = useRef<any>(null);
-  // El callback cambia en cada render; la referencia evita rearmar el reconocedor.
-  const entregar = useRef(alTexto);
-  entregar.current = alTexto;
-
-  useEffect(() => {
-    const Reconocimiento =
-      (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!Reconocimiento) return;
-
-    const r = new Reconocimiento();
-    r.lang = 'es-EC';
-    r.continuous = true;
-    // Sin resultados intermedios la caja se queda muerta mientras uno habla, y parece
-    // que no está escuchando.
-    r.interimResults = false;
-    r.onresult = (e: any) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) entregar.current(e.results[i][0].transcript.trim());
-      }
-    };
-    r.onend = () => setGrabando(false);
-    r.onerror = () => setGrabando(false);
-
-    motor.current = r;
-    setDisponible(true);
-    return () => {
-      try {
-        r.stop();
-      } catch {
-        /* ya estaba parado */
-      }
-    };
-  }, []);
-
-  const alternar = () => {
-    const r = motor.current;
-    if (!r) return;
-    try {
-      if (grabando) r.stop();
-      else {
-        r.start();
-        setGrabando(true);
-      }
-    } catch {
-      setGrabando(false);
-    }
-  };
-
-  return { grabando, disponible, alternar };
-}
-
-/**
- * El botón se muestra siempre, también donde el navegador no sabe dictar.
- *
- * Antes se ocultaba, y eso dejaba a quien lo buscaba sin saber si el sistema no lo
- * tenía o si estaba roto. Mejor que esté y diga por qué no puede.
- */
-function BotonDictado({
-  grabando,
-  disponible,
-  alternar,
-}: {
-  grabando: boolean;
-  disponible: boolean;
-  alternar: () => void;
-}) {
-  if (!disponible) {
+function BotonDictado({ dictado }: { dictado: Dictado }) {
+  if (dictado.motor === 'ninguno') {
     return (
       <span
-        title="Dictar necesita Chrome o Edge; su navegador no lo permite"
+        title="Este navegador no permite dictar"
         className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-500) opacity-60"
       >
         <MicOff className="size-4" />
@@ -334,20 +263,36 @@ function BotonDictado({
     );
   }
 
+  const conModelo = dictado.motor === 'vosk';
+  const etiqueta = dictado.preparando
+    ? 'Preparando…'
+    : dictado.grabando
+      ? 'Escuchando…'
+      : conModelo
+        ? 'Dictar (descarga 40 MB)'
+        : 'Dictar';
+
   return (
     <button
       type="button"
-      onClick={alternar}
-      title={grabando ? 'Dejar de dictar' : 'Dictar el problema'}
-      aria-pressed={grabando}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors ${
-        grabando
+      onClick={dictado.alternar}
+      disabled={dictado.preparando}
+      title={
+        conModelo
+          ? 'Su navegador no dicta por sí solo: se descargará un modelo que funciona dentro del navegador, sin enviar el audio a ningún sitio'
+          : dictado.grabando
+            ? 'Dejar de dictar'
+            : 'Dictar el problema'
+      }
+      aria-pressed={dictado.grabando}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+        dictado.grabando
           ? 'border-rose-500/40 bg-rose-500/10 text-rose-600'
           : 'border-(--line) bg-(--surface-2) text-(--ink-900) hover:border-(--accent)'
       }`}
     >
-      {grabando ? <MicOff className="size-4 animate-pulse" /> : <Mic className="size-4" />}
-      {grabando ? 'Escuchando…' : 'Dictar'}
+      {dictado.grabando ? <MicOff className="size-4 animate-pulse" /> : <Mic className="size-4" />}
+      {etiqueta}
     </button>
   );
 }
@@ -407,15 +352,17 @@ function Buscar({
             <Search className="size-4" />
             {buscar.isPending ? 'Buscando…' : 'Buscar solución'}
           </button>
-          <BotonDictado grabando={dictado.grabando} disponible={dictado.disponible} alternar={dictado.alternar} />
+          <BotonDictado dictado={dictado} />
           <span className="text-[12.5px] text-(--ink-500)">
-            {dictado.grabando
-              ? 'Hable con naturalidad; pulse otra vez para terminar'
-              : !dictado.disponible
-                ? 'El dictado necesita Chrome o Edge'
-                : listo
-                  ? 'Ctrl + Enter para buscar'
-                  : 'Escriba o dicte su problema'}
+            {dictado.error
+              ? dictado.error
+              : dictado.preparando
+                ? 'Descargando el modelo de voz, solo la primera vez…'
+                : dictado.grabando
+                  ? 'Hable con naturalidad; pulse otra vez para terminar'
+                  : listo
+                    ? 'Ctrl + Enter para buscar'
+                    : 'Escriba o dicte su problema'}
           </span>
         </div>
       </section>

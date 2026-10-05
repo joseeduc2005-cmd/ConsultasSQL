@@ -11,9 +11,9 @@
  * pero apagada no debe costar nada hasta que se use.
  */
 import { config, type BaseTickets } from '../config.ts';
-import { FuenteDemo } from './fuente-demo.ts';
-import { FuenteOracle } from './fuente-oracle.ts';
-import type { FuenteDatos } from './fuente.ts';
+import { FuenteDemo } from '../adaptadores/oracle/fuente-demo.ts';
+import { FuenteOracle } from '../adaptadores/oracle/fuente-oracle.ts';
+import type { FuenteDatos } from '../puertos/fuente-datos.ts';
 
 const registro = new Map<string, FuenteDatos>();
 
@@ -54,4 +54,4 @@ export async function cerrarFuentes(): Promise<void> {
   registro.clear();
 }
 
-export type { FuenteDatos, Fila, Parametros } from './fuente.ts';
+export type { FuenteDatos, Fila, Parametros } from '../puertos/fuente-datos.ts';

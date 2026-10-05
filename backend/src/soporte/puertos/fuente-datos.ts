@@ -1,5 +1,5 @@
 import type { ModoOracle } from '../config.ts';
-import type { NombreConsulta } from './catalogo.ts';
+import type { NombreConsulta } from '../dominio/oracle/catalogo.ts';
 
 export type Fila = Record<string, unknown>;
 export type Parametros = Record<string, string | number | Date | null>;

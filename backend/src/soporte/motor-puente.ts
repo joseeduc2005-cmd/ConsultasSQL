@@ -12,7 +12,7 @@
  *   - Todo pasa por el guardián de solo lectura antes de salir. `executeCompiledQuery`
  *     ejecuta lo que le den, incluidas escrituras, y esto nunca debe escribir.
  */
-import { asegurarSoloLectura } from './oracle/guardia.ts';
+import { asegurarSoloLectura } from './dominio/oracle/guardia.ts';
 import type { Ejecutor, TablaEsquema } from './exploracion-generica.ts';
 
 /** Lo que se usa del registro del motor, sin arrastrar todo el objeto. */

@@ -27,7 +27,7 @@ import {
 import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
 import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
 import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
-import type { EstadoFuente } from './oracle/fuente.ts';
+import type { EstadoFuente } from './puertos/fuente-datos.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { explorarDesdeEntrada } from './exploracion.ts';
 import { buscarPrecedentes, busquedasFallidas } from './precedentes.ts';

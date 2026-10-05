@@ -29,8 +29,8 @@
  *     decide una persona. La exploración detecta y propone; validar sigue siendo
  *     trabajo de quien atiende.
  */
-import type { Fila, FuenteDatos } from './oracle/fuente.ts';
-import type { NombreConsulta } from './oracle/catalogo.ts';
+import type { Fila, FuenteDatos } from './puertos/fuente-datos.ts';
+import type { NombreConsulta } from './dominio/oracle/catalogo.ts';
 
 /** Días hacia atrás que definen «usuario que está operando». */
 const DIAS_SANOS = 30;

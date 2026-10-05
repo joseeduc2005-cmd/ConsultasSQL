@@ -1,6 +1,6 @@
 import { config } from '../config.ts';
 import { registrarAlertas, registrarEjecucion, ultimaEjecucion, type EjecucionMonitor } from '../knowledge/alertas.ts';
-import type { FuenteDatos } from '../oracle/fuente.ts';
+import type { FuenteDatos } from '../puertos/fuente-datos.ts';
 import { MONITORES, type Monitor } from './monitores.ts';
 
 const enCurso = new Set<string>();

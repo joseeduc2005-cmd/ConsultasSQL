@@ -1,6 +1,6 @@
-import { config } from '../config.ts';
-import type { NombreConsulta } from './catalogo.ts';
-import type { EstadoFuente, Fila, FuenteDatos, Parametros } from './fuente.ts';
+import { config } from '../../config.ts';
+import type { NombreConsulta } from '../../dominio/oracle/catalogo.ts';
+import type { EstadoFuente, Fila, FuenteDatos, Parametros } from '../../puertos/fuente-datos.ts';
 
 /**
  * Datos 100 % ficticios para probar la aplicación sin conexión a Oracle.

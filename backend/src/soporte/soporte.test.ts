@@ -17,9 +17,9 @@ import { CORRECCIONES, accionDe, resolverPlantilla } from './correcciones.ts';
 import { explorarUsuario } from './exploracion.ts';
 import { extraerIdentificadores } from './interpreter/extraer.ts';
 import { clasificarConReglas } from './interpreter/reglas.ts';
-import { asegurarSoloLectura } from './oracle/guardia.ts';
-import type { Fila, FuenteDatos, Parametros } from './oracle/fuente.ts';
-import type { NombreConsulta } from './oracle/catalogo.ts';
+import { asegurarSoloLectura } from './dominio/oracle/guardia.ts';
+import type { Fila, FuenteDatos, Parametros } from './puertos/fuente-datos.ts';
+import type { NombreConsulta } from './dominio/oracle/catalogo.ts';
 
 // ─── Guardián de solo lectura ────────────────────────────────────────────────
 

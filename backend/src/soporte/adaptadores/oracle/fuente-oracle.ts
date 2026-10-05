@@ -1,8 +1,8 @@
 import oracledb from 'oracledb';
-import { config } from '../config.ts';
-import { CATALOGO, type NombreConsulta } from './catalogo.ts';
-import { asegurarSoloLectura } from './guardia.ts';
-import type { EstadoFuente, Fila, FuenteDatos, Parametros } from './fuente.ts';
+import { config } from '../../config.ts';
+import { CATALOGO, type NombreConsulta } from '../../dominio/oracle/catalogo.ts';
+import { asegurarSoloLectura } from '../../dominio/oracle/guardia.ts';
+import type { EstadoFuente, Fila, FuenteDatos, Parametros } from '../../puertos/fuente-datos.ts';
 
 /** Conserva solo los parámetros que la sentencia realmente usa (Oracle rechaza binds sobrantes). */
 function parametrosUsados(sql: string, parametros: Parametros): Parametros {

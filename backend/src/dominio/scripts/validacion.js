@@ -127,8 +127,8 @@ export function resolveWhereEntry(rawValue) {
   return { op: '=', value: rawValue, fieldRef: null };
 }
 
-export function ensureDynamicColumnAllowed(tableName, columns) {
-  const allowedColumns = DYNAMIC_SCRIPT_ALLOWED_COLUMNS[tableName] || [];
+export function ensureDynamicColumnAllowed(tableName, columns, esquema) {
+  const allowedColumns = esquema.columnasDe(tableName);
   for (const columnName of columns) {
     if (!allowedColumns.includes(columnName)) {
       throw new Error(`Columna no permitida: ${columnName}`);
@@ -148,7 +148,7 @@ export function ensureDynamicJoinRelationAllowed(left, right, contextLabel = 'JO
   }
 }
 
-export function assertDynamicScriptAllowed(script) {
+export function assertDynamicScriptAllowed(script, esquema) {
   const type = normalizeDynamicScriptType(script.tipo);
   const tableName = String(script.tabla || '').trim().toLowerCase();
 
@@ -156,7 +156,7 @@ export function assertDynamicScriptAllowed(script) {
     throw new Error('Operación no permitida');
   }
 
-  if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(tableName)) {
+  if (!esquema.permiteTabla(tableName)) {
     throw new Error('Tabla no permitida');
   }
 
@@ -171,13 +171,13 @@ export function assertDynamicScriptAllowed(script) {
     if (!whereObject || Object.keys(whereObject).length === 0) {
       throw new Error('UPDATE requiere un objeto where válido');
     }
-    ensureDynamicColumnAllowed(tableName, Object.keys(setObject));
+    ensureDynamicColumnAllowed(tableName, Object.keys(setObject), esquema);
     for (const fieldRef of Object.keys(whereObject)) {
       const { table, column } = parseQualifiedFieldRef(fieldRef, tableName);
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(table)) {
+      if (!esquema.permiteTabla(table)) {
         throw new Error(`WHERE: tabla no permitida (${table})`);
       }
-      ensureDynamicColumnAllowed(table, [column]);
+      ensureDynamicColumnAllowed(table, [column], esquema);
     }
   }
 
@@ -185,7 +185,7 @@ export function assertDynamicScriptAllowed(script) {
     if (!dataObject || Object.keys(dataObject).length === 0) {
       throw new Error('INSERT requiere un objeto data válido');
     }
-    ensureDynamicColumnAllowed(tableName, Object.keys(dataObject));
+    ensureDynamicColumnAllowed(tableName, Object.keys(dataObject), esquema);
   }
 
   if (type === 'delete' || type === 'select') {
@@ -196,10 +196,10 @@ export function assertDynamicScriptAllowed(script) {
       // Support both plain "columna" keys and qualified "tabla.columna" keys
       for (const fieldRef of Object.keys(whereObject)) {
         const { table, column } = parseQualifiedFieldRef(fieldRef, tableName);
-        if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(table)) {
+        if (!esquema.permiteTabla(table)) {
           throw new Error(`WHERE: tabla no permitida (${table})`);
         }
-        ensureDynamicColumnAllowed(table, [column]);
+        ensureDynamicColumnAllowed(table, [column], esquema);
       }
     }
 
@@ -208,10 +208,10 @@ export function assertDynamicScriptAllowed(script) {
         .map((entry) => parseQualifiedFieldRef(String(entry || '').trim(), tableName));
 
       parsedColumns.forEach(({ table, column }) => {
-        if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(table)) {
+        if (!esquema.permiteTabla(table)) {
           throw new Error(`SELECT: tabla no permitida (${table})`);
         }
-        ensureDynamicColumnAllowed(table, [column]);
+        ensureDynamicColumnAllowed(table, [column], esquema);
       });
     }
   }
@@ -278,7 +278,7 @@ export function assertManualSqlAllowed(sqlText, options = {}) {
   }
 }
 
-export function validateWorkflowBuilderDefinition(script) {
+export function validateWorkflowBuilderDefinition(script, esquema) {
   if (!script || typeof script !== 'object' || Array.isArray(script)) {
     throw new Error('script_json de workflow inválido');
   }
@@ -315,11 +315,11 @@ export function validateWorkflowBuilderDefinition(script) {
       return;
     }
 
-    assertDynamicScriptAllowed(rawStep);
+    assertDynamicScriptAllowed(rawStep, esquema);
   });
 }
 
-export function validateRelationalScriptDefinition(script) {
+export function validateRelationalScriptDefinition(script, esquema) {
   if (!script || typeof script !== 'object' || Array.isArray(script)) {
     throw new Error('Script relacional inválido');
   }
@@ -330,7 +330,7 @@ export function validateRelationalScriptDefinition(script) {
   }
 
   const baseTable = String(script.tabla || '').trim().toLowerCase();
-  if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(baseTable)) {
+  if (!esquema.permiteTabla(baseTable)) {
     throw new Error(`Tabla base no permitida: ${baseTable || 'vacía'}`);
   }
 
@@ -345,7 +345,7 @@ export function validateRelationalScriptDefinition(script) {
     }
 
     const joinTable = String(joinItem.tabla || '').trim().toLowerCase();
-    if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(joinTable)) {
+    if (!esquema.permiteTabla(joinTable)) {
       throw new Error(`Join ${index + 1}: tabla no permitida (${joinTable || 'vacía'})`);
     }
 
@@ -358,22 +358,22 @@ export function validateRelationalScriptDefinition(script) {
       const left = parseQualifiedFieldRef(leftRef, baseTable);
       const right = parseQualifiedFieldRef(rightRef);
 
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(left.table)) {
+      if (!esquema.permiteTabla(left.table)) {
         throw new Error(`Join ${index + 1}: tabla no permitida en ON (${left.table})`);
       }
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+      if (!esquema.permiteTabla(right.table)) {
         throw new Error(`Join ${index + 1}: tabla no permitida en ON (${right.table})`);
       }
 
-      ensureDynamicColumnAllowed(left.table, [left.column]);
-      ensureDynamicColumnAllowed(right.table, [right.column]);
+      ensureDynamicColumnAllowed(left.table, [left.column], esquema);
+      ensureDynamicColumnAllowed(right.table, [right.column], esquema);
       ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`);
     });
 
     if (Array.isArray(joinItem.columnas)) {
       joinItem.columnas.forEach((columnName) => {
         const col = String(columnName || '').trim();
-        if (col) ensureDynamicColumnAllowed(joinTable, [col]);
+        if (col) ensureDynamicColumnAllowed(joinTable, [col], esquema);
       });
     }
   });
@@ -381,7 +381,7 @@ export function validateRelationalScriptDefinition(script) {
   if (Array.isArray(script.columnas)) {
     script.columnas.forEach((columnName) => {
       const col = String(columnName || '').trim();
-      if (col) ensureDynamicColumnAllowed(baseTable, [col]);
+      if (col) ensureDynamicColumnAllowed(baseTable, [col], esquema);
     });
   }
 
@@ -389,24 +389,24 @@ export function validateRelationalScriptDefinition(script) {
   if (whereObject) {
     Object.entries(whereObject).forEach(([fieldRef, rawValue]) => {
       const { table, column } = parseQualifiedFieldRef(fieldRef, baseTable);
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(table)) {
+      if (!esquema.permiteTabla(table)) {
         throw new Error(`WHERE: tabla no permitida (${table})`);
       }
-      ensureDynamicColumnAllowed(table, [column]);
+      ensureDynamicColumnAllowed(table, [column], esquema);
 
       const { fieldRef: rightFieldRef } = resolveWhereEntry(rawValue);
       if (rightFieldRef) {
         const right = parseQualifiedFieldRef(rightFieldRef, baseTable);
-        if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+        if (!esquema.permiteTabla(right.table)) {
           throw new Error(`WHERE: tabla no permitida (${right.table})`);
         }
-        ensureDynamicColumnAllowed(right.table, [right.column]);
+        ensureDynamicColumnAllowed(right.table, [right.column], esquema);
       }
     });
   }
 }
 
-export function validateRelationalMutationScriptDefinition(script, mutationType) {
+export function validateRelationalMutationScriptDefinition(script, mutationType, esquema) {
   if (!script || typeof script !== 'object' || Array.isArray(script)) {
     throw new Error('Script relacional inválido');
   }
@@ -417,7 +417,7 @@ export function validateRelationalMutationScriptDefinition(script, mutationType)
   }
 
   const baseTable = String(script.tabla || '').trim().toLowerCase();
-  if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(baseTable)) {
+  if (!esquema.permiteTabla(baseTable)) {
     throw new Error(`Tabla base no permitida: ${baseTable || 'vacía'}`);
   }
 
@@ -432,7 +432,7 @@ export function validateRelationalMutationScriptDefinition(script, mutationType)
     }
 
     const joinTable = String(joinItem.tabla || '').trim().toLowerCase();
-    if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(joinTable)) {
+    if (!esquema.permiteTabla(joinTable)) {
       throw new Error(`Join ${index + 1}: tabla no permitida (${joinTable || 'vacía'})`);
     }
 
@@ -445,15 +445,15 @@ export function validateRelationalMutationScriptDefinition(script, mutationType)
       const left = parseQualifiedFieldRef(leftRef, baseTable);
       const right = parseQualifiedFieldRef(rightRef, baseTable);
 
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(left.table)) {
+      if (!esquema.permiteTabla(left.table)) {
         throw new Error(`Join ${index + 1}: tabla no permitida en ON (${left.table})`);
       }
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+      if (!esquema.permiteTabla(right.table)) {
         throw new Error(`Join ${index + 1}: tabla no permitida en ON (${right.table})`);
       }
 
-      ensureDynamicColumnAllowed(left.table, [left.column]);
-      ensureDynamicColumnAllowed(right.table, [right.column]);
+      ensureDynamicColumnAllowed(left.table, [left.column], esquema);
+      ensureDynamicColumnAllowed(right.table, [right.column], esquema);
       ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`);
     });
   });
@@ -465,18 +465,18 @@ export function validateRelationalMutationScriptDefinition(script, mutationType)
 
   Object.entries(whereObject).forEach(([fieldRef, rawValue]) => {
     const { table, column } = parseQualifiedFieldRef(fieldRef, baseTable);
-    if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(table)) {
+    if (!esquema.permiteTabla(table)) {
       throw new Error(`WHERE: tabla no permitida (${table})`);
     }
-    ensureDynamicColumnAllowed(table, [column]);
+    ensureDynamicColumnAllowed(table, [column], esquema);
 
     const { fieldRef: rightFieldRef } = resolveWhereEntry(rawValue);
     if (rightFieldRef) {
       const right = parseQualifiedFieldRef(rightFieldRef, baseTable);
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+      if (!esquema.permiteTabla(right.table)) {
         throw new Error(`WHERE: tabla no permitida (${right.table})`);
       }
-      ensureDynamicColumnAllowed(right.table, [right.column]);
+      ensureDynamicColumnAllowed(right.table, [right.column], esquema);
     }
   });
 
@@ -485,11 +485,11 @@ export function validateRelationalMutationScriptDefinition(script, mutationType)
     if (!setObject || Object.keys(setObject).length === 0) {
       throw new Error('UPDATE relacional requiere un objeto set válido');
     }
-    ensureDynamicColumnAllowed(baseTable, Object.keys(setObject));
+    ensureDynamicColumnAllowed(baseTable, Object.keys(setObject), esquema);
   }
 }
 
-export function validateBusinessScriptDefinition(script) {
+export function validateBusinessScriptDefinition(script, esquema) {
   if (!script || typeof script !== 'object' || Array.isArray(script)) {
     throw new Error('script_json empresarial inválido');
   }
@@ -529,18 +529,18 @@ export function validateBusinessScriptDefinition(script) {
   }
 
   if (Array.isArray(script.workflow)) {
-    validateWorkflowBuilderDefinition(script);
+    validateWorkflowBuilderDefinition(script, esquema);
     return;
   }
 
   if (Array.isArray(script.join)) {
-    validateRelationalScriptDefinition(script);
+    validateRelationalScriptDefinition(script, esquema);
     return;
   }
 
   const dynamicType = normalizeDynamicScriptType(script.tipo);
   if (dynamicType) {
-    assertDynamicScriptAllowed(script);
+    assertDynamicScriptAllowed(script, esquema);
     return;
   }
 

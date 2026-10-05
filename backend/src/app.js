@@ -85,9 +85,13 @@ import {
   ensureRequestAuditSchema,
 } from './adaptadores/postgres/esquemas.js';
 import {
-  configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
+  columnasPermitidas, configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
   relacionesDelEsquema, resetDynamicSchemaCache, tablasPermitidas, tiposDeColumna,
 } from './adaptadores/postgres/esquema-dinamico.js';
+import {
+  asegurarTipoDeColumna, buildRelationalMutationQuery, buildRelationalSelectQuery,
+  buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
+} from './dominio/sql/relacional.js';
 
 // El pool se reasigna al recargar la configuración multi-base, así que la auditoría
 // recibe un getter y no el valor: guardar el de ahora sería escribir contra una
@@ -797,6 +801,24 @@ async function ensureSqlUsesWhitelistedTables(sqlText, options = {}) {
   }
 }
 
+// ── El único sitio donde el dominio se asoma al esquema real ──────────────────
+//
+// Las reglas de qué se puede tocar son del negocio y viven en dominio/. Los datos
+// que esas reglas necesitan —qué tablas hay, qué columnas, de qué tipo— los sabe
+// PostgreSQL. Este objeto es la juntura, y está aquí para que esté en un sitio.
+//
+// Antes no existía, y por eso dominio/scripts/validacion.js se quedó referenciando
+// dos variables que vivían en app.js y que al mudarse no viajaron con él. El módulo
+// nació reventando con un ReferenceError en cada comprobación de tabla permitida, y
+// así estuvo catorce commits: las pruebas de caracterización que escribí cubrían las
+// funciones puras de ese fichero, justo no las cuatro que tenían la dependencia.
+const ESQUEMA_PERMITIDO = {
+  permiteTabla: (nombre) => tablasPermitidas().includes(nombre),
+  columnasDe: (nombre) => columnasPermitidas()[nombre] || [],
+  validarTipo: (tabla, columna, valor) =>
+    asegurarTipoDeColumna(tiposDeColumna()?.[tabla]?.[columna], columna, valor),
+};
+
 async function executeSafeSelectQuery(queryText, queryParams = [], timeoutMs = 5000, options = {}) {
   if (containsBlockedSql(queryText)) {
     throw new Error('SQL bloqueado por políticas de seguridad. Solo SELECT sin sentencias peligrosas.');
@@ -1500,54 +1522,6 @@ async function resolveErrorAnalysisResponse(text, dbPool) {
 
 
 
-function normalizeStrictSqlRawPayload(rawPayload) {
-  const raw = rawPayload && typeof rawPayload === 'object' && !Array.isArray(rawPayload)
-    ? rawPayload
-    : {};
-
-  const rows = Array.isArray(raw.rows)
-    ? raw.rows
-    : Array.isArray(raw.data)
-      ? raw.data
-      : (raw.resultado && typeof raw.resultado === 'object' && !Array.isArray(raw.resultado) && Array.isArray(raw.resultado.data))
-        ? raw.resultado.data
-      : Array.isArray(raw.resultado)
-        ? raw.resultado
-        : [];
-
-  const semanticCandidate =
-    (raw.resultado && typeof raw.resultado === 'object' && !Array.isArray(raw.resultado) ? raw.resultado : null)
-    || (raw.resultadoSemantico && typeof raw.resultadoSemantico === 'object' && !Array.isArray(raw.resultadoSemantico) ? raw.resultadoSemantico : null)
-    || (raw.resultado_final && typeof raw.resultado_final === 'object' && !Array.isArray(raw.resultado_final) ? raw.resultado_final : null)
-    || (raw.final && typeof raw.final === 'object' && !Array.isArray(raw.final) ? raw.final : null)
-    || (rows[0] && typeof rows[0] === 'object' && !Array.isArray(rows[0]) ? rows[0] : {});
-
-  const noticesFromArray = Array.isArray(raw.notices) ? raw.notices : [];
-  const noticesFromSummary = String(raw.resumenHumano || raw.explicacion || raw.explanation || '')
-    .split(/\r?\n/)
-    .map((line) => String(line || '').trim())
-    .filter(Boolean);
-  const notices = noticesFromArray.length > 0 ? noticesFromArray : noticesFromSummary;
-
-  const explicacion = String(
-    raw.resumenHumano
-    || raw.explicacion
-    || raw.explanation
-    || raw.message
-    || raw.error
-    || '',
-  ).trim();
-
-  const message = String(raw.message || raw.error || '').trim();
-
-  return {
-    rows,
-    notices,
-    semanticCandidate,
-    explicacion,
-    message,
-  };
-}
 
 function enforceStrictProductionSqlPayload(rawPayload) {
   const normalized = normalizeStrictSqlRawPayload(rawPayload);
@@ -1696,13 +1670,6 @@ function renumberWhereParams(whereClause = '', allValues = []) {
   return { clause, values };
 }
 
-/** Picks a likely identifier column from a row, for before/after matching. */
-function pickRowIdentifier(row = {}) {
-  for (const k of ['id', 'ID', 'Id', '_id', 'uuid', 'UUID', 'codigo', 'CODIGO']) {
-    if (row && Object.prototype.hasOwnProperty.call(row, k)) return { key: k, value: row[k] };
-  }
-  return null;
-}
 
 /** Runs a bounded SELECT against the target DB to snapshot rows. Never throws. */
 async function snapshotRowsForDetail(table, whereClause, values, targetDatabaseId, dbType, limit = 100) {
@@ -1730,89 +1697,7 @@ async function snapshotRowsForDetail(table, whereClause, values, targetDatabaseI
   }
 }
 
-/** Formats a value for the before/after detail lines. */
-function formatDetailValue(v) {
-  if (v === null || v === undefined) return 'NULL';
-  if (v instanceof Date) return v.toISOString();
-  if (typeof v === 'object') {
-    const s = JSON.stringify(v);
-    return s.length > 80 ? s.slice(0, 80) + '…' : s;
-  }
-  const s = String(v);
-  return s.length > 80 ? s.slice(0, 80) + '…' : s;
-}
 
-/**
- * Builds a human, multi-line explanation for a write operation, including a
- * per-row before→after diff (UPDATE), deleted rows (DELETE) or inserted rows (INSERT).
- */
-function buildWriteDetailExplanation({ operation, table, affectedRows, beforeRows = [], afterRows = [], text = '' }) {
-  const op = String(operation || '').toLowerCase();
-  const preview = String(text || '').replace(/\s+/g, ' ').trim();
-  const queryPreview = preview.length > 160 ? preview.slice(0, 160) + '…' : preview;
-  const n = Number(affectedRows || 0);
-  const plural = (count) => (count === 1 ? '' : 's');
-  const lines = [];
-
-  if (op === 'update') {
-    lines.push(`✅ UPDATE ejecutado en \`${table}\` — ${n} fila${plural(n)} afectada${plural(n)}.`);
-    if (n === 0) {
-      lines.push('ℹ️ Ninguna fila coincidió con el criterio WHERE — no se modificó ningún dato.');
-    } else if (beforeRows.length && afterRows.length) {
-      const afterById = new Map();
-      for (const r of afterRows) {
-        const id = pickRowIdentifier(r);
-        if (id) afterById.set(String(id.value), r);
-      }
-      lines.push('📋 Cambios aplicados (antes → después):');
-      let shown = 0;
-      for (const before of beforeRows) {
-        if (shown >= 20) { lines.push(`  … y ${beforeRows.length - shown} fila${plural(beforeRows.length - shown)} más`); break; }
-        const id = pickRowIdentifier(before);
-        const after = id ? afterById.get(String(id.value)) : null;
-        if (!after) continue;
-        const changes = [];
-        for (const key of Object.keys(before)) {
-          const b = formatDetailValue(before[key]);
-          const a = formatDetailValue(after[key]);
-          if (b !== a) changes.push(`${key}: ${b} → ${a}`);
-        }
-        if (changes.length) {
-          const lbl = id ? `${id.key}=${formatDetailValue(id.value)}` : `fila ${shown + 1}`;
-          lines.push(`  • ${lbl} — ${changes.join('  |  ')}`);
-          shown++;
-        }
-      }
-      if (shown === 0) lines.push('  • Las filas coincidieron pero los valores nuevos eran iguales a los anteriores.');
-    }
-  } else if (op === 'delete') {
-    lines.push(`✅ DELETE ejecutado en \`${table}\` — ${n} fila${plural(n)} eliminada${plural(n)}.`);
-    if (n === 0) {
-      lines.push('ℹ️ Ninguna fila coincidió con el criterio WHERE — no se eliminó ningún dato.');
-    } else if (beforeRows.length) {
-      lines.push('🗑️ Registros eliminados:');
-      beforeRows.slice(0, 20).forEach((r) => {
-        const entries = Object.entries(r).slice(0, 6).map(([k, v]) => `${k}=${formatDetailValue(v)}`);
-        lines.push(`  • ${entries.join(', ')}`);
-      });
-      if (beforeRows.length > 20) lines.push(`  … y ${beforeRows.length - 20} más`);
-    }
-  } else if (op === 'insert') {
-    lines.push(`✅ INSERT ejecutado en \`${table}\` — ${n} fila${plural(n)} insertada${plural(n)}.`);
-    if (afterRows.length) {
-      lines.push('📥 Registros insertados:');
-      afterRows.slice(0, 20).forEach((r) => {
-        const entries = Object.entries(r).slice(0, 8).map(([k, v]) => `${k}=${formatDetailValue(v)}`);
-        lines.push(`  • ${entries.join(', ')}`);
-      });
-    }
-  } else {
-    lines.push(`✅ ${op.toUpperCase()} ejecutado correctamente — ${n} fila${plural(n)} afectada${plural(n)}.`);
-  }
-
-  lines.push(`📝 SQL: ${queryPreview}`);
-  return lines.join('\n');
-}
 
 async function executeSingleManualSqlStep(sqlText, rawParams, emit, workflowContext = {}, silent = false, options = {}) {
   const startedAt = Date.now();
@@ -2898,186 +2783,14 @@ function normalizeWorkflowStoredValue(stepResult) {
 
 
 
-function validateDynamicColumnType(tableName, field, value) {
-  if (value === null || value === undefined) {
-    return;
-  }
-
-  const expected = tiposDeColumna()?.[tableName]?.[field];
-  if (!expected) {
-    return;
-  }
-
-  if (expected === 'string' && typeof value !== 'string') {
-    throw new Error(`Tipo inválido para ${field}`);
-  }
-
-  if (expected === 'boolean' && typeof value !== 'boolean') {
-    throw new Error(`Tipo inválido para ${field}`);
-  }
-
-  if (expected === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
-    throw new Error(`Tipo inválido para ${field}`);
-  }
-
-  if (expected === 'string_or_number' && typeof value !== 'string' && typeof value !== 'number') {
-    throw new Error(`Tipo inválido para ${field}`);
-  }
-}
 
 
 
 
-function buildSelectProjectionSql(script, baseTable) {
-  const rootColumns = Array.isArray(script?.columnas)
-    ? script.columnas.map((entry) => String(entry || '').trim()).filter(Boolean)
-    : [];
-
-  const joinColumns = Array.isArray(script?.join)
-    ? script.join.flatMap((joinItem) => {
-        const joinTable = String(joinItem?.tabla || '').trim().toLowerCase();
-        const cols = Array.isArray(joinItem?.columnas) ? joinItem.columnas : [];
-        return cols
-          .map((entry) => String(entry || '').trim())
-          .filter(Boolean)
-          .map((column) => ({ table: joinTable, column }));
-      })
-    : [];
-
-  const projection = [
-    ...rootColumns.map((column) => ({ table: baseTable, column })),
-    ...joinColumns,
-  ];
-
-  if (projection.length === 0) {
-    return `"${baseTable}".*`;
-  }
-
-  return projection
-    .map(({ table, column }) => `"${table}"."${column}"`)
-    .join(', ');
-}
 
 
-function buildRelationalMutationQuery(script, normalizedInputParams, workflowContext = {}, startIndex = 1) {
-  const baseTable = String(script.tabla || '').trim().toLowerCase();
-  const joins = Array.isArray(script.join) ? script.join : [];
-  const baseAlias = 'rb';
-
-  const toQualifiedSql = (fieldRef) => {
-    const ref = parseQualifiedFieldRef(fieldRef, baseTable);
-    const tableSql = ref.table === baseTable ? baseAlias : ref.table;
-    return `"${tableSql}"."${ref.column}"`;
-  };
-
-  const joinSql = joins
-    .map((joinItem) => {
-      const joinTable = String(joinItem.tabla || '').trim().toLowerCase();
-      const onObject = joinItem.on || {};
-      const onParts = Object.entries(onObject).map(([leftRef, rightRef]) => (
-        `${toQualifiedSql(leftRef)} = ${toQualifiedSql(rightRef)}`
-      ));
-      return `JOIN "${joinTable}" ON ${onParts.join(' AND ')}`;
-    })
-    .join(' ');
-
-  const resolvedWhere = isPlainObject(script.where)
-    ? resolveDynamicScriptNode(script.where, normalizedInputParams, workflowContext)
-    : {};
-
-  const whereValues = [];
-  const whereConditions = Object.entries(resolvedWhere || {}).map(([fieldRef, rawValue]) => {
-    const leftSql = toQualifiedSql(fieldRef);
-    const { op, value, fieldRef: rightFieldRef } = resolveWhereEntry(rawValue);
-
-    if (rightFieldRef) {
-      return `${leftSql} ${op} ${toQualifiedSql(rightFieldRef)}`;
-    }
-
-    const ref = parseQualifiedFieldRef(fieldRef, baseTable);
-    validateDynamicColumnType(ref.table, ref.column, value);
-    whereValues.push(value);
-    return `${leftSql} ${op} $${startIndex + whereValues.length - 1}`;
-  });
-
-  const logic = ['AND', 'OR'].includes(String(script.logic || '').toUpperCase())
-    ? String(script.logic).toUpperCase()
-    : 'AND';
-
-  const whereClause = whereConditions.length
-    ? ` WHERE ${whereConditions.join(` ${logic} `)} AND "${baseAlias}".ctid = "b".ctid`
-    : ` WHERE "${baseAlias}".ctid = "b".ctid`;
-
-  return {
-    baseTable,
-    baseAlias,
-    joinSql,
-    whereClause,
-    whereValues,
-    resolvedWhere,
-  };
-}
 
 
-function buildRelationalSelectQuery(script, normalizedInputParams, workflowContext = {}) {
-  const baseTable = String(script.tabla || '').trim().toLowerCase();
-  const joins = Array.isArray(script.join) ? script.join : [];
-
-    const joinClauses = joins.map((joinItem) => {
-      const joinTable = String(joinItem.tabla || '').trim().toLowerCase();
-      const onObject = joinItem.on || {};
-
-      const onParts = Object.entries(onObject).map(([leftRef, rightRef]) => {
-      const left = parseQualifiedFieldRef(leftRef, baseTable);
-      const right = parseQualifiedFieldRef(rightRef);
-
-      return `"${left.table}"."${left.column}" = "${right.table}"."${right.column}"`;
-    });
-
-    return `JOIN "${joinTable}" ON ${onParts.join(' AND ')}`;
-  });
-
-  const resolvedWhere = isPlainObject(script.where)
-    ? resolveDynamicScriptNode(script.where, normalizedInputParams, workflowContext)
-    : {};
-
-  const whereEntries = Object.entries(resolvedWhere || {});
-  const whereValues = [];
-  const whereConditions = whereEntries.map(([fieldRef, rawValue]) => {
-    const { table, column } = parseQualifiedFieldRef(fieldRef, baseTable);
-    const { op, value, fieldRef: rightFieldRef } = resolveWhereEntry(rawValue);
-
-    if (rightFieldRef) {
-      const right = parseQualifiedFieldRef(rightFieldRef, baseTable);
-      if (!tablasPermitidas().includes(right.table)) {
-        throw new Error(`WHERE: tabla no permitida (${right.table})`);
-      }
-      ensureDynamicColumnAllowed(right.table, [right.column]);
-      return `"${table}"."${column}" ${op} "${right.table}"."${right.column}"`;
-    }
-
-    validateDynamicColumnType(table, column, value);
-    whereValues.push(value);
-    return `"${table}"."${column}" ${op} $${whereValues.length}`;
-  });
-
-  // Support AND / OR logic between conditions (default: AND)
-  const logic = ['AND', 'OR'].includes(String(script.logic || '').toUpperCase())
-    ? String(script.logic).toUpperCase()
-    : 'AND';
-
-  const whereClause = whereConditions.length ? ` WHERE ${whereConditions.join(` ${logic} `)}` : '';
-  const limitValue = normalizeLimitValue(script.limit, 0);
-  const limitClause = limitValue > 0 ? ` LIMIT ${limitValue}` : '';
-  const projectionSql = buildSelectProjectionSql(script, baseTable);
-
-  return {
-    baseTable,
-    resolvedWhere,
-    whereValues,
-    query: `SELECT ${projectionSql} FROM "${baseTable}" ${joinClauses.join(' ')}${whereClause}${limitClause}`,
-  };
-}
 
 
 function buildWhereClause(whereObject, startIndex = 1, logic = 'AND') {
@@ -3130,7 +2843,7 @@ async function runPostProcessValidations(script, tableName, normalizedInputParam
     if (Object.keys(whereForValidation).length > 0) {
       for (const fieldRef of Object.keys(whereForValidation)) {
         const { table, column } = parseQualifiedFieldRef(fieldRef, tableName);
-        ensureDynamicColumnAllowed(table, [column]);
+        ensureDynamicColumnAllowed(table, [column], ESQUEMA_PERMITIDO);
       }
     }
 
@@ -3163,7 +2876,7 @@ async function runPostProcessValidations(script, tableName, normalizedInputParam
 
     const field = String(validation.campo || '').trim();
     if (field) {
-      ensureDynamicColumnAllowed(tableName, [field]);
+      ensureDynamicColumnAllowed(tableName, [field], ESQUEMA_PERMITIDO);
 
       const expected = resolveDynamicScriptNode(validation.valor, validationContext);
       const valid = rows.some((row) => evaluateValidationCondition(row[field], condition, expected));
@@ -3213,7 +2926,7 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
     return acc;
   }, {});
 
-  const validated = assertDynamicScriptAllowed(script);
+  const validated = assertDynamicScriptAllowed(script, ESQUEMA_PERMITIDO);
   console.log('[SCRIPT] Ejecutando script dinámico validado');
 
   if (validated.type === 'update') {
@@ -3224,12 +2937,12 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
         tabla: validated.tableName,
       };
 
-      validateRelationalMutationScriptDefinition(relationalScript, 'update');
+      validateRelationalMutationScriptDefinition(relationalScript, 'update', ESQUEMA_PERMITIDO);
 
       const resolvedSet = resolveDynamicScriptNode(validated.setObject, normalizedInputParams, workflowContext);
       const setFields = Object.keys(resolvedSet);
       for (const field of setFields) {
-        validateDynamicColumnType(validated.tableName, field, resolvedSet[field]);
+        ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, resolvedSet[field]);
       }
 
       const setValues = setFields.map((field) => resolvedSet[field]);
@@ -3237,7 +2950,8 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
         relationalScript,
         normalizedInputParams,
         workflowContext,
-        setFields.length + 1
+        setFields.length + 1,
+        ESQUEMA_PERMITIDO
       );
 
       const query = `UPDATE "${validated.tableName}" AS "b" SET ${setFields
@@ -3268,10 +2982,10 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
     const whereFields = Object.keys(resolvedWhere);
 
     for (const field of setFields) {
-      validateDynamicColumnType(validated.tableName, field, resolvedSet[field]);
+      ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, resolvedSet[field]);
     }
     for (const field of whereFields) {
-      validateDynamicColumnType(validated.tableName, field, resolvedWhere[field]);
+      ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, resolvedWhere[field]);
     }
 
     const setValues = setFields.map((field) => resolvedSet[field]);
@@ -3306,7 +3020,7 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
     const dataValues = dataFields.map((field) => resolvedData[field]);
 
     for (const field of dataFields) {
-      validateDynamicColumnType(validated.tableName, field, resolvedData[field]);
+      ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, resolvedData[field]);
     }
 
     const query = `INSERT INTO "${validated.tableName}" (${dataFields
@@ -3343,9 +3057,9 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
         tabla: validated.tableName,
       };
 
-      validateRelationalMutationScriptDefinition(relationalScript, 'delete');
+      validateRelationalMutationScriptDefinition(relationalScript, 'delete', ESQUEMA_PERMITIDO);
 
-      const relationalParts = buildRelationalMutationQuery(relationalScript, normalizedInputParams, workflowContext, 1);
+      const relationalParts = buildRelationalMutationQuery(relationalScript, normalizedInputParams, workflowContext, 1, ESQUEMA_PERMITIDO);
 
       const query = `DELETE FROM "${validated.tableName}" AS "b" WHERE EXISTS (SELECT 1 FROM "${validated.tableName}" AS "${relationalParts.baseAlias}" ${relationalParts.joinSql}${relationalParts.whereClause})`;
 
@@ -3371,7 +3085,7 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
     const whereFields = Object.keys(resolvedWhere);
 
     for (const field of whereFields) {
-      validateDynamicColumnType(validated.tableName, field, resolvedWhere[field]);
+      ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, resolvedWhere[field]);
     }
 
     const { whereValues, whereClause } = buildWhereClause(resolvedWhere, 1);
@@ -3426,8 +3140,8 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
         tabla: validated.tableName,
       };
 
-      validateRelationalScriptDefinition(relationalScript);
-      const relationalQuery = buildRelationalSelectQuery(relationalScript, normalizedInputParams, workflowContext);
+      validateRelationalScriptDefinition(relationalScript, ESQUEMA_PERMITIDO);
+      const relationalQuery = buildRelationalSelectQuery(relationalScript, normalizedInputParams, workflowContext, ESQUEMA_PERMITIDO);
 
       console.log('[RELATIONAL QUERY] Ejecutando select relacional parametrizado');
 
@@ -3473,9 +3187,9 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
         if (!tablasPermitidas().includes(right.table)) {
           throw new Error(`WHERE: tabla no permitida (${right.table})`);
         }
-        ensureDynamicColumnAllowed(right.table, [right.column]);
+        ensureDynamicColumnAllowed(right.table, [right.column], ESQUEMA_PERMITIDO);
       } else {
-        validateDynamicColumnType(validated.tableName, field, value);
+        ESQUEMA_PERMITIDO.validarTipo(validated.tableName, field, value);
       }
     }
 
@@ -3514,14 +3228,14 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
 }
 
 async function executeRelationalScript(script, rawParams, emit) {
-  validateRelationalScriptDefinition(script);
+  validateRelationalScriptDefinition(script, ESQUEMA_PERMITIDO);
 
   const normalizedInputParams = Object.entries(rawParams || {}).reduce((acc, [key, value]) => {
     acc[key] = sanitizeStructuredParamValue(value);
     return acc;
   }, {});
 
-  const relationalQuery = buildRelationalSelectQuery(script, normalizedInputParams, {});
+  const relationalQuery = buildRelationalSelectQuery(script, normalizedInputParams, {}, ESQUEMA_PERMITIDO);
   console.log('[RELATIONAL QUERY]', relationalQuery.query, relationalQuery.whereValues);
 
   const result = await pool.query(relationalQuery.query, relationalQuery.whereValues);
@@ -3826,7 +3540,7 @@ async function executeArticleById(articleId, rawParams, emit, options = {}) {
     }
 
     try {
-      ensureDynamicColumnAllowed(normalizedTableName, selectedColumns);
+      ensureDynamicColumnAllowed(normalizedTableName, selectedColumns, ESQUEMA_PERMITIDO);
     } catch (validationError) {
       const message = validationError instanceof Error ? validationError.message : 'Columnas inválidas';
       if (typeof emit === 'function') emit(`❌ ${message}`, 'error');
@@ -4236,7 +3950,11 @@ app.get('/api/audit/events', async (req, res) => {
 });
 app.use('/api', createContentRouter({
   pool, getUserFromRequest, ensureDynamicSchemaReady,
-  parseStructuredScript, validateBusinessScriptDefinition, logArticleChange,
+  parseStructuredScript, logArticleChange,
+  // El validador llega ya atado al esquema real: la ruta no tiene por qué saber que
+  // detrás hay un caché de PostgreSQL, solo que algo valida.
+  validateBusinessScriptDefinition: (script) =>
+    validateBusinessScriptDefinition(script, ESQUEMA_PERMITIDO),
 }));
 app.use('/api/execute', createExecuteRouter({
   executeArticleById, enforceStrictProductionSqlPayload,

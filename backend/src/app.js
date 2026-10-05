@@ -65,6 +65,11 @@ import { correlationIdMiddleware } from './middleware/correlationId.js';
 import { SQL_BLOCKED_KEYWORDS, containsBlockedSql, extractSqlReferencedTables, getDatabaseSchemaTableNames, normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from './dominio/sql/guardas.js';
 import { ROLE_LEVELS, getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
 import { ALLOWED_OUTBOUND_HOSTS, BLOCKED_OUTBOUND_PATTERNS, CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked, sanitizeOrigin } from './dominio/red/salida.js';
+import { extractDatabaseHintsFromText as deducirBases, resolveRequestedDatabasesForQuery as resolverBasesPedidas } from './dominio/bases/resolucion.js';
+
+const extractDatabaseHintsFromText = (text) => deducirBases(text, multiDbRegistry.getDatabases());
+const resolveRequestedDatabasesForQuery = (text, requestedDatabases = []) =>
+  resolverBasesPedidas(text, requestedDatabases, multiDbRegistry.getDatabases());
 
 const API_RATE_LIMIT_WINDOW_MS = Math.max(5_000, Number(process.env.API_RATE_LIMIT_WINDOW_MS) || 60_000);
 const API_RATE_LIMIT_MAX = Math.max(1, Number(process.env.API_RATE_LIMIT_MAX) || 100);
@@ -956,48 +961,7 @@ function setQueryCacheEntry(cacheKey, value, ttlMs = QUERY_CACHE_TTL_MS) {
 
 
 
-function extractDatabaseHintsFromText(text) {
-  const input = String(text || '').trim().toLowerCase();
-  if (!input) return [];
 
-  const configured = multiDbRegistry.getDatabases();
-  if (configured.length === 0) return [];
-
-  const ids = new Set();
-  const mentionsOracle = /\boracle\b/.test(input);
-  const mentionsPostgres = /\bpostgres(?:ql)?\b|\bpg\b/.test(input);
-  const mentionsMySql = /\bmysql\b/.test(input);
-
-  for (const db of configured) {
-    const dbId = String(db.id || '').trim();
-    const dbType = String(db.type || '').trim().toLowerCase();
-    if (!dbId) continue;
-
-    if (input.includes(dbId.toLowerCase())) {
-      ids.add(dbId);
-      continue;
-    }
-
-    if (mentionsOracle && dbType === 'oracle') ids.add(dbId);
-    if (mentionsPostgres && dbType === 'postgres') ids.add(dbId);
-    if (mentionsMySql && dbType === 'mysql') ids.add(dbId);
-  }
-
-  return [...ids];
-}
-
-function resolveRequestedDatabasesForQuery(text, requestedDatabases = []) {
-  const explicit = Array.isArray(requestedDatabases)
-    ? requestedDatabases.map((item) => String(item || '').trim()).filter(Boolean)
-    : [];
-
-  if (explicit.length > 0) {
-    return [...new Set(explicit)];
-  }
-
-  const inferred = extractDatabaseHintsFromText(text);
-  return [...new Set(inferred)];
-}
 
 function resolveSqlTargetDatabase(sqlText, options = {}) {
   const requestedDatabaseId = String(options?.databaseId || '').trim();

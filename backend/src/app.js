@@ -93,6 +93,8 @@ import {
   asegurarTipoDeColumna, buildRelationalMutationQuery, buildRelationalSelectQuery,
   buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
 } from './dominio/sql/relacional.js';
+import { crearGuardianesDeSoporte } from './adaptadores/http/sesion-soporte.js';
+import { ALLOWED_ACTIONS } from './aplicacion/acciones.js';
 import { crearAprendizajeSemantico } from './aplicacion/aprendizaje.js';
 import { crearEjecucionDeScripts } from './aplicacion/ejecucion.js';
 import { INTELLIGENT_QUERY_CACHE, QUERY_CACHE_TTL_MS, bumpQueryCacheDataVersion, getQueryCacheDataVersion, getQueryCacheEntry, setQueryCacheEntry } from './adaptadores/memoria/cache-consultas.js';
@@ -536,112 +538,6 @@ const ESQUEMA_PERMITIDO = {
 // ALLOWED ACTIONS - Whitelist of executable repair actions
 // No shell access. All DB queries use parameterized statements.
 // ============================================================
-const ALLOWED_ACTIONS = {
-  verificar_conexion: {
-    label: 'Verificar Conexión de Usuario',
-    fields: [{ name: 'username', label: 'Nombre de usuario', type: 'text', required: true }],
-    execute: async (params, pool, emit) => {
-      emit('🔍 Buscando usuario en el sistema...');
-      const result = await pool.query(
-        'SELECT id, username, role, created_at FROM users WHERE username = $1',
-        [params.username]
-      );
-      if (result.rowCount === 0) {
-        emit('❌ Usuario no encontrado en la base de datos');
-        return { success: false, message: 'Usuario no encontrado' };
-      }
-      const user = result.rows[0];
-      emit(`✅ Usuario encontrado: ${user.username}`);
-      emit(`✅ Rol asignado: ${user.role}`);
-      emit('✅ Conexión verificada correctamente');
-      return { success: true, message: 'Verificación completada' };
-    }
-  },
-  desbloquear_cuenta: {
-    label: 'Desbloquear Cuenta de Usuario',
-    fields: [
-      { name: 'username', label: 'Nombre de usuario', type: 'text', required: true },
-      { name: 'motivo', label: 'Motivo del desbloqueo (opcional)', type: 'textarea', required: false },
-    ],
-    execute: async (params, pool, emit) => {
-      emit('🔍 Buscando cuenta de usuario...');
-      const result = await pool.query(
-        'SELECT id, username, role FROM users WHERE username = $1',
-        [params.username]
-      );
-      if (result.rowCount === 0) {
-        emit('❌ Usuario no encontrado');
-        return { success: false, message: 'Usuario no encontrado' };
-      }
-      const user = result.rows[0];
-      emit(`✅ Cuenta encontrada: ${user.username} (${user.role})`);
-      emit('🔓 Revisando estado de bloqueo...');
-      emit('✅ Cuenta desbloqueada exitosamente');
-      if (params.motivo) {
-        emit(`📝 Motivo registrado: ${params.motivo.substring(0, 100)}`);
-      }
-      emit('✅ El usuario puede iniciar sesión nuevamente');
-      return { success: true, message: 'Cuenta desbloqueada correctamente' };
-    }
-  },
-  limpiar_sesiones: {
-    label: 'Limpiar Sesiones Antiguas',
-    fields: [
-      { name: 'username', label: 'Nombre de usuario', type: 'text', required: true },
-      { name: 'horas', label: 'Limpiar sesiones más antiguas de (horas)', type: 'number', required: true },
-    ],
-    execute: async (params, pool, emit) => {
-      const hours = parseInt(params.horas, 10);
-      if (isNaN(hours) || hours < 1) {
-        emit('❌ Número de horas inválido');
-        return { success: false, message: 'Parámetro de horas inválido' };
-      }
-      emit('🔍 Buscando sesiones del usuario...');
-      const result = await pool.query(
-        'SELECT id, username FROM users WHERE username = $1',
-        [params.username]
-      );
-      if (result.rowCount === 0) {
-        emit('❌ Usuario no encontrado');
-        return { success: false, message: 'Usuario no encontrado' };
-      }
-      emit(`✅ Usuario localizado en el sistema`);
-      emit(`🗑️ Invalidando tokens anteriores a ${hours} horas...`);
-      emit('✅ Todas las sesiones antiguas han sido cerradas');
-      emit(`✅ Se mantienen sesiones recientes (últimas ${hours} horas)`);
-      return { success: true, message: 'Sesiones limpiadas correctamente' };
-    }
-  },
-  verificar_estado_cuenta: {
-    label: 'Verificar Estado Detallado de Cuenta',
-    fields: [
-      { name: 'username', label: 'Nombre de usuario', type: 'text', required: true },
-      { name: 'incluir_logs', label: 'Incluir historial de accesos', type: 'checkbox', required: false },
-    ],
-    execute: async (params, pool, emit) => {
-      emit('🔍 Consultando estado de cuenta...');
-      const result = await pool.query(
-        'SELECT id, username, role, created_at FROM users WHERE username = $1',
-        [params.username]
-      );
-      if (result.rowCount === 0) {
-        emit('❌ Usuario no encontrado');
-        return { success: false, message: 'Usuario no encontrado' };
-      }
-      const user = result.rows[0];
-      emit(`✅ Usuario: ${user.username}`);
-      emit(`✅ Rol: ${user.role}`);
-      emit(`📅 Registrado: ${new Date(user.created_at).toLocaleDateString('es-ES')}`);
-      emit('✅ Estado de cuenta: Activa y en buen estado');
-      if (params.incluir_logs === 'true' || params.incluir_logs === true) {
-        emit('📊 Últimos accesos:');
-        emit('  • 2026-04-06 13:45 - IP 192.168.1.100');
-        emit('  • 2026-04-05 09:22 - IP 192.168.1.100');
-      }
-      return { success: true, message: 'Estado verificado correctamente' };
-    }
-  },
-};
 
 
 
@@ -1118,51 +1014,13 @@ app.use('/api/db', createDbSchemaRouter({
 }));
 app.use('/api/actions', createActionsRouter({ BUSINESS_ACTION_CATALOG, getUserFromRequest }));
 
-/**
- * El módulo de soporte consulta la Oracle de producción y expone los tickets con
- * su investigación completa, así que va entero detrás del rol admin.
- *
- * A diferencia de adminRoute, aquí NO se acepta la cabecera `x-user-role`: la
- * pone el navegador y cualquiera podría mandarla. El rol sale solo de la sesión
- * asociada al token, que es lo único que el backend emitió.
- */
-async function soloAdminSoporte(req, res, next) {
-  try {
-    const usuario = await getUserFromRequestAsync(req);
-    if (!usuario) {
-      return res.status(401).json({ error: 'Inicie sesión para acceder al módulo de soporte.' });
-    }
-    if (normalizeRole(usuario.role) !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado: el módulo de soporte requiere rol admin.' });
-    }
-    // Se adjunta para que el módulo pueda atribuir lo que publique sin volver a resolverlo.
-    req.usuarioSoporte = { id: usuario.id, username: usuario.username };
-    return next();
-  } catch (error) {
-    return next(error);
-  }
-}
 
 // Soporte: /api/soporte/{estado,resumen,tickets,consultas,playbooks,diagnosticos,monitores,alertas}
-/**
- * Cualquier persona con sesión, para la parte de reportar y buscar solución.
- *
- * Va aparte del guardián de admin a propósito: `/api/soporte` exige rol admin entero,
- * y abrir agujeros ahí es la clase de cosa que se olvida. Aquí la lista de lo que
- * puede hacer un usuario normal es explícita y corta.
- */
-async function sesionSoporte(req, res, next) {
-  try {
-    const usuario = await getUserFromRequestAsync(req);
-    if (!usuario) {
-      return res.status(401).json({ error: 'Inicie sesión para reportar o consultar un caso.' });
-    }
-    req.usuarioSoporte = { id: usuario.id, username: usuario.username };
-    return next();
-  } catch (error) {
-    return next(error);
-  }
-}
+
+const { sesionSoporte, soloAdminSoporte } = crearGuardianesDeSoporte({
+  obtenerUsuario: getUserFromRequestAsync,
+  normalizarRol: normalizeRole,
+});
 
 app.use('/api/soporte-cliente', sesionSoporte, crearSoporteClienteRouter({
   log: (datos, mensaje) => logger.info(mensaje, datos),

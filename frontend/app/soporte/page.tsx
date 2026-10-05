@@ -307,7 +307,33 @@ function useDictado(alTexto: (fragmento: string) => void) {
   return { grabando, disponible, alternar };
 }
 
-function BotonDictado({ grabando, alternar }: { grabando: boolean; alternar: () => void }) {
+/**
+ * El botón se muestra siempre, también donde el navegador no sabe dictar.
+ *
+ * Antes se ocultaba, y eso dejaba a quien lo buscaba sin saber si el sistema no lo
+ * tenía o si estaba roto. Mejor que esté y diga por qué no puede.
+ */
+function BotonDictado({
+  grabando,
+  disponible,
+  alternar,
+}: {
+  grabando: boolean;
+  disponible: boolean;
+  alternar: () => void;
+}) {
+  if (!disponible) {
+    return (
+      <span
+        title="Dictar necesita Chrome o Edge; su navegador no lo permite"
+        className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-500) opacity-60"
+      >
+        <MicOff className="size-4" />
+        Dictar (no disponible)
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -381,13 +407,15 @@ function Buscar({
             <Search className="size-4" />
             {buscar.isPending ? 'Buscando…' : 'Buscar solución'}
           </button>
-          {dictado.disponible && <BotonDictado grabando={dictado.grabando} alternar={dictado.alternar} />}
+          <BotonDictado grabando={dictado.grabando} disponible={dictado.disponible} alternar={dictado.alternar} />
           <span className="text-[12.5px] text-(--ink-500)">
             {dictado.grabando
               ? 'Hable con naturalidad; pulse otra vez para terminar'
-              : listo
-                ? 'Ctrl + Enter para buscar'
-                : 'Escriba o dicte su problema'}
+              : !dictado.disponible
+                ? 'El dictado necesita Chrome o Edge'
+                : listo
+                  ? 'Ctrl + Enter para buscar'
+                  : 'Escriba o dicte su problema'}
           </span>
         </div>
       </section>

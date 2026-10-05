@@ -71,7 +71,7 @@ import { crearRutasConsultas } from './adaptadores/http/consultas.js';
 import { ALLOWED_WHERE_OPERATORS, DYNAMIC_SCRIPT_ALLOWED_TYPES, MANUAL_SQL_BLOCKED_KEYWORDS, WORKFLOW_ALLOWED_STEP_TYPES, assertDynamicScriptAllowed, assertManualSqlAllowed, buildRelationKey, detectSqlOperation, ensureDynamicColumnAllowed, ensureDynamicJoinRelationAllowed, isPlainObject, normalizeBusinessStep, normalizeDynamicScriptType, parseQualifiedFieldRef, resolveWhereEntry, validateBusinessScriptDefinition, validateRelationalMutationScriptDefinition, validateRelationalScriptDefinition, validateWorkflowBuilderDefinition } from './dominio/scripts/validacion.js';
 import { buildHumanSqlExplanation, buildProductionSqlResponse, sanitizeProductionResultObject } from './dominio/presentacion/explicacion.js';
 import { applyCastToSqlPlaceholder, applyOptionalSqlFilterTransform, buildAnalyticSelectQuery, buildManualSqlQuery, collectManualSqlPlaceholderMetadata, countPositionalSqlPlaceholders, getValueByPath, inferManualPlaceholderCast, inferStructuredParamSemantic, isMissingParamValue, isOptionalUserPlaceholder, isWriteConfirmed, normalizeLimitValue, normalizeManualSqlParamsInput, resolveDynamicScriptNode, resolveValue, resolveValueMultiSource, resolveWorkflowContextPlaceholder, sanitizeStructuredParamValue, validateStructuredParamByName, MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, MANUAL_SQL_POSITIONAL_PLACEHOLDER_REGEX, STRUCTURED_PLACEHOLDER_REGEX } from './dominio/sql/construccion.js';
-import { configurarPool as configurarPoolAuditoria, logArticleChange, logError, logLoginEvent, logQueryHistory, logRequest, logSystemEvent } from './adaptadores/postgres/auditoria.js';
+import { configurarPool as configurarPoolAuditoria, logArticleChange, logArticleExecution, logError, logLoginEvent, logQueryHistory, logRequest, logSystemEvent } from './adaptadores/postgres/auditoria.js';
 import { capturarCuerpoParaAuditoria, crearAuditoriaDePeticiones } from './adaptadores/http/auditoria.js';
 import { registrarCicloDeVida } from './adaptadores/proceso/ciclo-de-vida.js';
 import {
@@ -93,11 +93,14 @@ import {
   asegurarTipoDeColumna, buildRelationalMutationQuery, buildRelationalSelectQuery,
   buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
 } from './dominio/sql/relacional.js';
+import { crearAprendizajeSemantico } from './aplicacion/aprendizaje.js';
 import { crearEjecucionDeScripts } from './aplicacion/ejecucion.js';
+import { INTELLIGENT_QUERY_CACHE, QUERY_CACHE_TTL_MS, bumpQueryCacheDataVersion, getQueryCacheDataVersion, getQueryCacheEntry, setQueryCacheEntry } from './adaptadores/memoria/cache-consultas.js';
 import { collectStructuredVariables, evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, interpolateStructuredNode, isEmptyWorkflowValue, normalizeWorkflowStoredValue, parseStepOrder, replaceVariables, resolveTemplateVariable } from './dominio/flujos/pasos.js';
 import { ALIAS_DE_ACCION, EXECUTABLE_SOLUTION_TYPES, MANUAL_SQL_NAMED_PLACEHOLDER_REGEX, MANUAL_SQL_TIMEOUT_MS, normalizeAndValidateStructuredParams, normalizeStructuredParams, parseStructuredScript } from './dominio/scripts/estructurado.js';
 import { MONGO_WRITE_OPS_RE, SQL_WRITE_KEYWORDS_RE, buildWhereClause, detectMongoOperation, parseWriteTarget, renumberWhereParams, scriptContainsMutation, sqlTextContainsMutation } from './dominio/sql/mutaciones.js';
 import { addWithUniqueKey, buildAggregatedResultFromStepPayload, buildComplexWorkflowExplanation, buildDistributedSyntheticSql, buildPerStepWriteSummary, extractObjectForAggregation } from './dominio/presentacion/agregacion.js';
+import { MANUAL_SQL_PLACEHOLDER_REGEX, buildAutoDashboard, buildCrossDbSelectOptions, collectStructuredRequiredParams, detectErrorAnalysisMode, detectMainTableFromText, enforceStrictProductionSqlPayload, hasUnsafeMutationWithoutWhere, isStrictSqlResponsePath, tableLooksLikeUsers } from './dominio/consultas/decidir.js';
 
 // El pool se reasigna al recargar la configuración multi-base, así que la auditoría
 // recibe un getter y no el valor: guardar el de ahora sería escribir contra una
@@ -203,17 +206,6 @@ const MULTI_DB_BOOTSTRAP_STATE = {
   runningPromise: null,
   lastRunAt: 0,
 };
-const LEARNED_SEMANTIC_CACHE = {
-  fingerprint: '',
-  loadedAt: 0,
-  ttlMs: 30 * 1000,
-  refreshPromise: null,
-  snapshot: {
-    tableAliases: {},
-    columnKeywords: {},
-    suggestionTerms: [],
-  },
-};
 logger.info('Herramientas de Schema dinámico inicializadas');
 
 async function ensureMultiDbReady(options = {}) {
@@ -317,20 +309,15 @@ async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
   return summary;
 }
 
-function resetLearnedSemanticCache() {
-  LEARNED_SEMANTIC_CACHE.fingerprint = '';
-  LEARNED_SEMANTIC_CACHE.loadedAt = 0;
-  LEARNED_SEMANTIC_CACHE.refreshPromise = null;
-  applyLearnedSemanticSnapshot({ tableAliases: {}, columnKeywords: {}, suggestionTerms: [] });
-}
 
 
 async function reloadActiveDatabaseConnection(reason = 'reload') {
   const previousPool = pool;
   const previousRegistry = BUSINESS_ACTIONS_REGISTRY;
   const previousMultiDbConfig = multiDbRegistry.getConfigSnapshot();
-  const previousLearnedSnapshot = { ...LEARNED_SEMANTIC_CACHE.snapshot };
-  const previousLearnedFingerprint = LEARNED_SEMANTIC_CACHE.fingerprint;
+  // Lo aprendido se guarda antes de tocar nada, para poder devolverlo si la base
+  // nueva no responde. Antes esto metia la mano en el cache; ahora lo pide.
+  const aprendidoAnterior = guardarEstado();
 
   multiDbRegistry.reloadFromEnv();
   setupMultiDbConfigWatcher();
@@ -389,9 +376,7 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
     pool = previousPool;
     BUSINESS_ACTIONS_REGISTRY = previousRegistry;
     schemaDetector.pool = previousPool;
-    LEARNED_SEMANTIC_CACHE.fingerprint = previousLearnedFingerprint;
-    applyLearnedSemanticSnapshot(previousLearnedSnapshot);
-    LEARNED_SEMANTIC_CACHE.loadedAt = Date.now();
+    restaurarEstado(aprendidoAnterior);
     if (nextPool && typeof nextPool.end === 'function') {
       await nextPool.end().catch(() => {});
     }
@@ -438,205 +423,19 @@ async function testDatabaseConnection() {
 
 
 
-function applyLearnedSemanticSnapshot(snapshot = {}) {
-  const safeSnapshot = {
-    tableAliases: { ...(snapshot?.tableAliases || {}) },
-    columnKeywords: { ...(snapshot?.columnKeywords || {}) },
-    suggestionTerms: dedupeSemanticValues(snapshot?.suggestionTerms || []),
-  };
-
-  LEARNED_SEMANTIC_CACHE.snapshot = safeSnapshot;
-  schemaDetector.setLearnedSemanticDictionary(safeSnapshot);
-  queryBuilder.setLearnedSemanticDictionary(safeSnapshot);
-  queryParameterizer.setLearnedSemanticDictionary(safeSnapshot);
-
-  // Inject table mappings directly into QueryIntelligenceEngine for primary lookup
-  // Format required: { normalizedTerm: { tableName, confidence }[] }
-  if (queryBuilder?.queryIntelligenceEngine?.setLearnedTableMappings) {
-    const tableMappings = {};
-    for (const [term, targetTables] of Object.entries(safeSnapshot.tableAliases || {})) {
-      const mappingEntries = (targetTables || []).map((tableName) => ({ tableName, confidence: 0.75 }));
-      if (mappingEntries.length > 0) tableMappings[term] = mappingEntries;
-    }
-    queryBuilder.queryIntelligenceEngine.setLearnedTableMappings(tableMappings);
-  }
-}
-
-
-function buildLearnedSemanticSnapshot(rows = []) {
-  const tableAliases = {};
-  const columnKeywords = {};
-
-  for (const row of rows || []) {
-    const term = normalizeSemanticLearningTerm(row.normalized_term || row.original_term);
-    const targetKind = String(row.target_kind || '').trim().toLowerCase();
-    const targetName = normalizeSchemaIdentifier(row.target_name || '');
-    if (!term || !targetName) continue;
-
-    if (targetKind === 'table') {
-      tableAliases[term] = dedupeSemanticValues([...(tableAliases[term] || []), targetName]);
-      continue;
-    }
-
-    if (targetKind === 'column') {
-      columnKeywords[term] = dedupeSemanticValues([...(columnKeywords[term] || []), targetName]);
-    }
-  }
-
-  return {
-    tableAliases,
-    columnKeywords,
-    suggestionTerms: dedupeSemanticValues([...Object.keys(tableAliases), ...Object.keys(columnKeywords)]),
-  };
-}
-
-async function refreshSemanticLearningCache(force = false) {
-  if (!pool || typeof pool.query !== 'function') {
-    const emptySnapshot = { tableAliases: {}, columnKeywords: {}, suggestionTerms: [] };
-    applyLearnedSemanticSnapshot(emptySnapshot);
-    LEARNED_SEMANTIC_CACHE.fingerprint = '';
-    LEARNED_SEMANTIC_CACHE.loadedAt = Date.now();
-    return emptySnapshot;
-  }
-
-  const currentFingerprint = schemaDetector.getConnectionFingerprint();
-  const fingerprintChanged = LEARNED_SEMANTIC_CACHE.fingerprint !== currentFingerprint;
-  const cacheIsFresh = !force && !fingerprintChanged && (Date.now() - LEARNED_SEMANTIC_CACHE.loadedAt) < LEARNED_SEMANTIC_CACHE.ttlMs;
-  if (cacheIsFresh) {
-    return LEARNED_SEMANTIC_CACHE.snapshot;
-  }
-
-  if (LEARNED_SEMANTIC_CACHE.refreshPromise) {
-    await LEARNED_SEMANTIC_CACHE.refreshPromise;
-    return LEARNED_SEMANTIC_CACHE.snapshot;
-  }
-
-  LEARNED_SEMANTIC_CACHE.refreshPromise = (async () => {
-    const result = await pool.query(`
-      SELECT normalized_term, original_term, target_kind, target_name, table_name, confidence, hit_count
-      FROM semantic_learning
-      WHERE db_fingerprint = $1
-      ORDER BY hit_count DESC, confidence DESC, last_seen DESC
-    `, [currentFingerprint]);
-
-    const snapshot = buildLearnedSemanticSnapshot(result.rows || []);
-    applyLearnedSemanticSnapshot(snapshot);
-    LEARNED_SEMANTIC_CACHE.fingerprint = currentFingerprint;
-    LEARNED_SEMANTIC_CACHE.loadedAt = Date.now();
-  })();
-
-  try {
-    await LEARNED_SEMANTIC_CACHE.refreshPromise;
-  } finally {
-    LEARNED_SEMANTIC_CACHE.refreshPromise = null;
-  }
-
-  return LEARNED_SEMANTIC_CACHE.snapshot;
-}
-
-async function upsertSemanticLearningEntry({ term, targetKind, targetName, tableName = '', confidence = 0.65 }) {
-  // Gate: only persist entries with sufficient confidence to prevent low-quality pollution
-  if (Number(confidence) < 0.7) {
-    return false;
-  }
-
-  const connectionFingerprint = schemaDetector.getConnectionFingerprint();
-  const normalizedTerm = normalizeSemanticLearningTerm(term);
-  const normalizedTargetName = normalizeSchemaIdentifier(targetName);
-  const normalizedTableName = normalizeSchemaIdentifier(tableName);
-  if (!normalizedTerm || !normalizedTargetName || !['table', 'column'].includes(String(targetKind || '').trim().toLowerCase())) {
-    return false;
-  }
-
-  await pool.query(
-    `INSERT INTO semantic_learning
-      (db_fingerprint, normalized_term, original_term, target_kind, target_name, table_name, confidence, hit_count, last_seen)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
-     ON CONFLICT (db_fingerprint, normalized_term, target_kind, target_name, table_name)
-     DO UPDATE SET
-       original_term = EXCLUDED.original_term,
-       confidence = GREATEST(semantic_learning.confidence, EXCLUDED.confidence),
-       hit_count = semantic_learning.hit_count + 1,
-       last_seen = NOW()`,
-    [
-      connectionFingerprint,
-      normalizedTerm,
-      String(term || '').trim(),
-      String(targetKind || '').trim().toLowerCase(),
-      normalizedTargetName,
-      normalizedTableName,
-      Number(confidence) || 0.65,
-    ]
-  );
-
-  return true;
-}
-
-async function learnSemanticMappingsFromSuccessfulQuery(queryText, queryResult) {
-  const input = String(queryText || '').trim();
-  if (!input || !queryResult?.exito) return;
-
-  const baseTable = normalizeSchemaIdentifier(queryResult?.debug?.tablaSeleccionada || queryResult?.analisis?.tablaBase || '');
-  if (!baseTable) return;
-
-  const schema = await queryBuilder.getFullSchema();
-  const baseSchema = schema?.schema?.[baseTable];
-  if (!baseSchema) return;
-
-  const knownVocabulary = queryBuilder.getTokenCorrectionVocabulary();
-  const tokens = queryBuilder.tokenizeInputRaw(input)
-    .map((token) => queryBuilder.normalizeTokenBase(token))
-    .filter((token) => token && token.length >= 4)
-    .filter((token) => !knownVocabulary.has(token))
-    .filter((token) => !queryBuilder.isLikelyUuid(token) && !queryBuilder.isLikelyNumericId(token));
-
-  const learnableTerms = [...new Set(tokens.map((token) => normalizeSemanticLearningTerm(token)).filter(Boolean))].slice(0, 6);
-  if (learnableTerms.length === 0) return;
-
-  let learned = false;
-  for (const term of learnableTerms) {
-    // Only save high-confidence table associations (≥ 0.85) so the learning store
-    // stays clean. The upsertSemanticLearningEntry gate (confidence < 0.7) provides
-    // a second safety net.
-    const resolutionScore = Number(queryResult?.debug?.confianza || queryResult?.analisis?.confianza || 0.85);
-    const tableConfidence = resolutionScore >= 0.85 ? 0.85 : 0;
-    if (tableConfidence >= 0.7) {
-      learned = (await upsertSemanticLearningEntry({ term, targetKind: 'table', targetName: baseTable, confidence: tableConfidence })) || learned;
-    }
-
-    const inferredColumn = queryBuilder.findBestAttributeColumn(term, baseSchema);
-    if (inferredColumn) {
-      learned = (await upsertSemanticLearningEntry({
-        term,
-        targetKind: 'column',
-        targetName: inferredColumn,
-        tableName: baseTable,
-        confidence: 0.70,
-      })) || learned;
-    }
-  }
-
-  if (learned) {
-    await refreshSemanticLearningCache(true);
-    schemaCache.invalidate();
-    bumpQueryCacheDataVersion();
-  }
-}
-
-
-
-const INTELLIGENT_QUERY_CACHE = new Map();
-const QUERY_CACHE_TTL_MS = 60 * 1000;
-let QUERY_CACHE_DATA_VERSION = 1;
 
 
 
 
 
-function bumpQueryCacheDataVersion() {
-  QUERY_CACHE_DATA_VERSION += 1;
-  INTELLIGENT_QUERY_CACHE.clear();
-}
+
+
+
+
+
+
+
+
 
 function setupEnvWatcher() {
   const candidatePaths = [
@@ -693,27 +492,7 @@ function setupMultiDbConfigWatcher() {
   console.log(`👀 Monitoreando config multibase: ${configPath}`);
 }
 
-function getQueryCacheEntry(cacheKey) {
-  const found = INTELLIGENT_QUERY_CACHE.get(cacheKey);
-  if (!found) return null;
-  if (found.expiresAt < Date.now()) {
-    INTELLIGENT_QUERY_CACHE.delete(cacheKey);
-    return null;
-  }
-  if (found.dataVersion !== QUERY_CACHE_DATA_VERSION) {
-    INTELLIGENT_QUERY_CACHE.delete(cacheKey);
-    return null;
-  }
-  return found.value;
-}
 
-function setQueryCacheEntry(cacheKey, value, ttlMs = QUERY_CACHE_TTL_MS) {
-  INTELLIGENT_QUERY_CACHE.set(cacheKey, {
-    dataVersion: QUERY_CACHE_DATA_VERSION,
-    expiresAt: Date.now() + ttlMs,
-    value,
-  });
-}
 
 
 
@@ -743,145 +522,15 @@ const ESQUEMA_PERMITIDO = {
 };
 
 
-function buildCrossDbSelectOptions(options = {}) {
-  const explicitDatabaseId = String(options?.databaseId || '').trim();
-  const requestedDatabases = Array.isArray(options?.requestedDatabases)
-    ? options.requestedDatabases
-    : [];
-  const queryHintText = String(options?.queryHintText || '').trim();
-
-  const resolvedRequested = resolveRequestedDatabasesForQuery(queryHintText, requestedDatabases);
-  const resolvedDatabaseId = explicitDatabaseId || resolvedRequested[0] || '';
-
-  return {
-    allowCrossDatabase: true,
-    databaseId: resolvedDatabaseId,
-    allowUnknownTablesForTarget: true,
-  };
-}
 
 
 
 
 
-/**
- * Registra una ejecución de artículo en la tabla article_executions (auditoría completa).
- */
-async function logArticleExecution({ articleId, articleTitulo, ejecutadoPor, ejecutadoRol, parametrosUsados, filasResultado, duracionMs, estado, mensajeError }) {
-  try {
-    await pool.query(
-      `INSERT INTO article_executions
-        (article_id, article_titulo, ejecutado_por, ejecutado_rol, parametros_usados, filas_resultado, duracion_ms, estado, mensaje_error, ejecutado_en)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
-      [
-        articleId ? String(articleId) : null,
-        String(articleTitulo || ''),
-        String(ejecutadoPor || 'anonymous'),
-        String(ejecutadoRol || 'user'),
-        parametrosUsados ? JSON.stringify(parametrosUsados) : null,
-        Math.max(0, Number(filasResultado) || 0),
-        Math.max(0, Number(duracionMs) || 0),
-        String(estado || 'ok'),
-        mensajeError ? String(mensajeError) : null,
-      ]
-    );
-  } catch (err) {
-    console.error('[ARTICLE_EXEC_AUDIT] ❌ Error registrando ejecución:', err.message || err);
-  }
-}
 
-function buildAutoDashboard(rows = []) {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return { chartType: 'none', reason: 'empty' };
-  }
 
-  const first = rows[0] || {};
-  const keys = Object.keys(first);
-  const numericKeys = keys.filter((k) => typeof first[k] === 'number');
-  const dateKeys = keys.filter((k) => /(date|fecha|created_at|updated_at|time)/i.test(k));
-  const categoryKeys = keys.filter((k) => typeof first[k] === 'string');
 
-  if (numericKeys.some((k) => /count|total|sum|avg|max|min/i.test(k))) {
-    return {
-      chartType: 'bar',
-      xKey: categoryKeys[0] || keys[0],
-      yKey: numericKeys.find((k) => /count|total|sum/i.test(k)) || numericKeys[0],
-    };
-  }
 
-  if (dateKeys.length > 0 && numericKeys.length > 0) {
-    return {
-      chartType: 'line',
-      xKey: dateKeys[0],
-      yKey: numericKeys[0],
-    };
-  }
-
-  if (categoryKeys.length > 0 && numericKeys.length > 0) {
-    return {
-      chartType: 'pie',
-      categoryKey: categoryKeys[0],
-      valueKey: numericKeys[0],
-    };
-  }
-
-  return { chartType: 'table' };
-}
-
-function tableLooksLikeUsers(tableName) {
-  const normalized = normalizeSchemaIdentifier(tableName);
-  return normalized === 'users' || normalized === 'usuarios' || normalized.includes('user');
-}
-
-function detectMainTableFromText(text) {
-  const normalized = String(text || '').toLowerCase();
-  const aliases = {
-    users: ['user', 'users', 'usuario', 'usuarios'],
-    logs: ['log', 'logs', 'bitacora', 'bitacoras'],
-    sessions: ['session', 'sessions', 'sesion', 'sesiones'],
-    roles: ['role', 'roles', 'rol', 'roles'],
-  };
-
-  for (const tableName of tablasPermitidas()) {
-    const tokens = aliases[tableName] || [tableName];
-    if (tokens.some((token) => normalized.includes(token))) {
-      return tableName;
-    }
-  }
-
-  return tablasPermitidas().find((t) => tableLooksLikeUsers(t)) || tablasPermitidas()[0] || '';
-}
-
-function buildNaturalLanguageSuggestions(rawText = '') {
-  const input = String(rawText || '').trim().toLowerCase();
-  const suggestions = [];
-
-  for (const tableName of tablasPermitidas()) {
-    if (!input || tableName.includes(input) || input.includes(tableName)) {
-      const relations = relacionesDelEsquema().filter((r) => r.from.tabla === tableName || r.to.tabla === tableName);
-      for (const rel of relations) {
-        const other = rel.from.tabla === tableName ? rel.to.tabla : rel.from.tabla;
-        suggestions.push(`${tableName} con ${other}`);
-      }
-    }
-  }
-
-  for (const term of LEARNED_SEMANTIC_CACHE.snapshot?.suggestionTerms || []) {
-    const normalizedTerm = String(term || '').trim().toLowerCase();
-    if (!normalizedTerm) continue;
-    if (!input || normalizedTerm.includes(input) || input.includes(normalizedTerm)) {
-      suggestions.push(normalizedTerm);
-
-      const mappedTables = LEARNED_SEMANTIC_CACHE.snapshot?.tableAliases?.[normalizedTerm] || [];
-      for (const tableName of mappedTables) {
-        suggestions.push(`${normalizedTerm} recientes`);
-        suggestions.push(`${tableName} con ${normalizedTerm}`);
-      }
-    }
-  }
-
-  return Array.from(new Set(suggestions)).slice(0, 10);
-}
 
 // ============================================================
 // ALLOWED ACTIONS - Whitelist of executable repair actions
@@ -1046,48 +695,24 @@ const {
   schemaDetector,
 });
 
-
-
-
-
-
-
-
-
-
-function collectStructuredRequiredParams(script) {
-  const requiredFromScript = Array.isArray(script?.parametros_requeridos)
-    ? script.parametros_requeridos.map((item) => String(item || '').trim()).filter(Boolean)
-    : [];
-
-  const detectedFromPlaceholders = extractVariables(script)
-    .map((item) => String(item || '').trim())
-    .filter((item) => Boolean(item) && !item.includes('.'));
-
-  return Array.from(new Set([...requiredFromScript, ...detectedFromPlaceholders]));
-}
-
-
-const MANUAL_SQL_PLACEHOLDER_REGEX = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
-
-
-function hasUnsafeMutationWithoutWhere(sqlText = '') {
-  const cleaned = String(sqlText || '').trim().replace(/;\s*$/, '').trim();
-  if (!/^(update|delete)\b/i.test(cleaned)) return false;
-  // Sin ningún WHERE → inseguro
-  if (!/\bwhere\b/i.test(cleaned)) return true;
-  // WHERE trivialmente verdadero: 1=1, 1 = 1, true, 'a'='a', etc.
-  const whereIdx = cleaned.toLowerCase().lastIndexOf('where');
-  const afterWhere = cleaned.slice(whereIdx + 5).trim().replace(/;\s*$/, '').trim().toLowerCase();
-  const trivial = [
-    /^1\s*=\s*1$/,
-    /^'[^']*'\s*=\s*'[^']*'$/,    // 'a'='a'
-    /^true$/,
-    /^1\s*=\s*1\s*(and\s+.*)?$/,  // WHERE 1=1 AND ...
-  ];
-  if (trivial.some((re) => re.test(afterWhere))) return true;
-  return false;
-}
+// El aprendizaje semántico, con su propio estado dentro. El caché de lo aprendido no
+// sale: lo que sale son las funciones, y para la recarga de configuración, dos que
+// guardan y devuelven el estado.
+const {
+  applyLearnedSemanticSnapshot,
+  buildNaturalLanguageSuggestions,
+  guardarEstado,
+  learnSemanticMappingsFromSuccessfulQuery,
+  refreshSemanticLearningCache,
+  resetLearnedSemanticCache,
+  restaurarEstado,
+} = crearAprendizajeSemantico({
+  obtenerPool: () => pool,
+  schemaCache,
+  schemaDetector,
+  queryBuilder,
+  queryParameterizer,
+});
 
 
 
@@ -1098,9 +723,20 @@ function hasUnsafeMutationWithoutWhere(sqlText = '') {
 
 
 
-function detectErrorAnalysisMode(text) {
-  return detectErrorAnalysisInput(text);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 async function resolveErrorAnalysisResponse(text, dbPool) {
@@ -1125,20 +761,7 @@ async function resolveErrorAnalysisResponse(text, dbPool) {
 
 
 
-function enforceStrictProductionSqlPayload(rawPayload) {
-  const normalized = normalizeStrictSqlRawPayload(rawPayload);
-  return buildProductionSqlResponse(normalized);
-}
 
-function isStrictSqlResponsePath(requestPath = '') {
-  const path = String(requestPath || '').toLowerCase();
-  return [
-    '/api/sql/manual',
-    '/api/query',
-    '/api/query/distributed',
-    '/api/query/execute-generated',
-  ].includes(path);
-}
 
 
 
@@ -1482,7 +1105,7 @@ app.use('/api/query-history', createHistoryRouter({
 }));
 app.use('/api/process', createProcessRouter({
   pool, slugifyProcessName,
-  getQueryCacheDataVersion: () => QUERY_CACHE_DATA_VERSION,
+  getQueryCacheDataVersion,
   getQueryCacheEntry, setQueryCacheEntry, QUERY_CACHE_TTL_MS,
   executeArticleById, getUserFromRequest, getRoleFromRequest, logQueryHistory,
 }));

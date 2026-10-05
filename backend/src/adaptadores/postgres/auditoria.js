@@ -180,3 +180,35 @@ export async function logError({ mensaje, stack, modulo, capa, contexto, archivo
     console.error('[AUDITORIA] no se pudo registrar el error:', error.message);
   }
 }
+
+/**
+ * Cada ejecucion del script de un articulo.
+ *
+ * Estaba sola en app.js mientras sus cuatro hermanas ya vivian aqui. Mismo pool por
+ * getter y mismo motivo: se reasigna al recargar la configuracion multi-base.
+ */
+/**
+ * Registra una ejecución de artículo en la tabla article_executions (auditoría completa).
+ */
+export async function logArticleExecution({ articleId, articleTitulo, ejecutadoPor, ejecutadoRol, parametrosUsados, filasResultado, duracionMs, estado, mensajeError }) {
+  try {
+    await obtenerPool().query(
+      `INSERT INTO article_executions
+        (article_id, article_titulo, ejecutado_por, ejecutado_rol, parametros_usados, filas_resultado, duracion_ms, estado, mensaje_error, ejecutado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+      [
+        articleId ? String(articleId) : null,
+        String(articleTitulo || ''),
+        String(ejecutadoPor || 'anonymous'),
+        String(ejecutadoRol || 'user'),
+        parametrosUsados ? JSON.stringify(parametrosUsados) : null,
+        Math.max(0, Number(filasResultado) || 0),
+        Math.max(0, Number(duracionMs) || 0),
+        String(estado || 'ok'),
+        mensajeError ? String(mensajeError) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[ARTICLE_EXEC_AUDIT] ❌ Error registrando ejecución:', err.message || err);
+  }
+}

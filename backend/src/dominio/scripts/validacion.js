@@ -10,7 +10,8 @@
  * objeto y lanzan si no sirve. Juntas forman las reglas del formato, que es algo que
  * conviene poder leer de una sentada.
  */
-import { isComplexSqlScript } from '../../infrastructure/query/PlSqlInterpreter.js';
+import { isComplexSqlScript, parsePlSqlScript } from '../../infrastructure/query/PlSqlInterpreter.js';
+import { getBusinessActionMetadata, getRequiredParamsForActions } from '../acciones/catalogo.js';
 import { normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from '../sql/guardas.js';
 
 export const ALLOWED_WHERE_OPERATORS = new Set(['=', '!=', '>', '<', '>=', '<=', 'LIKE']);
@@ -68,10 +69,10 @@ export function parseQualifiedFieldRef(fieldRef, defaultTable = '') {
   return { table: parts[0].toLowerCase(), column: parts[1] };
 }
 
-export function hasRelationBetweenFields(left, right) {
+export function hasRelationBetweenFields(left, right, esquema) {
   const direct = buildRelationKey(left.table, left.column, right.table, right.column);
   const reverse = buildRelationKey(right.table, right.column, left.table, left.column);
-  return DYNAMIC_SCHEMA_RELATION_KEYS.has(direct) || DYNAMIC_SCHEMA_RELATION_KEYS.has(reverse);
+  return esquema.hayRelacion(direct) || esquema.hayRelacion(reverse);
 }
 
 export function normalizeDynamicScriptType(type) {
@@ -136,12 +137,13 @@ export function ensureDynamicColumnAllowed(tableName, columns, esquema) {
   }
 }
 
-export function ensureDynamicJoinRelationAllowed(left, right, contextLabel = 'JOIN') {
+export function ensureDynamicJoinRelationAllowed(left, right, contextLabel, esquema) {
+  contextLabel = contextLabel || 'JOIN';
   if (left.table === right.table && left.column === right.column) {
     return;
   }
 
-  if (!hasRelationBetweenFields(left, right)) {
+  if (!hasRelationBetweenFields(left, right, esquema)) {
     throw new Error(
       `${contextLabel}: no existe relación FK entre ${left.table}.${left.column} y ${right.table}.${right.column}`
     );
@@ -367,7 +369,7 @@ export function validateRelationalScriptDefinition(script, esquema) {
 
       ensureDynamicColumnAllowed(left.table, [left.column], esquema);
       ensureDynamicColumnAllowed(right.table, [right.column], esquema);
-      ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`);
+      ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`, esquema);
     });
 
     if (Array.isArray(joinItem.columnas)) {
@@ -454,7 +456,7 @@ export function validateRelationalMutationScriptDefinition(script, mutationType,
 
       ensureDynamicColumnAllowed(left.table, [left.column], esquema);
       ensureDynamicColumnAllowed(right.table, [right.column], esquema);
-      ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`);
+      ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`, esquema);
     });
   });
 

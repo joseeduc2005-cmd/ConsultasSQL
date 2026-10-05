@@ -1,48 +1,8 @@
-export const BUSINESS_ACTION_CATALOG = [
-  {
-    nombre: 'getUser',
-    descripcion: 'Obtiene usuario por username',
-    categoria: 'usuarios',
-    requiredParams: ['usuario'],
-  },
-  {
-    nombre: 'unlockUser',
-    descripcion: 'Desbloquea usuario',
-    categoria: 'usuarios',
-    requiredParams: [],
-  },
-  {
-    nombre: 'validateUser',
-    descripcion: 'Valida existencia de usuario',
-    categoria: 'usuarios',
-    requiredParams: [],
-  },
-  {
-    nombre: 'logAction',
-    descripcion: 'Registra auditoría',
-    categoria: 'auditoria',
-    requiredParams: ['usuario'],
-  },
-];
+import { BUSINESS_ACTION_CATALOG, getBusinessActionMetadata, getRequiredParamsForActions }
+  from './dominio/acciones/catalogo.js';
 
-const ACTION_METADATA_MAP = BUSINESS_ACTION_CATALOG.reduce((acc, item) => {
-  acc[item.nombre] = item;
-  return acc;
-}, {});
-
-export function getBusinessActionMetadata(actionName) {
-  return ACTION_METADATA_MAP[actionName] || null;
-}
-
-export function getRequiredParamsForActions(actionNames = []) {
-  const required = new Set();
-  for (const actionName of actionNames) {
-    const metadata = getBusinessActionMetadata(actionName);
-    const requiredParams = Array.isArray(metadata?.requiredParams) ? metadata.requiredParams : [];
-    requiredParams.forEach((paramName) => required.add(paramName));
-  }
-  return Array.from(required);
-}
+// Se reexportan porque el catalogo se mudo a dominio/ y app.js las importa de aqui.
+export { BUSINESS_ACTION_CATALOG, getBusinessActionMetadata, getRequiredParamsForActions };
 
 export function createBusinessActionsRegistry(pool) {
   const actions = {

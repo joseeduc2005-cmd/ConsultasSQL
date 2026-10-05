@@ -92,6 +92,9 @@ import {
   asegurarTipoDeColumna, buildRelationalMutationQuery, buildRelationalSelectQuery,
   buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
 } from './dominio/sql/relacional.js';
+import { collectStructuredVariables, evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, interpolateStructuredNode, isEmptyWorkflowValue, normalizeWorkflowStoredValue, parseStepOrder, replaceVariables, resolveTemplateVariable } from './dominio/flujos/pasos.js';
+import { ALIAS_DE_ACCION, EXECUTABLE_SOLUTION_TYPES, MANUAL_SQL_NAMED_PLACEHOLDER_REGEX, MANUAL_SQL_TIMEOUT_MS, normalizeAndValidateStructuredParams, normalizeStructuredParams, parseStructuredScript } from './dominio/scripts/estructurado.js';
+import { MONGO_WRITE_OPS_RE, SQL_WRITE_KEYWORDS_RE, buildWhereClause, detectMongoOperation, parseWriteTarget, renumberWhereParams, scriptContainsMutation, sqlTextContainsMutation } from './dominio/sql/mutaciones.js';
 
 // El pool se reasigna al recargar la configuración multi-base, así que la auditoría
 // recibe un getter y no el valor: guardar el de ahora sería escribir contra una
@@ -182,7 +185,6 @@ initSessionStore(pool); // Permitir restaurar sesiones desde la BD tras reinicio
 
 // Timeout for admin-authored manual SQL / article execution. Generous (2 min)
 // so long, complex, multi-statement scripts run to completion like in DBeaver.
-const MANUAL_SQL_TIMEOUT_MS = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000);
 
 let BUSINESS_ACTIONS_REGISTRY = createBusinessActionsRegistry(pool);
 
@@ -1266,41 +1268,6 @@ const ALLOWED_ACTIONS = {
   },
 };
 
-const EXECUTABLE_SOLUTION_TYPES = new Set(['ejecutable', 'database', 'script']);
-
-const STRUCTURED_ACTIONS = {
-  verificar_conexion: {
-    execute: ALLOWED_ACTIONS.verificar_conexion.execute,
-    aliases: {
-      usuario: 'username',
-      username: 'username',
-    },
-  },
-  desbloquear_cuenta: {
-    execute: ALLOWED_ACTIONS.desbloquear_cuenta.execute,
-    aliases: {
-      usuario: 'username',
-      username: 'username',
-      motivo: 'motivo',
-    },
-  },
-  limpiar_sesiones: {
-    execute: ALLOWED_ACTIONS.limpiar_sesiones.execute,
-    aliases: {
-      usuario: 'username',
-      username: 'username',
-      horas: 'horas',
-    },
-  },
-  verificar_estado_cuenta: {
-    execute: ALLOWED_ACTIONS.verificar_estado_cuenta.execute,
-    aliases: {
-      usuario: 'username',
-      username: 'username',
-      incluir_logs: 'incluir_logs',
-    },
-  },
-};
 
 
 
@@ -1310,6 +1277,17 @@ const STRUCTURED_ACTIONS = {
 
 
 
+
+
+// La tabla de acciones estructuradas: los alias los sabe el dominio, lo que ejecuta
+// cada una lo sabe app.js porque necesita el pool. Unirlas aqui es lo que evita que
+// dominio/ tenga que importar una funcion que abre conexiones.
+const STRUCTURED_ACTIONS = Object.fromEntries(
+  Object.entries(ALIAS_DE_ACCION).map(([nombre, aliases]) => [
+    nombre,
+    { aliases, execute: ALLOWED_ACTIONS[nombre].execute },
+  ])
+);
 
 async function ejecutarAccionEmpresarial(nombre, params, context, emit) {
   const actionName = String(nombre || '').trim();
@@ -1397,25 +1375,6 @@ async function executeBusinessWorkflow(script, rawParams, emit) {
 
 
 
-function parseStructuredScript(scriptJson) {
-  if (!scriptJson) {
-    return null;
-  }
-
-  if (typeof scriptJson === 'object') {
-    return scriptJson;
-  }
-
-  if (typeof scriptJson === 'string') {
-    try {
-      return JSON.parse(scriptJson);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
 
 
 
@@ -1432,21 +1391,8 @@ function collectStructuredRequiredParams(script) {
   return Array.from(new Set([...requiredFromScript, ...detectedFromPlaceholders]));
 }
 
-function normalizeAndValidateStructuredParams(script, rawParams = {}) {
-  const normalizedParams = Object.entries(rawParams || {}).reduce((acc, [key, value]) => {
-    acc[key] = sanitizeStructuredParamValue(value);
-    return acc;
-  }, {});
-
-  Object.entries(normalizedParams).forEach(([paramName, value]) => {
-    validateStructuredParamByName(paramName, value);
-  });
-
-  return normalizedParams;
-}
 
 const MANUAL_SQL_PLACEHOLDER_REGEX = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
-const MANUAL_SQL_NAMED_PLACEHOLDER_REGEX = /(^|[^:]):([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
 
 function hasUnsafeMutationWithoutWhere(sqlText = '') {
@@ -1473,21 +1419,6 @@ function hasUnsafeMutationWithoutWhere(sqlText = '') {
 
 
 
-function getManualSqlStepTitle(stepSql = '', stepNumber = 1) {
-  const raw = String(stepSql || '');
-  const commentMatch = raw.match(/^\s*--\s*Paso\s*\d+\s*:\s*([^\n\r]+)/i);
-  if (commentMatch && commentMatch[1]) {
-    return String(commentMatch[1]).trim();
-  }
-
-  const cleaned = stripLeadingSqlComments(raw).trim();
-  const operation = detectSqlOperation(cleaned);
-  if (operation === 'select') return `Paso ${stepNumber}: Consultando datos`;
-  if (operation === 'update') return `Paso ${stepNumber}: Actualizando registros`;
-  if (operation === 'insert') return `Paso ${stepNumber}: Insertando registros`;
-  if (operation === 'delete') return `Paso ${stepNumber}: Eliminando registros`;
-  return `Paso ${stepNumber}: Procesando`;
-}
 
 
 
@@ -1546,20 +1477,6 @@ function isStrictSqlResponsePath(requestPath = '') {
 
 
 
-/**
- * Detects the operation type of a MongoDB JSON query.
- * Returns 'select' for read operations and 'write' for DML.
- */
-function detectMongoOperation(jsonText = '') {
-  try {
-    const op = JSON.parse(String(jsonText || '').trim());
-    if (op?.find !== undefined || op?.findOne !== undefined || op?.aggregate || op?.countDocuments !== undefined || op?.distinct !== undefined) return 'select';
-    if (op?.insertOne || op?.insertMany || op?.updateOne || op?.updateMany || op?.replaceOne || op?.deleteOne || op?.deleteMany) return 'insert';
-  } catch {
-    // not valid JSON — treat as read
-  }
-  return 'select';
-}
 
 /**
  * Executes a write (DML) query on the specified target database, converting
@@ -1629,47 +1546,7 @@ async function executeWriteToTargetDb(sqlText, queryParams, targetDatabaseId) {
 
 // ─── Write-operation detail: parse target + before/after snapshots ───────────
 
-/**
- * Extracts the target table + WHERE clause from a single-statement
- * UPDATE / DELETE / INSERT so we can snapshot affected rows.
- * Returns null when the statement can't be parsed (multi-statement, exotic SQL).
- */
-function parseWriteTarget(sqlText = '') {
-  const sql = String(sqlText || '')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .replace(/;\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  // Bail on multi-statement scripts — the snapshot would be ambiguous.
-  if (/;\s*\S/.test(sql)) return null;
 
-  let m = sql.match(/^update\s+([a-zA-Z_][\w.$"]*)\s+set\s+[\s\S]*?(?:\s+where\s+([\s\S]+?))?(?:\s+returning\b[\s\S]*)?$/i);
-  if (m) return { operation: 'update', table: m[1].replace(/"/g, ''), whereClause: (m[2] || '').trim() };
-
-  m = sql.match(/^delete\s+from\s+([a-zA-Z_][\w.$"]*)(?:\s+where\s+([\s\S]+?))?(?:\s+returning\b[\s\S]*)?$/i);
-  if (m) return { operation: 'delete', table: m[1].replace(/"/g, ''), whereClause: (m[2] || '').trim() };
-
-  m = sql.match(/^insert\s+into\s+([a-zA-Z_][\w.$"]*)/i);
-  if (m) return { operation: 'insert', table: m[1].replace(/"/g, ''), whereClause: '' };
-
-  return null;
-}
-
-/**
- * Re-numbers the $N placeholders inside a WHERE clause so it can run as a
- * standalone SELECT (the original numbering references the full statement).
- */
-function renumberWhereParams(whereClause = '', allValues = []) {
-  const map = new Map();
-  const values = [];
-  const clause = String(whereClause || '').replace(/\$(\d+)/g, (_, n) => {
-    const old = Number(n);
-    if (!map.has(old)) { map.set(old, values.length + 1); values.push(allValues[old - 1]); }
-    return '$' + map.get(old);
-  });
-  return { clause, values };
-}
 
 
 /** Runs a bounded SELECT against the target DB to snapshot rows. Never throws. */
@@ -1945,52 +1822,7 @@ async function executeOneSqlStep(sqlText, rawParams, workflowContext, stepNum, e
   });
 }
 
-function evaluateProceduralExpression(rawExpr, workflowContext = {}) {
-  const expr = String(rawExpr || '').trim();
-  if (!expr) return '';
 
-  const placeholderMatch = expr.match(/^{{\s*([a-zA-Z0-9_.]+)\s*}}$/);
-  if (placeholderMatch) {
-    const resolved = resolveWorkflowContextPlaceholder(placeholderMatch[1], workflowContext, workflowContext);
-    return isMissingParamValue(resolved) ? '' : resolved;
-  }
-
-  if (/^'.*'$/s.test(expr)) {
-    return expr.replace(/^'(.*)'$/s, '$1').replace(/''/g, "'");
-  }
-
-  if (/^-?\d+(?:\.\d+)?$/.test(expr)) {
-    return Number(expr);
-  }
-
-  if (/^(true|false)$/i.test(expr)) {
-    return expr.toLowerCase() === 'true';
-  }
-
-  const contextual = resolveWorkflowContextPlaceholder(expr, workflowContext, workflowContext);
-  if (!isMissingParamValue(contextual)) return contextual;
-
-  if (Object.prototype.hasOwnProperty.call(workflowContext || {}, expr)) {
-    return workflowContext[expr];
-  }
-
-  const lowered = expr.toLowerCase();
-  if (Object.prototype.hasOwnProperty.call(workflowContext || {}, lowered)) {
-    return workflowContext[lowered];
-  }
-
-  return expr;
-}
-
-function formatRaiseNoticeMessage(template, args = []) {
-  let index = 0;
-  const text = String(template || '').replace(/%/g, () => {
-    const value = index < args.length ? args[index] : '';
-    index += 1;
-    return String(value ?? '');
-  });
-  return text.trim();
-}
 
 async function executeNoticeStep(step, workflowContext, stepNum, emit) {
   const args = Array.isArray(step?.noticeArgs)
@@ -2153,47 +1985,6 @@ async function executeConditionalStep(step, rawParams, workflowContext, stepNum,
   };
 }
 
-function evaluateSimpleCondition(expr, workflowContext) {
-  // Handle simple patterns like "v_count > 0", "step1.count > 0" or "{{step1.count}} > 0"
-  const clean = String(expr || '').trim().replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, '$1');
-  const m = clean.match(/^([a-zA-Z_][\w.]*)\s*(>=|<=|!=|<>|=|>|<)\s*(.+)$/i);
-  if (!m) return true; // can't evaluate → assume true
-
-  const [, lhs, op, rhs] = m;
-
-  const resolveToken = (tokenRaw) => {
-    const token = String(tokenRaw || '').trim().replace(/^['"]|['"]$/g, '');
-    if (token === '') return null;
-    if (/^(true|false)$/i.test(token)) return token.toLowerCase() === 'true';
-    if (/^-?\d+(?:\.\d+)?$/.test(token)) return Number(token);
-
-    const contextual = resolveWorkflowContextPlaceholder(token, workflowContext, workflowContext);
-    if (!isMissingParamValue(contextual)) return contextual;
-
-    if (Object.prototype.hasOwnProperty.call(workflowContext || {}, token)) {
-      return workflowContext[token];
-    }
-    if (Object.prototype.hasOwnProperty.call(workflowContext || {}, token.toLowerCase())) {
-      return workflowContext[token.toLowerCase()];
-    }
-    return token;
-  };
-
-  const lhsVal = resolveToken(lhs);
-  const rhsVal = resolveToken(rhs);
-
-  const lNum = Number(lhsVal);
-  const rNum = Number(rhsVal);
-  const bothNumeric = Number.isFinite(lNum) && Number.isFinite(rNum);
-
-  if (op === '>') return bothNumeric ? lNum > rNum : String(lhsVal) > String(rhsVal);
-  if (op === '<') return bothNumeric ? lNum < rNum : String(lhsVal) < String(rhsVal);
-  if (op === '>=') return bothNumeric ? lNum >= rNum : String(lhsVal) >= String(rhsVal);
-  if (op === '<=') return bothNumeric ? lNum <= rNum : String(lhsVal) <= String(rhsVal);
-  if (op === '=') return bothNumeric ? lNum === rNum : String(lhsVal) === String(rhsVal);
-  if (op === '!=' || op === '<>') return bothNumeric ? lNum !== rNum : String(lhsVal) !== String(rhsVal);
-  return true;
-}
 
 async function executeComplexSqlWorkflow(sqlText, rawParams, emit) {
   const startedAt = Date.now();
@@ -2543,10 +2334,6 @@ async function executeManualSqlScript(script, rawParams, emit) {
   });
 }
 
-function parseStepOrder(stepKey = '') {
-  const match = String(stepKey || '').match(/^step(\d+)$/i);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-}
 
 function extractObjectForAggregation(value) {
   if (Array.isArray(value)) {
@@ -2603,183 +2390,10 @@ function buildAggregatedResultFromStepPayload(stepPayload = {}) {
   return hasData ? aggregated : null;
 }
 
-function collectStructuredVariables(node, variables = new Set()) {
-  if (typeof node === 'string') {
-    let match;
-    while ((match = STRUCTURED_PLACEHOLDER_REGEX.exec(node)) !== null) {
-      variables.add(match[1]);
-    }
-    STRUCTURED_PLACEHOLDER_REGEX.lastIndex = 0;
 
-    let sqlMatch;
-    while ((sqlMatch = MANUAL_SQL_NAMED_PLACEHOLDER_REGEX.exec(node)) !== null) {
-      variables.add(sqlMatch[2]);
-    }
-    MANUAL_SQL_NAMED_PLACEHOLDER_REGEX.lastIndex = 0;
-
-    return variables;
-  }
-
-  if (Array.isArray(node)) {
-    node.forEach((item) => collectStructuredVariables(item, variables));
-    return variables;
-  }
-
-  if (node && typeof node === 'object') {
-    Object.values(node).forEach((value) => collectStructuredVariables(value, variables));
-  }
-
-  return variables;
-}
-
-function extractVariables(scriptJson) {
-  const parsedScript = parseStructuredScript(scriptJson);
-  if (!parsedScript || typeof parsedScript !== 'object') {
-    return [];
-  }
-
-  return Array.from(collectStructuredVariables(parsedScript));
-}
 
 // SQL write keywords — DML, DDL and privilege/procedure calls that can change the system.
-const SQL_WRITE_KEYWORDS_RE = /\b(insert|update|delete|merge|upsert|replace|truncate|drop|alter|create|grant|revoke|call|exec|execute)\b/i;
 // MongoDB write operations — JSON format, shell syntax, or parsed `operation` field.
-const MONGO_WRITE_OPS_RE = /\b(insertone|insertmany|updateone|updatemany|replaceone|deleteone|deletemany|findandmodify|findoneandupdate|findoneanddelete|findoneandreplace|bulkwrite)\b/i;
-
-/**
- * Detects whether a raw SQL / MongoDB text performs a write operation.
- * Strips SQL comments first so leading `-- comment`, block comments, `BEGIN;`
- * or whitespace cannot hide a real mutation keyword.
- */
-function sqlTextContainsMutation(rawSql) {
-  const noComments = String(rawSql || '')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // block comments
-    .replace(/--[^\n]*/g, ' ');           // line comments
-  if (!noComments.trim()) return false;
-  // MongoDB write ops — checked before stripping quotes (Mongo JSON/shell relies on them).
-  if (MONGO_WRITE_OPS_RE.test(noComments)) return true;
-  // SQL — strip single-quoted string literals so data values can't trigger false positives.
-  const sqlOnly = noComments.replace(/'(?:[^']|'')*'/g, "''");
-  return SQL_WRITE_KEYWORDS_RE.test(sqlOnly);
-}
-
-function scriptContainsMutation(node) {
-  if (!node || typeof node !== 'object') {
-    return false;
-  }
-
-  if (Array.isArray(node)) {
-    return node.some((item) => scriptContainsMutation(item));
-  }
-
-  const current = node;
-  const stepType = String(current.tipo || '').trim().toLowerCase();
-  if (['update', 'delete', 'insert', 'merge', 'truncate', 'drop', 'alter', 'ddl'].includes(stepType)) {
-    return true;
-  }
-
-  // MongoDB shell-parsed format: { operation: 'updateone', ... }
-  const operation = String(current.operation || '').trim().toLowerCase();
-  if (operation && MONGO_WRITE_OPS_RE.test(operation)) {
-    return true;
-  }
-
-  // Manual SQL / MongoDB text — check every field that can carry a query,
-  // regardless of modo/origen, so any storage format is covered.
-  for (const key of ['sql', 'pipeline', 'filter', 'query', 'statement']) {
-    const val = current[key];
-    if (typeof val === 'string' && sqlTextContainsMutation(val)) {
-      return true;
-    }
-  }
-
-  return Object.values(current).some((value) => scriptContainsMutation(value));
-}
-
-function interpolateStructuredNode(node, rawParams) {
-  if (typeof node === 'string') {
-    const fullMatch = node.match(/^{{\s*([a-zA-Z0-9_]+)\s*}}$/);
-    if (fullMatch) {
-      return sanitizeStructuredParamValue(rawParams[fullMatch[1]]);
-    }
-
-    return node.replace(STRUCTURED_PLACEHOLDER_REGEX, (_, variableName) => {
-      return String(sanitizeStructuredParamValue(rawParams[variableName]));
-    });
-  }
-
-  if (Array.isArray(node)) {
-    return node.map((item) => interpolateStructuredNode(item, rawParams));
-  }
-
-  if (node && typeof node === 'object') {
-    return Object.fromEntries(
-      Object.entries(node).map(([key, value]) => [key, interpolateStructuredNode(value, rawParams)])
-    );
-  }
-
-  return node;
-}
-
-function replaceVariables(scriptJson, inputs) {
-  const parsedScript = parseStructuredScript(scriptJson);
-  if (!parsedScript) {
-    return null;
-  }
-
-  const safeInputs = Object.entries(inputs || {}).reduce((acc, [key, value]) => {
-    acc[key] = sanitizeStructuredParamValue(value);
-    return acc;
-  }, {});
-
-  return interpolateStructuredNode(parsedScript, safeInputs);
-}
-
-function normalizeStructuredParams(actionName, params) {
-  const actionConfig = STRUCTURED_ACTIONS[actionName];
-  if (!actionConfig) {
-    return {};
-  }
-
-  return Object.entries(params || {}).reduce((acc, [key, value]) => {
-    const mappedKey = actionConfig.aliases[key] || key;
-    acc[mappedKey] = sanitizeStructuredParamValue(value);
-    return acc;
-  }, {});
-}
-
-
-
-
-
-
-
-function resolveTemplateVariable(path, source) {
-  return getValueByPath(source, path);
-}
-
-function isEmptyWorkflowValue(value) {
-  if (value === undefined || value === null) return true;
-  if (typeof value === 'string' && value.trim() === '') return true;
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === 'object') return Object.keys(value).length === 0;
-  return false;
-}
-
-function normalizeWorkflowStoredValue(stepResult) {
-  if (stepResult && Array.isArray(stepResult.data)) {
-    if (stepResult.data.length === 1) {
-      return stepResult.data[0];
-    }
-    return stepResult.data;
-  }
-
-  if (stepResult && stepResult.data !== undefined) {
-    return stepResult.data;
-  }
-
-  return stepResult;
-}
 
 
 
@@ -2794,42 +2408,22 @@ function normalizeWorkflowStoredValue(stepResult) {
 
 
 
-function buildWhereClause(whereObject, startIndex = 1, logic = 'AND') {
-  const safeLogic = ['AND', 'OR'].includes(String(logic).toUpperCase())
-    ? String(logic).toUpperCase()
-    : 'AND';
-  const whereFields = Object.keys(whereObject || {});
-  const whereValues = [];
-  const conditions = whereFields.map((field, index) => {
-    const { op, value, fieldRef } = resolveWhereEntry(whereObject[field]);
-
-    if (fieldRef) {
-      const right = parseQualifiedFieldRef(fieldRef);
-      return `"${field}" ${op} "${right.table}"."${right.column}"`;
-    }
-
-    whereValues.push(value);
-    return `"${field}" ${op} $${startIndex + whereValues.length - 1}`;
-  });
-  const whereClause = whereFields.length
-    ? ` WHERE ${conditions.join(` ${safeLogic} `)}`
-    : '';
-
-  return { whereFields, whereValues, whereClause };
-}
 
 
-function evaluateValidationCondition(actual, condition, expected) {
-  const normalized = String(condition || 'igual').trim().toLowerCase();
 
-  if (normalized === 'igual') return actual === expected;
-  if (normalized === 'diferente') return actual !== expected;
-  if (normalized === 'mayor') return Number(actual) > Number(expected);
-  if (normalized === 'menor') return Number(actual) < Number(expected);
-  if (normalized === 'contiene') return String(actual ?? '').includes(String(expected ?? ''));
 
-  throw new Error(`Condición no soportada: ${condition}`);
-}
+
+
+
+
+
+
+
+
+
+
+
+
 
 async function runPostProcessValidations(script, tableName, normalizedInputParams, sourceRows, sourceWhere, emit) {
   const validations = Array.isArray(script?.post_proceso?.validaciones) ? script.post_proceso.validaciones : [];
@@ -3254,20 +2848,6 @@ async function executeRelationalScript(script, rawParams, emit) {
   };
 }
 
-function evaluateWorkflowValidationCondition(actual, condition, expected) {
-  const normalized = String(condition || 'existe').trim().toLowerCase();
-
-  if (normalized === 'existe') return !isEmptyWorkflowValue(actual);
-  if (normalized === 'no_existe') return isEmptyWorkflowValue(actual);
-  if (normalized === 'igual') {
-    if (typeof actual === 'object' || typeof expected === 'object') {
-      return JSON.stringify(actual) === JSON.stringify(expected);
-    }
-    return actual === expected;
-  }
-
-  throw new Error(`Condición no soportada: ${condition}`);
-}
 
 function executeWorkflowValidationStep(step, workflowContext, userParams = {}) {
   const variablePath = String(step.variable || '').trim();

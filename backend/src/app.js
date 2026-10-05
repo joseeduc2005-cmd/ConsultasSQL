@@ -63,71 +63,20 @@ import { crearSoporteClienteRouter, crearSoporteRouter, iniciarSoporte } from '.
 import logger from './infrastructure/logger/logger.js';
 import { correlationIdMiddleware } from './middleware/correlationId.js';
 import { SQL_BLOCKED_KEYWORDS, containsBlockedSql, extractSqlReferencedTables, getDatabaseSchemaTableNames, normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from './dominio/sql/guardas.js';
+import { ROLE_LEVELS, getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
+import { ALLOWED_OUTBOUND_HOSTS, BLOCKED_OUTBOUND_PATTERNS, CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked, sanitizeOrigin } from './dominio/red/salida.js';
+
+const API_RATE_LIMIT_WINDOW_MS = Math.max(5_000, Number(process.env.API_RATE_LIMIT_WINDOW_MS) || 60_000);
+const API_RATE_LIMIT_MAX = Math.max(1, Number(process.env.API_RATE_LIMIT_MAX) || 100);
 
 dotenv.config();
 
 const multiDbRegistry = new MultiDbRegistry();
 let watchedMultiDbConfigPath = '';
 
-const ALLOWED_OUTBOUND_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
-const BLOCKED_OUTBOUND_PATTERNS = ['openai', 'anthropic', 'googleapis', 'huggingface', 'ai'];
-const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002')
-  .split(',')
-  .map((origin) => String(origin || '').trim())
-  .filter(Boolean);
-const API_RATE_LIMIT_WINDOW_MS = Math.max(5_000, Number(process.env.API_RATE_LIMIT_WINDOW_MS) || 60_000);
-const API_RATE_LIMIT_MAX = Math.max(1, Number(process.env.API_RATE_LIMIT_MAX) || 100);
 
-function sanitizeOrigin(origin) {
-  return String(origin || '').trim();
-}
 
-function isOriginAllowed(origin) {
-  if (!origin) return true;
-  const normalizedOrigin = sanitizeOrigin(origin);
-  return CORS_ALLOWED_ORIGINS.includes(normalizedOrigin);
-}
 
-function extractHostFromRequestOptions(options, maybeUrl) {
-  if (typeof options === 'string') {
-    try {
-      return new URL(options).hostname || '';
-    } catch {
-      return '';
-    }
-  }
-
-  if (options instanceof URL) {
-    return options.hostname || '';
-  }
-
-  if (options && typeof options === 'object') {
-    return String(options.hostname || options.host || '').toLowerCase();
-  }
-
-  if (typeof maybeUrl === 'string') {
-    try {
-      return new URL(maybeUrl).hostname || '';
-    } catch {
-      return '';
-    }
-  }
-
-  return '';
-}
-
-function isOutboundBlocked(hostnameRaw) {
-  const hostname = String(hostnameRaw || '').toLowerCase().trim();
-  if (!hostname) return false;
-
-  if (ALLOWED_OUTBOUND_HOSTS.has(hostname)) return false;
-
-  if (BLOCKED_OUTBOUND_PATTERNS.some((pattern) => hostname.includes(pattern))) {
-    return true;
-  }
-
-  return true;
-}
 
 const originalHttpRequest = http.request.bind(http);
 const originalHttpsRequest = https.request.bind(https);
@@ -902,31 +851,14 @@ async function learnSemanticMappingsFromSuccessfulQuery(queryText, queryResult) 
   }
 }
 
-const ROLE_LEVELS = {
-  user: 1,
-  admin: 2,
-  superadmin: 3,
-};
 
 
 const INTELLIGENT_QUERY_CACHE = new Map();
 const QUERY_CACHE_TTL_MS = 60 * 1000;
 let QUERY_CACHE_DATA_VERSION = 1;
 
-function normalizeRole(roleValue) {
-  const role = String(roleValue || '').trim().toLowerCase();
-  return ROLE_LEVELS[role] ? role : 'user';
-}
 
-function hasRequiredRole(userRole, requiredRole) {
-  const current = ROLE_LEVELS[normalizeRole(userRole)] || 0;
-  const required = ROLE_LEVELS[normalizeRole(requiredRole)] || 0;
-  return current >= required;
-}
 
-function getRoleFromRequest(req, user) {
-  return normalizeRole(req.headers['x-user-role'] || user?.role || 'user');
-}
 
 function slugifyProcessName(value) {
   return String(value || '')

@@ -81,11 +81,20 @@ import {
   ensureErrorLogsSchema,
   ensureSemanticLearningSchema,
 } from './adaptadores/postgres/esquemas.js';
+import {
+  configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
+  relacionesDelEsquema, resetDynamicSchemaCache, tablasPermitidas, tiposDeColumna,
+} from './adaptadores/postgres/esquema-dinamico.js';
 
 // El pool se reasigna al recargar la configuración multi-base, así que la auditoría
 // recibe un getter y no el valor: guardar el de ahora sería escribir contra una
 // conexión cerrada en cuanto alguien toque multidb.databases.json.
 configurarPoolAuditoria(() => pool);
+configurarEsquemaDinamico({
+  pool: () => pool,
+  huellaConexion: () => schemaDetector.getConnectionFingerprint(),
+  publicarContexto: (ctx) => queryParameterizer.setSchemaContext(ctx),
+});
 configurarEsquemas({
   pool: () => pool,
   huellaConexion: () => schemaDetector.getConnectionFingerprint(),
@@ -303,18 +312,6 @@ function resetLearnedSemanticCache() {
   applyLearnedSemanticSnapshot({ tableAliases: {}, columnKeywords: {}, suggestionTerms: [] });
 }
 
-function resetDynamicSchemaCache() {
-  DYNAMIC_SCRIPT_ALLOWED_TABLES = [];
-  DYNAMIC_SCRIPT_ALLOWED_COLUMNS = {};
-  DYNAMIC_SCRIPT_COLUMN_TYPES = {};
-  DYNAMIC_SCRIPT_TABLE_PKS = {};
-  DYNAMIC_SCHEMA_RELATIONSHIPS = [];
-  DYNAMIC_SCHEMA_RELATION_KEYS = new Set();
-  DYNAMIC_SCHEMA_CACHE.loadedAt = 0;
-  DYNAMIC_SCHEMA_CACHE.fingerprint = '';
-  DYNAMIC_SCHEMA_CACHE.refreshPromise = null;
-  queryParameterizer.setSchemaContext({ tables: [] });
-}
 
 async function reloadActiveDatabaseConnection(reason = 'reload') {
   const previousPool = pool;
@@ -753,7 +750,7 @@ async function ensureSqlUsesWhitelistedTables(sqlText, options = {}) {
 
   const allowedTables = new Set((providedAllowedTables && providedAllowedTables.length > 0)
     ? providedAllowedTables
-    : DYNAMIC_SCRIPT_ALLOWED_TABLES.map((table) => normalizeSchemaIdentifier(table)).filter(Boolean));
+    : tablasPermitidas().map((table) => normalizeSchemaIdentifier(table)).filter(Boolean));
 
   // Accept both fully-qualified and plain table references
   // (e.g. system.comments and comments) for multi-DB SQL passthrough.
@@ -1067,23 +1064,23 @@ function detectMainTableFromText(text) {
     roles: ['role', 'roles', 'rol', 'roles'],
   };
 
-  for (const tableName of DYNAMIC_SCRIPT_ALLOWED_TABLES) {
+  for (const tableName of tablasPermitidas()) {
     const tokens = aliases[tableName] || [tableName];
     if (tokens.some((token) => normalized.includes(token))) {
       return tableName;
     }
   }
 
-  return DYNAMIC_SCRIPT_ALLOWED_TABLES.find((t) => tableLooksLikeUsers(t)) || DYNAMIC_SCRIPT_ALLOWED_TABLES[0] || '';
+  return tablasPermitidas().find((t) => tableLooksLikeUsers(t)) || tablasPermitidas()[0] || '';
 }
 
 function buildNaturalLanguageSuggestions(rawText = '') {
   const input = String(rawText || '').trim().toLowerCase();
   const suggestions = [];
 
-  for (const tableName of DYNAMIC_SCRIPT_ALLOWED_TABLES) {
+  for (const tableName of tablasPermitidas()) {
     if (!input || tableName.includes(input) || input.includes(tableName)) {
-      const relations = DYNAMIC_SCHEMA_RELATIONSHIPS.filter((r) => r.from.tabla === tableName || r.to.tabla === tableName);
+      const relations = relacionesDelEsquema().filter((r) => r.from.tabla === tableName || r.to.tabla === tableName);
       for (const rel of relations) {
         const other = rel.from.tabla === tableName ? rel.to.tabla : rel.from.tabla;
         suggestions.push(`${tableName} con ${other}`);
@@ -1255,202 +1252,14 @@ const STRUCTURED_ACTIONS = {
   },
 };
 
-let DYNAMIC_SCRIPT_ALLOWED_TABLES = [];
-// Safe whitelist of WHERE operators — prevents any form of SQL injection via operator field
-let DYNAMIC_SCRIPT_ALLOWED_COLUMNS = {};
-let DYNAMIC_SCRIPT_COLUMN_TYPES = {};
-let DYNAMIC_SCRIPT_TABLE_PKS = {};
-let DYNAMIC_SCHEMA_RELATIONSHIPS = [];
-let DYNAMIC_SCHEMA_RELATION_KEYS = new Set();
-
-const DYNAMIC_SCHEMA_CACHE = {
-  loadedAt: 0,
-  fingerprint: '',
-  ttlMs: 60 * 1000,
-  refreshPromise: null,
-};
-
-
-function inferRuntimeTypeFromPgType(dataType, udtName) {
-  const normalized = normalizeSchemaIdentifier(dataType || udtName || '');
-
-  if (['boolean', 'bool'].includes(normalized)) return 'boolean';
-  if (
-    normalized.includes('int')
-    || normalized.includes('numeric')
-    || normalized.includes('decimal')
-    || normalized.includes('double')
-    || normalized.includes('real')
-  ) {
-    return 'number';
-  }
-
-  if (normalized.includes('json')) return 'object';
-  return 'string';
-}
 
 
 
-function getDynamicSchemaSnapshot() {
-  return {
-    tablas: Object.fromEntries(
-      Object.entries(DYNAMIC_SCRIPT_ALLOWED_COLUMNS).map(([tableName, columns]) => [tableName, [...columns]])
-    ),
-    relaciones: [...DYNAMIC_SCHEMA_RELATIONSHIPS],
-    fingerprint: DYNAMIC_SCHEMA_CACHE.fingerprint,
-    loadedAt: DYNAMIC_SCHEMA_CACHE.loadedAt,
-  };
-}
 
-function getDynamicSchemaFull() {
-  const result = {};
-  for (const tableName of DYNAMIC_SCRIPT_ALLOWED_TABLES) {
-    const columns = DYNAMIC_SCRIPT_ALLOWED_COLUMNS[tableName] || [];
-    const tipos = DYNAMIC_SCRIPT_COLUMN_TYPES[tableName] || {};
-    const pk = DYNAMIC_SCRIPT_TABLE_PKS[tableName] || null;
-    const fk = DYNAMIC_SCHEMA_RELATIONSHIPS
-      .filter((r) => r.from.tabla === tableName)
-      .map((r) => ({ columna: r.from.columna, referencia: `${r.to.tabla}.${r.to.columna}` }));
-    result[tableName] = { columnas: columns, tipos, pk, fk };
-  }
-  return result;
-}
 
-async function refreshDynamicSchemaCache(force = false) {
-  const currentFingerprint = schemaDetector.getConnectionFingerprint();
-  const cacheIsFresh =
-    !force
-    && DYNAMIC_SCHEMA_CACHE.fingerprint === currentFingerprint
-    && DYNAMIC_SCRIPT_ALLOWED_TABLES.length > 0
-    && (Date.now() - DYNAMIC_SCHEMA_CACHE.loadedAt) < DYNAMIC_SCHEMA_CACHE.ttlMs;
 
-  if (cacheIsFresh) {
-    return getDynamicSchemaSnapshot();
-  }
 
-  if (DYNAMIC_SCHEMA_CACHE.refreshPromise) {
-    await DYNAMIC_SCHEMA_CACHE.refreshPromise;
-    return getDynamicSchemaSnapshot();
-  }
 
-  DYNAMIC_SCHEMA_CACHE.refreshPromise = (async () => {
-    const tablesResult = await pool.query(`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND table_type = 'BASE TABLE'
-      ORDER BY table_name
-    `);
-
-    const columnsResult = await pool.query(`
-      SELECT table_name, column_name, data_type, udt_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-      ORDER BY table_name, ordinal_position
-    `);
-
-    const fkResult = await pool.query(`
-      SELECT
-        tc.table_name AS tabla_origen,
-        kcu.column_name AS columna_origen,
-        ccu.table_name AS tabla_destino,
-        ccu.column_name AS columna_destino
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-        AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public'
-      ORDER BY tc.table_name, kcu.column_name
-    `);
-
-    const pkResult = await pool.query(`
-      SELECT tc.table_name, kcu.column_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      WHERE tc.constraint_type = 'PRIMARY KEY'
-        AND tc.table_schema = 'public'
-      ORDER BY tc.table_name
-    `);
-
-    const nextTables = tablesResult.rows
-      .map((row) => normalizeSchemaIdentifier(row.table_name))
-      .filter(Boolean);
-
-    const nextColumnsByTable = {};
-    const nextTypesByTable = {};
-
-    for (const row of columnsResult.rows) {
-      const tableName = normalizeSchemaIdentifier(row.table_name);
-      const columnName = normalizeSchemaIdentifier(row.column_name);
-      if (!tableName || !columnName) continue;
-
-      if (!nextColumnsByTable[tableName]) nextColumnsByTable[tableName] = [];
-      if (!nextTypesByTable[tableName]) nextTypesByTable[tableName] = {};
-
-      nextColumnsByTable[tableName].push(columnName);
-      nextTypesByTable[tableName][columnName] = inferRuntimeTypeFromPgType(row.data_type, row.udt_name);
-    }
-
-    const nextRelationships = fkResult.rows.map((row) => {
-      const fromTable = normalizeSchemaIdentifier(row.tabla_origen);
-      const fromColumn = normalizeSchemaIdentifier(row.columna_origen);
-      const toTable = normalizeSchemaIdentifier(row.tabla_destino);
-      const toColumn = normalizeSchemaIdentifier(row.columna_destino);
-
-      return {
-        from: { tabla: fromTable, columna: fromColumn },
-        to: { tabla: toTable, columna: toColumn },
-      };
-    }).filter((item) => item.from.tabla && item.from.columna && item.to.tabla && item.to.columna);
-
-    const relationKeys = new Set(
-      nextRelationships.map((relation) => buildRelationKey(
-        relation.from.tabla,
-        relation.from.columna,
-        relation.to.tabla,
-        relation.to.columna
-      ))
-    );
-
-    DYNAMIC_SCRIPT_ALLOWED_TABLES = nextTables;
-    DYNAMIC_SCRIPT_ALLOWED_COLUMNS = nextColumnsByTable;
-    DYNAMIC_SCRIPT_COLUMN_TYPES = nextTypesByTable;
-    DYNAMIC_SCHEMA_RELATIONSHIPS = nextRelationships;
-    DYNAMIC_SCHEMA_RELATION_KEYS = relationKeys;
-    DYNAMIC_SCHEMA_CACHE.fingerprint = currentFingerprint;
-    DYNAMIC_SCHEMA_CACHE.loadedAt = Date.now();
-    queryParameterizer.setSchemaContext({ tables: nextTables });
-
-      const nextPKs = {};
-      for (const row of pkResult.rows) {
-        const tableName = normalizeSchemaIdentifier(row.table_name);
-        if (tableName) nextPKs[tableName] = normalizeSchemaIdentifier(row.column_name);
-      }
-      DYNAMIC_SCRIPT_TABLE_PKS = nextPKs;
-  })();
-
-  try {
-    await DYNAMIC_SCHEMA_CACHE.refreshPromise;
-  } finally {
-    DYNAMIC_SCHEMA_CACHE.refreshPromise = null;
-  }
-
-  return getDynamicSchemaSnapshot();
-}
-
-async function ensureDynamicSchemaReady(force = false) {
-  const snapshot = await refreshDynamicSchemaCache(force);
-  if (!snapshot || !snapshot.tablas || Object.keys(snapshot.tablas).length === 0) {
-    throw new Error('No se pudo detectar el schema dinámico de la base de datos');
-  }
-  return snapshot;
-}
 
 async function ejecutarAccionEmpresarial(nombre, params, context, emit) {
   const actionName = String(nombre || '').trim();
@@ -3067,7 +2876,7 @@ function validateDynamicColumnType(tableName, field, value) {
     return;
   }
 
-  const expected = DYNAMIC_SCRIPT_COLUMN_TYPES?.[tableName]?.[field];
+  const expected = tiposDeColumna()?.[tableName]?.[field];
   if (!expected) {
     return;
   }
@@ -3213,7 +3022,7 @@ function buildRelationalSelectQuery(script, normalizedInputParams, workflowConte
 
     if (rightFieldRef) {
       const right = parseQualifiedFieldRef(rightFieldRef, baseTable);
-      if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+      if (!tablasPermitidas().includes(right.table)) {
         throw new Error(`WHERE: tabla no permitida (${right.table})`);
       }
       ensureDynamicColumnAllowed(right.table, [right.column]);
@@ -3634,7 +3443,7 @@ async function executeDynamicTypedScript(script, rawParams, emit, workflowContex
       const { value, fieldRef } = resolveWhereEntry(resolvedWhere[field]);
       if (fieldRef) {
         const right = parseQualifiedFieldRef(fieldRef, validated.tableName);
-        if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(right.table)) {
+        if (!tablasPermitidas().includes(right.table)) {
           throw new Error(`WHERE: tabla no permitida (${right.table})`);
         }
         ensureDynamicColumnAllowed(right.table, [right.column]);
@@ -3977,7 +3786,7 @@ async function executeArticleById(articleId, rawParams, emit, options = {}) {
 
     const tableName = parts[1];
     const normalizedTableName = normalizeSchemaIdentifier(tableName);
-    if (!DYNAMIC_SCRIPT_ALLOWED_TABLES.includes(normalizedTableName)) {
+    if (!tablasPermitidas().includes(normalizedTableName)) {
       if (typeof emit === 'function') emit('❌ Tabla no permitida', 'error');
       console.warn(`[EXECUTE] ⚠️ Tabla no permitida: "${tableName}" en artículo ${articleId}`);
       return { success: false, message: 'Tabla no permitida' };

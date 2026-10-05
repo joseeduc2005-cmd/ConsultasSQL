@@ -168,6 +168,12 @@ export const api = {
       method: 'POST',
       body: json(revision),
     }),
+  /** Lo que la gente buscó y no encontró: la lista de lo que falta por escribir. */
+  busquedasFallidas: (dias = 30) =>
+    solicitar<{ texto: string; veces: number; resultados: number; confianza: string | null; ultima: string }[]>(
+      `/busquedas-fallidas?dias=${dias}`,
+    ),
+
   rechazarAporte: (id: string, nota: string) =>
     solicitar<Aporte>(`/aportes/${id}/rechazar`, { method: 'POST', body: json({ nota }) }),
 

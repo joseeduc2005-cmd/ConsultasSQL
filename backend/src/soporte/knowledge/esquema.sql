@@ -234,3 +234,22 @@ CREATE TABLE IF NOT EXISTS soporte.aprendizaje (
 );
 
 CREATE INDEX IF NOT EXISTS idx_soporte_aprendizaje_termino ON soporte.aprendizaje (termino);
+
+-- Cada búsqueda, y si acabó en algo.
+--
+-- No hace falta que nadie pulse «no me sirvió»: la gente no pulsa botones que no le
+-- devuelven nada. Se apunta la búsqueda, y cuando alguien abre un resultado se marca
+-- `abrio`. Lo que queda sin abrir, o sin resultados, es lo que falló — y eso es lo que
+-- le dice al equipo qué le falta a la base de conocimiento o qué palabra falta en un
+-- tema que ya existe.
+CREATE TABLE IF NOT EXISTS soporte.busquedas (
+  id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  texto      text NOT NULL,
+  autor      text,
+  resultados integer NOT NULL DEFAULT 0,
+  confianza  text,
+  abrio      boolean NOT NULL DEFAULT false,
+  creado_en  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_soporte_busquedas_fallidas ON soporte.busquedas (abrio, creado_en DESC);

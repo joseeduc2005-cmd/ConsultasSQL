@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, Clock, Database, Lightbulb, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Database, Lightbulb, SearchX, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/soporte/lib/api';
@@ -72,7 +72,58 @@ export default function AportesPage() {
           <Ficha key={a.id} aporte={a} />
         ))}
       </div>
+
+      <BusquedasSinRespuesta />
     </div>
+  );
+}
+
+/**
+ * Lo que la gente buscó y no encontró.
+ *
+ * Es lo que le falta a la base de conocimiento, dicho con las palabras de quien lo
+ * necesitaba. Nadie pulsa un botón de «no me sirvió», así que se deduce: una búsqueda
+ * cuenta como fallida si no devolvió nada, si lo que devolvió iba marcado como lejano,
+ * o si nadie llegó a abrir ninguno de los resultados.
+ *
+ * Dos lecturas distintas, y la columna de resultados las separa:
+ *   - Sin resultados y repetida muchas veces: falta ese tema, hay que escribirlo.
+ *   - Con resultados pero nadie los abre: el tema existe y no lo encuentran — lo que
+ *     falta es esa palabra en su título.
+ */
+function BusquedasSinRespuesta() {
+  const { data } = useQuery({ queryKey: ['busquedas-fallidas'], queryFn: () => api.busquedasFallidas(30) });
+  if (!data?.length) return null;
+
+  return (
+    <section className="mt-8 border-t border-(--line) pt-6">
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+        <SearchX className="size-4 text-(--ink-500)" />
+        Buscaron esto y se fueron sin nada
+      </h2>
+      <p className="mt-1 text-[13px] text-muted-foreground">
+        Últimos 30 días. Si algo se repite y no devuelve resultados, es un tema que falta por
+        escribir; si devuelve resultados y nadie los abre, es una palabra que falta en el título de
+        un tema que ya existe.
+      </p>
+
+      <div className="mt-3 space-y-1.5">
+        {data.map((b) => (
+          <div
+            key={b.texto}
+            className="flex items-start gap-3 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 py-2.5"
+          >
+            <span className="mt-0.5 shrink-0 rounded-full bg-(--accent)/10 px-2 py-0.5 text-[11.5px] font-semibold text-(--accent)">
+              {b.veces}×
+            </span>
+            <span className="min-w-0 flex-1 text-[13.5px]">{b.texto}</span>
+            <span className="shrink-0 text-[11.5px] text-muted-foreground">
+              {b.resultados === 0 ? 'sin resultados' : `${b.resultados} resultado(s), ninguno abierto`}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

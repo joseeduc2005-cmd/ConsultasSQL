@@ -30,7 +30,7 @@ import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
 import type { EstadoFuente } from './oracle/fuente.ts';
 import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
 import { explorarDesdeEntrada } from './exploracion.ts';
-import { buscarPrecedentes } from './precedentes.ts';
+import { buscarPrecedentes, busquedasFallidas } from './precedentes.ts';
 import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from './solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
 import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
@@ -644,6 +644,16 @@ export function crearSoporteRouter(
   // `knowledge_base`; rechazar exige un motivo, que el autor sí ve.
 
   router.get('/aportes', h(async (req) => listarAportes(texto(req.query.estado))));
+
+  /**
+   * Lo que la gente buscó y no encontró.
+   *
+   * Es la lista de lo que le falta a la base de conocimiento, dicha con las palabras de
+   * quien lo necesitaba. Un término repetido muchas veces sin resultado es un tema que
+   * hay que escribir; uno que sí tiene tema pero nadie abre es una palabra que falta en
+   * su título.
+   */
+  router.get('/busquedas-fallidas', h(async (req) => busquedasFallidas(Number(req.query.dias) || 30)));
 
   router.get(
     '/aportes/:id',

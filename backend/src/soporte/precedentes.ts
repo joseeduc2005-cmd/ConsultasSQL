@@ -125,6 +125,48 @@ function confianzaDe(cobertura: number): 'alta' | 'media' | 'baja' {
 export const aConsultaParaPruebas = aConsulta;
 
 /**
+ * Deja constancia de una búsqueda, para saber después si sirvió de algo.
+ *
+ * Nunca lanza: llevar la cuenta no puede impedir que alguien busque.
+ */
+export async function registrarBusqueda(
+  texto: string,
+  autor: string | null,
+  resultados: number,
+  confianza: string | null,
+): Promise<void> {
+  try {
+    await ejecutar(
+      'INSERT INTO soporte.busquedas (texto, autor, resultados, confianza) VALUES ($1, $2, $3, $4)',
+      [texto.trim().slice(0, 500), autor, resultados, confianza],
+    );
+  } catch {
+    /* sin registro se pierde una medida, no una búsqueda */
+  }
+}
+
+/**
+ * Las búsquedas que no acabaron en nada, agrupadas por lo que se escribió.
+ *
+ * Son las tres formas de irse con las manos vacías: sin resultados, con resultados que
+ * la propia pantalla marcó como lejanos, o con resultados que nadie llegó a abrir.
+ */
+export function busquedasFallidas(dias = 30, limite = 50) {
+  return filas<{ texto: string; veces: number; resultados: number; confianza: string | null; ultima: string }>(
+    `SELECT lower(btrim(texto)) AS texto, count(*)::int AS veces,
+            max(resultados) AS resultados, min(confianza) AS confianza,
+            max(creado_en) AS ultima
+       FROM soporte.busquedas
+      WHERE creado_en > now() - ($1 || ' days')::interval
+        AND abrio = false
+      GROUP BY lower(btrim(texto))
+      ORDER BY count(*) DESC, max(creado_en) DESC
+      LIMIT $2`,
+    [String(dias), limite],
+  );
+}
+
+/**
  * Apunta que, buscando esto, alguien abrió ese tema.
  *
  * Se guarda por término y no por la frase entera: nadie escribe dos veces igual, y
@@ -138,6 +180,15 @@ export async function registrarAcierto(texto: string, articulo: string): Promise
   try {
     const consulta = aConsulta(texto);
     if (!consulta) return;
+    // La misma apertura cierra la búsqueda que la originó: lo que quede sin cerrar es
+    // lo que no le sirvió a nadie.
+    await ejecutar(
+      `UPDATE soporte.busquedas SET abrio = true
+        WHERE id = (SELECT id FROM soporte.busquedas
+                     WHERE lower(btrim(texto)) = lower(btrim($1)) AND abrio = false
+                     ORDER BY creado_en DESC LIMIT 1)`,
+      [texto],
+    );
     await ejecutar(
       `INSERT INTO soporte.aprendizaje (termino, articulo)
        SELECT t, $2 FROM unnest($1::text[]) AS t

@@ -21,7 +21,7 @@ import { basesConectadas } from './motor-puente.ts';
 import { solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
 import { filas } from './knowledge/db.ts';
 import { guardarTicket, obtenerTicket, type Ticket } from './knowledge/tickets.ts';
-import { buscarPrecedentes, registrarAcierto } from './precedentes.ts';
+import { buscarPrecedentes, registrarAcierto, registrarBusqueda } from './precedentes.ts';
 
 type Manejador = (req: Request, res: Response) => Promise<unknown>;
 
@@ -141,6 +141,9 @@ export function crearSoporteClienteRouter(
       const cuerpo = (req.body ?? {}) as { texto?: string };
       const consulta = textoRequerido(cuerpo.texto, 'texto');
       const precedentes = await buscarPrecedentes(consulta, { limite: 6, soloPublicos: true });
+      // Queda apuntada para saber si sirvió: la marca de «sirvió» la pone abrir un
+      // resultado, así que no hace falta pedirle a nadie que valore nada.
+      await registrarBusqueda(consulta, quien(req).username, precedentes.length, precedentes[0]?.confianza ?? null);
       return { consulta, precedentes };
     }),
   );

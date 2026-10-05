@@ -264,13 +264,10 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
   }
 
   const conModelo = dictado.motor === 'vosk';
-  const etiqueta = dictado.preparando
-    ? 'Preparando…'
-    : dictado.grabando
-      ? 'Escuchando…'
-      : conModelo
-        ? 'Dictar (descarga 40 MB)'
-        : 'Dictar';
+  // El botón dice lo mismo en todos los navegadores. Anunciar el tamaño en la etiqueta
+  // asustaba más que informar: lo que importa es que funciona, y la espera de la
+  // primera vez ya se explica mientras ocurre.
+  const etiqueta = dictado.preparando ? 'Preparando…' : dictado.grabando ? 'Escuchando…' : 'Dictar';
 
   return (
     <button
@@ -279,7 +276,7 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
       disabled={dictado.preparando}
       title={
         conModelo
-          ? 'Su navegador no dicta por sí solo: se descargará un modelo que funciona dentro del navegador, sin enviar el audio a ningún sitio'
+          ? 'La primera vez tarda un momento en prepararse. Después funciona sin conexión, y el audio no sale de su equipo'
           : dictado.grabando
             ? 'Dejar de dictar'
             : 'Dictar el problema'
@@ -357,7 +354,7 @@ function Buscar({
             {dictado.error
               ? dictado.error
               : dictado.preparando
-                ? 'Descargando el modelo de voz, solo la primera vez…'
+                ? 'Preparando el dictado, solo la primera vez…'
                 : dictado.grabando
                   ? 'Hable con naturalidad; pulse otra vez para terminar'
                   : listo

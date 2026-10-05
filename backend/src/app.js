@@ -71,6 +71,12 @@ import { crearRutasConsultas } from './adaptadores/http/consultas.js';
 import { ALLOWED_WHERE_OPERATORS, DYNAMIC_SCRIPT_ALLOWED_TYPES, MANUAL_SQL_BLOCKED_KEYWORDS, WORKFLOW_ALLOWED_STEP_TYPES, assertDynamicScriptAllowed, assertManualSqlAllowed, buildRelationKey, detectSqlOperation, ensureDynamicColumnAllowed, ensureDynamicJoinRelationAllowed, hasRelationBetweenFields, isPlainObject, normalizeBusinessStep, normalizeDynamicScriptType, parseQualifiedFieldRef, resolveWhereEntry, validateBusinessScriptDefinition, validateRelationalMutationScriptDefinition, validateRelationalScriptDefinition, validateWorkflowBuilderDefinition } from './dominio/scripts/validacion.js';
 import { buildHumanSqlExplanation, buildProductionSqlResponse, sanitizeProductionResultObject } from './dominio/presentacion/explicacion.js';
 import { applyCastToSqlPlaceholder, applyOptionalSqlFilterTransform, buildAnalyticSelectQuery, buildManualSqlQuery, collectManualSqlPlaceholderMetadata, countPositionalSqlPlaceholders, getValueByPath, inferManualPlaceholderCast, inferStructuredParamSemantic, isMissingParamValue, isOptionalUserPlaceholder, isWriteConfirmed, normalizeLimitValue, normalizeManualSqlParamsInput, resolveDynamicScriptNode, resolveValue, resolveValueMultiSource, resolveWorkflowContextPlaceholder, sanitizeStructuredParamValue, validateStructuredParamByName, MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, MANUAL_SQL_POSITIONAL_PLACEHOLDER_REGEX, STRUCTURED_PLACEHOLDER_REGEX } from './dominio/sql/construccion.js';
+import { configurarPool as configurarPoolAuditoria, logArticleChange, logLoginEvent, logQueryHistory, logSystemEvent } from './adaptadores/postgres/auditoria.js';
+
+// El pool se reasigna al recargar la configuración multi-base, así que la auditoría
+// recibe un getter y no el valor: guardar el de ahora sería escribir contra una
+// conexión cerrada en cuanto alguien toque multidb.databases.json.
+configurarPoolAuditoria(() => pool);
 
 const extractDatabaseHintsFromText = (text) => deducirBases(text, multiDbRegistry.getDatabases());
 const resolveRequestedDatabasesForQuery = (text, requestedDatabases = []) =>
@@ -1248,108 +1254,7 @@ function resolveArticleExecutionDatabaseId(article = {}, structuredScript = null
 }
 
 
-async function logQueryHistory({
-  username,
-  role,
-  queryText,
-  generatedSql,
-  queryParams,
-  placeholderOrder,
-  executionMs,
-  rowCount,
-  wasCached,
-  status,
-}) {
-  try {
-    await pool.query(
-      `INSERT INTO query_history
-        (username, user_role, query_text, generated_sql, query_params, placeholder_order, execution_ms, row_count, was_cached, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        String(username || 'anonymous'),
-        normalizeRole(role),
-        queryText || null,
-        String(generatedSql || ''),
-        queryParams === undefined ? null : JSON.stringify(queryParams),
-        placeholderOrder === undefined ? null : JSON.stringify(placeholderOrder),
-        Math.max(0, Number(executionMs) || 0),
-        Math.max(0, Number(rowCount) || 0),
-        Boolean(wasCached),
-        String(status || 'ok'),
-      ]
-    );
-  } catch (error) {
-    console.error('[QUERY_HISTORY] ❌ Error registrando historial:', error.message || error);
-  }
-}
 
-/**
- * Registra un cambio (crear/editar/eliminar) de artículo en article_changes.
- * accion: 'crear' | 'editar' | 'eliminar'
- * detalle: objeto con los datos relevantes del cambio
- */
-/**
- * Registra un intento de login (exitoso o fallido) en login_audit.
- */
-async function logLoginEvent({ username, rol, ip, userAgent, estado, detalle }) {
-  try {
-    await pool.query(
-      `INSERT INTO login_audit (username, rol, ip, user_agent, estado, detalle, fecha)
-       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-      [
-        String(username || 'unknown'),
-        rol ? String(rol) : null,
-        ip ? String(ip).substring(0, 60) : null,
-        userAgent ? String(userAgent).substring(0, 300) : null,
-        String(estado || 'ok'),
-        detalle ? String(detalle) : null,
-      ]
-    );
-  } catch (err) {
-    console.error('[LOGIN_AUDIT] ❌ Error registrando login:', err.message || err);
-  }
-}
-
-/**
- * Registra un evento del sistema (descarga Excel, exportación, etc.) en system_events.
- */
-async function logSystemEvent({ evento, usuario, rol, detalle, ip }) {
-  try {
-    await pool.query(
-      `INSERT INTO system_events (evento, usuario, rol, detalle, ip, fecha)
-       VALUES ($1,$2,$3,$4,$5,NOW())`,
-      [
-        String(evento || 'evento_desconocido'),
-        usuario ? String(usuario) : null,
-        rol ? String(rol) : null,
-        detalle ? JSON.stringify(detalle) : null,
-        ip ? String(ip).substring(0, 60) : null,
-      ]
-    );
-  } catch (err) {
-    console.error('[SYSTEM_EVENT_AUDIT] ❌ Error registrando evento:', err.message || err);
-  }
-}
-
-async function logArticleChange({ articleId, articleTitulo, accion, realizadoPor, realizadoRol, detalle }) {
-  try {
-    await pool.query(
-      `INSERT INTO article_changes
-        (article_id, article_titulo, accion, realizado_por, realizado_rol, detalle, realizado_en)
-       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-      [
-        articleId ? String(articleId) : null,
-        String(articleTitulo || ''),
-        String(accion || 'editar'),
-        String(realizadoPor || 'anonymous'),
-        String(realizadoRol || 'admin'),
-        detalle ? JSON.stringify(detalle) : null,
-      ]
-    );
-  } catch (err) {
-    console.error('[ARTICLE_CHANGE_AUDIT] ❌ Error registrando cambio:', err.message || err);
-  }
-}
 
 /**
  * Registra una ejecución de artículo en la tabla article_executions (auditoría completa).

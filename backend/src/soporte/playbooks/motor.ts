@@ -1,6 +1,6 @@
 import { CATALOGO, type ConsultaCatalogo } from '../dominio/oracle/catalogo.ts';
 import type { FuenteDatos, Parametros } from '../puertos/fuente-datos.ts';
-import { solicitudInvalida } from '../http/errores.ts';
+import { solicitudInvalida } from '../adaptadores/http/errores.ts';
 import type {
   ConsultaEjecutada,
   Contexto,

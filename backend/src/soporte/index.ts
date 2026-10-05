@@ -14,11 +14,11 @@ import { sembrarSiVacio } from './knowledge/semillas.ts';
 import { configurarMotor, type RegistroMotor } from './motor-puente.ts';
 import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
-import { precalentarEstadoOracle } from './rutas.ts';
+import { precalentarEstadoOracle } from './adaptadores/http/rutas-admin.ts';
 import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
 
-export { crearSoporteClienteRouter } from './rutas-cliente.ts';
-export { crearSoporteRouter } from './rutas.ts';
+export { crearSoporteClienteRouter } from './adaptadores/http/rutas-cliente.ts';
+export { crearSoporteRouter } from './adaptadores/http/rutas-admin.ts';
 export { config as configSoporte } from './config.ts';
 
 export interface OpcionesSoporte {

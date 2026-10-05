@@ -8,13 +8,13 @@
  * Pendiente a propósito: /interpretar, porque depende del modelo de lenguaje.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from './aportes.ts';
-import { config } from './config.ts';
-import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './http/errores.ts';
-import { cambiarEstadoAlerta, contarAlertasAbiertas, listarAlertas, ultimaEjecucion, type EstadoAlerta } from './knowledge/alertas.ts';
-import { categoriasConsultas, contarConsultas, listarConsultas, obtenerConsulta } from './knowledge/consultas.ts';
-import { filas } from './knowledge/db.ts';
-import { contarDiagnosticos, guardarDiagnostico, listarDiagnosticos, obtenerDiagnostico, vincularDiagnostico } from './knowledge/diagnosticos.ts';
+import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from '../../aportes.ts';
+import { config } from '../../config.ts';
+import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './errores.ts';
+import { cambiarEstadoAlerta, contarAlertasAbiertas, listarAlertas, ultimaEjecucion, type EstadoAlerta } from '../../knowledge/alertas.ts';
+import { categoriasConsultas, contarConsultas, listarConsultas, obtenerConsulta } from '../../knowledge/consultas.ts';
+import { filas } from '../../knowledge/db.ts';
+import { contarDiagnosticos, guardarDiagnostico, listarDiagnosticos, obtenerDiagnostico, vincularDiagnostico } from '../../knowledge/diagnosticos.ts';
 import {
   ESTADOS_TICKET,
   actualizarTicket,
@@ -23,19 +23,19 @@ import {
   guardarTicket,
   listarTickets,
   obtenerTicket,
-} from './knowledge/tickets.ts';
-import { MONITORES, obtenerMonitor } from './monitors/monitores.ts';
-import { ejecutarMonitor, monitorEnCurso } from './monitors/programador.ts';
-import { basesParaTickets, fuente, fuentePara } from './oracle/index.ts';
-import type { EstadoFuente } from './puertos/fuente-datos.ts';
-import { CORRECCIONES, publicarCorrecciones } from './correcciones.ts';
-import { explorarDesdeEntrada } from './exploracion.ts';
-import { buscarPrecedentes, busquedasFallidas } from './precedentes.ts';
-import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from './solucion.ts';
-import { construirVocabulario, sembrarVocabulario } from './vocabulario.ts';
-import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from './playbooks/index.ts';
-import { ejecutarPlaybook, validarEntrada } from './playbooks/motor.ts';
-import type { ResultadoDiagnostico } from './playbooks/tipos.ts';
+} from '../../knowledge/tickets.ts';
+import { MONITORES, obtenerMonitor } from '../../monitors/monitores.ts';
+import { ejecutarMonitor, monitorEnCurso } from '../../monitors/programador.ts';
+import { basesParaTickets, fuente, fuentePara } from '../../oracle/index.ts';
+import type { EstadoFuente } from '../../puertos/fuente-datos.ts';
+import { CORRECCIONES, publicarCorrecciones } from '../../correcciones.ts';
+import { explorarDesdeEntrada } from '../../exploracion.ts';
+import { buscarPrecedentes, busquedasFallidas } from '../../precedentes.ts';
+import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from '../../solucion.ts';
+import { construirVocabulario, sembrarVocabulario } from '../../vocabulario.ts';
+import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from '../../playbooks/index.ts';
+import { ejecutarPlaybook, validarEntrada } from '../../playbooks/motor.ts';
+import type { ResultadoDiagnostico } from '../../playbooks/tipos.ts';
 
 type Manejador = (req: Request, res: Response) => Promise<unknown>;
 

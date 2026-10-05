@@ -23,8 +23,8 @@ const { configurarPool, aplicarEsquema } = await import('../src/soporte/knowledg
 configurarPool(() => pool);
 await aplicarEsquema();
 
-const { crearSoporteClienteRouter } = await import('../src/soporte/rutas-cliente.ts');
-const { crearSoporteRouter } = await import('../src/soporte/rutas.ts');
+const { crearSoporteClienteRouter } = await import('../src/soporte/adaptadores/http/rutas-cliente.ts');
+const { crearSoporteRouter } = await import('../src/soporte/adaptadores/http/rutas-admin.ts');
 
 // `knowledge_base.creado_por` es una clave foránea contra users, así que el revisor
 // tiene que existir de verdad. Se toma un admin real de la base; los dos usuarios que

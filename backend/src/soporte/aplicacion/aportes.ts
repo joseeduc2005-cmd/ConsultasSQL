@@ -14,7 +14,7 @@
  * Estos son los casos de uso. Solo conocen el dominio y el puerto: no saben si debajo
  * hay PostgreSQL, ni les importa.
  */
-import { solicitudInvalida, textoOpcional, textoRequerido } from '../http/errores.ts';
+import { solicitudInvalida, textoOpcional, textoRequerido } from '../adaptadores/http/errores.ts';
 import {
   MINIMO_DESCRITO,
   contenidoDelAporte,

@@ -22,7 +22,7 @@ configurarPool(() => pool);
 await aplicarEsquema();
 
 const admin = (await pool.query("SELECT id, username FROM users WHERE role = 'admin' LIMIT 1")).rows[0];
-const { crearSoporteRouter } = await import('../src/soporte/rutas.ts');
+const { crearSoporteRouter } = await import('../src/soporte/adaptadores/http/rutas-admin.ts');
 
 const app = express();
 app.use(express.json());

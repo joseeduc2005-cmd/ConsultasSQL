@@ -66,6 +66,7 @@ import { SQL_BLOCKED_KEYWORDS, containsBlockedSql, extractSqlReferencedTables, g
 import { ROLE_LEVELS, getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
 import { ALLOWED_OUTBOUND_HOSTS, BLOCKED_OUTBOUND_PATTERNS, CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked, sanitizeOrigin } from './dominio/red/salida.js';
 import { extractDatabaseHintsFromText as deducirBases, resolveRequestedDatabasesForQuery as resolverBasesPedidas } from './dominio/bases/resolucion.js';
+import { dedupeSemanticValues, normalizeGeneratedSelectSql, normalizeSemanticLearningTerm, slugifyProcessName } from './dominio/texto/normalizar.js';
 
 const extractDatabaseHintsFromText = (text) => deducirBases(text, multiDbRegistry.getDatabases());
 const resolveRequestedDatabasesForQuery = (text, requestedDatabases = []) =>
@@ -623,19 +624,7 @@ async function ensureErrorLogsSchema() {
   }
 }
 
-function normalizeSemanticLearningTerm(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
 
-function dedupeSemanticValues(values = []) {
-  return [...new Set((values || []).map((item) => String(item || '').trim()).filter(Boolean))];
-}
 
 function applyLearnedSemanticSnapshot(snapshot = {}) {
   const safeSnapshot = {
@@ -865,15 +854,6 @@ let QUERY_CACHE_DATA_VERSION = 1;
 
 
 
-function slugifyProcessName(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
 
 function bumpQueryCacheDataVersion() {
   QUERY_CACHE_DATA_VERSION += 1;
@@ -1263,14 +1243,6 @@ function resolveArticleExecutionDatabaseId(article = {}, structuredScript = null
   return requested[0] || '';
 }
 
-function normalizeGeneratedSelectSql(sqlText) {
-  const input = String(sqlText || '');
-  if (!input) return input;
-
-  // Repair common generator drift: ILIKE over non-text columns without explicit cast.
-  // Example: "t1"."activo" ILIKE '%x%' -> "t1"."activo"::text ILIKE '%x%'
-  return input.replace(/((?:"[^"]+"|[a-zA-Z_][\w]*)\.(?:"[^"]+"|[a-zA-Z_][\w]*))(?!::text)\s+ILIKE/gi, '$1::text ILIKE');
-}
 
 async function logQueryHistory({
   username,

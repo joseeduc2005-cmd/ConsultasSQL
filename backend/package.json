@@ -12,7 +12,7 @@
     "dev": "node src/app.js",
     "build": "tsc",
     "start": "node src/app.js",
-    "test": "node --test --experimental-strip-types src/dominio/sql/guardas.test.js src/dominio/acceso/roles.test.js src/dominio/red/salida.test.js src/dominio/bases/resolucion.test.js src/dominio/texto/normalizar.test.js src/soporte/soporte.test.ts",
+    "test": "node --test --experimental-strip-types src/dominio/sql/guardas.test.js src/dominio/acceso/roles.test.js src/dominio/red/salida.test.js src/dominio/bases/resolucion.test.js src/dominio/texto/normalizar.test.js src/dominio/scripts/validacion.test.js src/soporte/soporte.test.ts",
     "test:soporte": "node --test src/soporte/soporte.test.ts"
   },
   "keywords": [

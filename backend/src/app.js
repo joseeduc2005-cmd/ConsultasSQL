@@ -22,9 +22,9 @@ import {
 import SchemaDetector from './infrastructure/database/SchemaDetector.js';
 import SchemaCache from './infrastructure/cache/SchemaCache.js';
 import QueryBuilder from './infrastructure/query/QueryBuilder.js';
-import QueryAnalyzer from './infrastructure/query/QueryAnalyzer.js';
-import ResultExplainer from './infrastructure/query/ResultExplainer.js';
-import QueryParameterizer from './infrastructure/query/QueryParameterizer.js';
+import QueryAnalyzer from './dominio/consultas/QueryAnalyzer.js';
+import ResultExplainer from './dominio/presentacion/ResultExplainer.js';
+import QueryParameterizer from './dominio/consultas/QueryParameterizer.js';
 import {
   analyzeErrorInput,
   buildErrorAnalysisResponse,
@@ -41,12 +41,12 @@ import {
   extractDatabaseDirective,
   isNativePlSql,
   buildEngineLog,
-} from './infrastructure/query/SqlEngineDetector.js';
+} from './dominio/sql/SqlEngineDetector.js';
 import { bootstrapGlobalSystems } from './bootstrap.js';
 import { connectDatabase as probeUniversalConnection, closeConnection as closeUniversalConnection } from './infrastructure/universal-db/index.js';
 import { createQueryRouter } from './adaptadores/http/QueryRoute.js';
 import { initDynamicRoutes } from './adaptadores/http/DynamicRoutes.js';
-import { createResponseSecurityMiddleware } from './infrastructure/security/responseSecurity.js';
+import { createResponseSecurityMiddleware } from './adaptadores/http/responseSecurity.js';
 import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './adaptadores/http/sesion.js';
 import { createAuthRouter } from './adaptadores/http/authRoute.js';
 import { createContentRouter } from './adaptadores/http/contentRoute.js';

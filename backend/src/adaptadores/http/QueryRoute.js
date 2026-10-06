@@ -21,15 +21,15 @@ import {
   searchErrorLogs,
 } from '../../infrastructure/query/ErrorAnalysisEngine.js';
 import { askOllama } from '../../infrastructure/ai/OllamaClient.js';
-import { DatabaseRelevanceValidator } from '../../infrastructure/query/DatabaseRelevanceValidator.js';
-import { ResultExplainer } from '../../infrastructure/query/ResultExplainer.js';
+import { DatabaseRelevanceValidator } from '../../dominio/bases/DatabaseRelevanceValidator.js';
+import { ResultExplainer } from '../../dominio/presentacion/ResultExplainer.js';
 import {
   detectSqlSyntaxEngine,
   detectQueryType,
   detectQueryComplexity,
   extractDatabaseDirective,
   buildEngineLog,
-} from '../../infrastructure/query/SqlEngineDetector.js';
+} from '../../dominio/sql/SqlEngineDetector.js';
 
 const OLLAMA_MODEL_LIGHT = process.env.OLLAMA_MODEL_LIGHT || process.env.OLLAMA_MODEL || '';
 

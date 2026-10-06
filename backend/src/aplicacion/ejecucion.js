@@ -43,7 +43,7 @@ import MultiDbRegistry from '../infrastructure/distributed/MultiDbRegistry.js';
 import logger from '../infrastructure/logger/logger.js';
 import { analyzeErrorInput, buildErrorAnalysisResponse, enrichErrorAnalysisWithAi, searchErrorLogs } from '../infrastructure/query/ErrorAnalysisEngine.js';
 import { isComplexSqlScript, parsePlSqlScript, shouldForceProceduralMode } from '../dominio/sql/plsql.js';
-import { buildEngineLog, detectQueryType, detectSqlSyntaxEngine, extractDatabaseDirective, isNativePlSql } from '../infrastructure/query/SqlEngineDetector.js';
+import { buildEngineLog, detectQueryType, detectSqlSyntaxEngine, extractDatabaseDirective, isNativePlSql } from '../dominio/sql/SqlEngineDetector.js';
 import path from 'path';
 
 export function crearEjecucionDeScripts({

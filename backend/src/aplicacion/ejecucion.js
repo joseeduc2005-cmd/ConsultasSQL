@@ -28,8 +28,6 @@
  * Las otras veintiuna eran detalle interno repartido por app.js. Que ahora no se vean
  * desde fuera es la mitad del punto de haberlas traído aquí.
  */
-import { logQueryHistory } from '../adaptadores/postgres/auditoria.js';
-import { ensureDynamicSchemaReady, refreshDynamicSchemaCache, tablasPermitidas } from '../adaptadores/postgres/esquema-dinamico.js';
 import { getBusinessActionMetadata, getRequiredParamsForActions } from '../dominio/acciones/catalogo.js';
 import { detectErrorAnalysisMode } from '../dominio/consultas/decidir.js';
 import { evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, normalizeWorkflowStoredValue, replaceVariables, resolveTemplateVariable } from '../dominio/flujos/pasos.js';
@@ -44,11 +42,18 @@ import { buildRelationalMutationQuery, buildRelationalSelectQuery, buildWriteDet
 import MultiDbRegistry from '../infrastructure/distributed/MultiDbRegistry.js';
 import logger from '../infrastructure/logger/logger.js';
 import { analyzeErrorInput, buildErrorAnalysisResponse, enrichErrorAnalysisWithAi, searchErrorLogs } from '../infrastructure/query/ErrorAnalysisEngine.js';
-import { isComplexSqlScript, parsePlSqlScript, shouldForceProceduralMode } from '../infrastructure/query/PlSqlInterpreter.js';
+import { isComplexSqlScript, parsePlSqlScript, shouldForceProceduralMode } from '../dominio/sql/plsql.js';
 import { buildEngineLog, detectQueryType, detectSqlSyntaxEngine, extractDatabaseDirective, isNativePlSql } from '../infrastructure/query/SqlEngineDetector.js';
 import path from 'path';
 
 export function crearEjecucionDeScripts({
+  // Estos cuatro eran imports directos al adaptador de PostgreSQL. Entran por aqui
+  // porque la capa de aplicacion no debe saber que detras hay PostgreSQL: solo que
+  // hay donde registrar y donde preguntar por el esquema.
+  logQueryHistory,
+  ensureDynamicSchemaReady,
+  refreshDynamicSchemaCache,
+  tablasPermitidas,
   obtenerPool,
   obtenerRegistroAcciones,
   esquema,
@@ -2122,7 +2127,7 @@ export function crearEjecucionDeScripts({
     }
 
     try {
-      const effectiveRequestedDatabases = resolveRequestedDatabasesForQuery(inputText, requestedDatabases);
+      const effectiveRequestedDatabases = resolverBasesDeConsulta(inputText, requestedDatabases);
       const configuredDatabases = multiDbRegistry.getDatabases();
       if (configuredDatabases.length <= 1) {
         return {

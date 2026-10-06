@@ -34,7 +34,7 @@ import {
 } from './infrastructure/query/ErrorAnalysisEngine.js';
 import MultiDbRegistry from './infrastructure/distributed/MultiDbRegistry.js';
 import MultiDatabaseEngine from './infrastructure/distributed/MultiDatabaseEngine.js';
-import { isComplexSqlScript, shouldForceProceduralMode, parsePlSqlScript, applyLoopVarResolution } from './infrastructure/query/PlSqlInterpreter.js';
+import { isComplexSqlScript, shouldForceProceduralMode, parsePlSqlScript, applyLoopVarResolution } from './dominio/sql/plsql.js';
 import {
   detectSqlSyntaxEngine,
   detectQueryType,
@@ -494,6 +494,10 @@ const {
   executeManualSqlScript,
   executeSafeSelectQuery,
 } = crearEjecucionDeScripts({
+  logQueryHistory,
+  ensureDynamicSchemaReady,
+  refreshDynamicSchemaCache,
+  tablasPermitidas,
   obtenerPool: () => pool,
   obtenerRegistroAcciones: () => BUSINESS_ACTIONS_REGISTRY,
   esquema: ESQUEMA_PERMITIDO,
@@ -520,6 +524,9 @@ const {
   resetLearnedSemanticCache,
   restaurarEstado,
 } = crearAprendizajeSemantico({
+  bumpQueryCacheDataVersion,
+  relacionesDelEsquema,
+  tablasPermitidas,
   obtenerPool: () => pool,
   schemaCache,
   schemaDetector,

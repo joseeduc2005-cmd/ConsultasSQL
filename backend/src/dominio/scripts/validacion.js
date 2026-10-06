@@ -10,7 +10,7 @@
  * objeto y lanzan si no sirve. Juntas forman las reglas del formato, que es algo que
  * conviene poder leer de una sentada.
  */
-import { isComplexSqlScript, parsePlSqlScript } from '../../infrastructure/query/PlSqlInterpreter.js';
+import { isComplexSqlScript, parsePlSqlScript } from '../sql/plsql.js';
 import { getBusinessActionMetadata, getRequiredParamsForActions } from '../acciones/catalogo.js';
 import { normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from '../sql/guardas.js';
 

@@ -1,4 +1,16 @@
 /**
+ * El interprete de PL/SQL: parte un bloque en sus pasos y resuelve sus expresiones.
+ *
+ * Vivia en infrastructure/query/ y no pertenecia ahi. Son novecientas setenta y seis
+ * lineas sin un solo import y sin tocar nada de fuera: lee texto y devuelve una
+ * estructura. Eso es dominio, y tenerlo en infraestructura obligaba a que
+ * dominio/scripts/validacion.js importara hacia afuera para poder usarlo, que es
+ * justo lo que una arquitectura hexagonal existe para evitar.
+ *
+ * Se movio tal cual, sin tocar una linea de su contenido.
+ */
+
+/**
  * PlSqlInterpreter.js
  *
  * Interprets PL/SQL-like procedural scripts and transforms them into

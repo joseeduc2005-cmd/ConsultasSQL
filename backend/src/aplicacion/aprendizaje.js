@@ -16,12 +16,15 @@
  * El pool llega por getter, como en todos los demás, porque se reasigna al recargar
  * la configuración multi-base.
  */
-import { bumpQueryCacheDataVersion } from '../adaptadores/memoria/cache-consultas.js';
-import { relacionesDelEsquema, tablasPermitidas } from '../adaptadores/postgres/esquema-dinamico.js';
 import { normalizeSchemaIdentifier } from '../dominio/sql/guardas.js';
 import { dedupeSemanticValues, normalizeSemanticLearningTerm } from '../dominio/texto/normalizar.js';
 
 export function crearAprendizajeSemantico({
+  // Eran imports directos a los adaptadores; entran por el puerto para que este
+  // modulo no sepa de donde salen el esquema ni el cache.
+  bumpQueryCacheDataVersion,
+  relacionesDelEsquema,
+  tablasPermitidas,
   obtenerPool,
   schemaCache,
   schemaDetector,

@@ -10,7 +10,7 @@
  * ejemplos raros sin levantar nada, que es lo que hacía falta sobre todo para la de
  * las escrituras sin WHERE.
  */
-import { detectErrorAnalysisInput } from '../../infrastructure/query/ErrorAnalysisEngine.js';
+import { detectErrorAnalysisInput } from './errores.js';
 import { resolveRequestedDatabasesForQuery } from '../bases/resolucion.js';
 import { extractVariables } from '../flujos/pasos.js';
 import { buildProductionSqlResponse } from '../presentacion/explicacion.js';

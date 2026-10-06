@@ -16,7 +16,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import logger, { childLogger } from '../infrastructure/logger/logger.js';
+import logger, { childLogger } from '../../infrastructure/logger/logger.js';
 
 export function correlationIdMiddleware(req, res, next) {
   // Reutilizar ID del cliente o generar uno nuevo

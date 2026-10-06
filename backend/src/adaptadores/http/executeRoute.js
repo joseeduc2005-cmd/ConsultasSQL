@@ -1,6 +1,6 @@
 // ─── Execute routes: /api/execute/*, /api/repair ─────────────────────────────
 import { Router } from 'express';
-import logger from '../infrastructure/logger/logger.js';
+import logger from '../../infrastructure/logger/logger.js';
 
 /**
  * @param {{

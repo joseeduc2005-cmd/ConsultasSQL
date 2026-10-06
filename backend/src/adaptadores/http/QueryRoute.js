@@ -19,17 +19,17 @@ import {
   detectErrorAnalysisInput,
   enrichErrorAnalysisWithAi,
   searchErrorLogs,
-} from '../infrastructure/query/ErrorAnalysisEngine.js';
-import { askOllama } from '../infrastructure/ai/OllamaClient.js';
-import { DatabaseRelevanceValidator } from '../infrastructure/query/DatabaseRelevanceValidator.js';
-import { ResultExplainer } from '../infrastructure/query/ResultExplainer.js';
+} from '../../infrastructure/query/ErrorAnalysisEngine.js';
+import { askOllama } from '../../infrastructure/ai/OllamaClient.js';
+import { DatabaseRelevanceValidator } from '../../infrastructure/query/DatabaseRelevanceValidator.js';
+import { ResultExplainer } from '../../infrastructure/query/ResultExplainer.js';
 import {
   detectSqlSyntaxEngine,
   detectQueryType,
   detectQueryComplexity,
   extractDatabaseDirective,
   buildEngineLog,
-} from '../infrastructure/query/SqlEngineDetector.js';
+} from '../../infrastructure/query/SqlEngineDetector.js';
 
 const OLLAMA_MODEL_LIGHT = process.env.OLLAMA_MODEL_LIGHT || process.env.OLLAMA_MODEL || '';
 

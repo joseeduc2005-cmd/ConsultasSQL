@@ -44,24 +44,24 @@ import {
 } from './infrastructure/query/SqlEngineDetector.js';
 import { bootstrapGlobalSystems } from './bootstrap.js';
 import { connectDatabase as probeUniversalConnection, closeConnection as closeUniversalConnection } from './infrastructure/universal-db/index.js';
-import { createQueryRouter } from './routes/QueryRoute.js';
-import { initDynamicRoutes } from './routes/DynamicRoutes.js';
+import { createQueryRouter } from './adaptadores/http/QueryRoute.js';
+import { initDynamicRoutes } from './adaptadores/http/DynamicRoutes.js';
 import { createResponseSecurityMiddleware } from './infrastructure/security/responseSecurity.js';
-import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './lib/session.js';
-import { createAuthRouter } from './routes/authRoute.js';
-import { createContentRouter } from './routes/contentRoute.js';
-import { createExecuteRouter, createRepairRouter } from './routes/executeRoute.js';
-import { createHistoryRouter } from './routes/historyRoute.js';
-import { createProcessRouter } from './routes/processRoute.js';
-import { createAdminRouter, createDbSchemaRouter } from './routes/adminRoute.js';
-import { createActionsRouter } from './routes/actionsRoute.js';
-import { createSqlRouter } from './routes/sqlRoute.js';
-import { createDistributedRouter } from './routes/distributedRoute.js';
+import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './adaptadores/http/sesion.js';
+import { createAuthRouter } from './adaptadores/http/authRoute.js';
+import { createContentRouter } from './adaptadores/http/contentRoute.js';
+import { createExecuteRouter, createRepairRouter } from './adaptadores/http/executeRoute.js';
+import { createHistoryRouter } from './adaptadores/http/historyRoute.js';
+import { createProcessRouter } from './adaptadores/http/processRoute.js';
+import { createAdminRouter, createDbSchemaRouter } from './adaptadores/http/adminRoute.js';
+import { createActionsRouter } from './adaptadores/http/actionsRoute.js';
+import { createSqlRouter } from './adaptadores/http/sqlRoute.js';
+import { createDistributedRouter } from './adaptadores/http/distributedRoute.js';
 // Módulo de soporte (tickets, diagnósticos, vigilancia) absorbido desde ticket v2.0.
 // Está en TypeScript: Node >= 22.18 lo ejecuta sin compilar (ver SOPORTE.md).
 import { crearSoporteClienteRouter, crearSoporteRouter, iniciarSoporte } from './soporte/index.ts';
 import logger from './infrastructure/logger/logger.js';
-import { correlationIdMiddleware } from './middleware/correlationId.js';
+import { correlationIdMiddleware } from './adaptadores/http/correlationId.js';
 import { SQL_BLOCKED_KEYWORDS, containsBlockedSql, extractSqlReferencedTables, getDatabaseSchemaTableNames, normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from './dominio/sql/guardas.js';
 import { ROLE_LEVELS, getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
 import { ALLOWED_OUTBOUND_HOSTS, BLOCKED_OUTBOUND_PATTERNS, CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked, sanitizeOrigin } from './dominio/red/salida.js';

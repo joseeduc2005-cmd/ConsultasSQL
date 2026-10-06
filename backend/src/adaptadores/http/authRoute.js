@@ -1,7 +1,7 @@
 // ─── Auth routes: /api/auth/* ─────────────────────────────────────────────────
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { sessions } from '../lib/session.js';
+import { sessions } from './sesion.js';
 
 /**
  * @param {{ pool: import('pg').Pool, logLoginEvent: Function }} deps

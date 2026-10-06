@@ -31,6 +31,7 @@
 import { logQueryHistory } from '../adaptadores/postgres/auditoria.js';
 import { ensureDynamicSchemaReady, refreshDynamicSchemaCache, tablasPermitidas } from '../adaptadores/postgres/esquema-dinamico.js';
 import { getBusinessActionMetadata, getRequiredParamsForActions } from '../dominio/acciones/catalogo.js';
+import { detectErrorAnalysisMode } from '../dominio/consultas/decidir.js';
 import { evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, normalizeWorkflowStoredValue, replaceVariables, resolveTemplateVariable } from '../dominio/flujos/pasos.js';
 import { buildAggregatedResultFromStepPayload, buildComplexWorkflowExplanation, buildDistributedSyntheticSql, buildPerStepWriteSummary } from '../dominio/presentacion/agregacion.js';
 import { buildHumanSqlExplanation, buildProductionSqlResponse, extractSemanticMetricsFromNotices } from '../dominio/presentacion/explicacion.js';
@@ -2105,7 +2106,73 @@ export function crearEjecucionDeScripts({
     };
   }
 
+
+  // ── Por dónde va una consulta y cuándo se analiza un error ──────────────────
+  // Las dos deciden a quién llamar, no ejecutan nada por su cuenta. Estaban en
+  // app.js, que es el único sitio del que no tenían por qué depender.
+  function decideQueryExecutionMode(text, requestedDatabases = []) {
+    const inputText = String(text || '').trim();
+    if (!inputText) {
+      return {
+        mode: 'normal',
+        reason: 'empty-text',
+        matchedDatabases: [],
+        matchedEntities: [],
+      };
+    }
+
+    try {
+      const effectiveRequestedDatabases = resolveRequestedDatabasesForQuery(inputText, requestedDatabases);
+      const configuredDatabases = multiDbRegistry.getDatabases();
+      if (configuredDatabases.length <= 1) {
+        return {
+          mode: 'normal',
+          reason: 'single-database-config',
+          matchedDatabases: configuredDatabases.map((database) => database.id),
+          matchedEntities: [],
+        };
+      }
+
+      const resolution = multiDatabaseEngine.resolveEntitiesAcrossDatabases(inputText, effectiveRequestedDatabases);
+      const decision = multiDatabaseEngine.decideExecution(resolution);
+
+      return {
+        mode: decision.mode,
+        reason: decision.executionType.toLowerCase(),
+        matchedDatabases: decision.source || [],
+        matchedEntities: (resolution.entities || []).map((entity) => entity.primary?.tableName || entity.entity).filter(Boolean),
+        requestedDatabases: effectiveRequestedDatabases,
+        resolution,
+        executionType: decision.executionType,
+      };
+    } catch (error) {
+      return {
+        mode: 'normal',
+        reason: 'decision-fallback-error',
+        matchedDatabases: [],
+        matchedEntities: [],
+        error: error?.message || String(error),
+      };
+    }
+  }
+
+  async function resolveErrorAnalysisResponse(text, dbPool) {
+    const inputText = String(text || '').trim();
+    if (!detectErrorAnalysisMode(inputText)) {
+      return null;
+    }
+
+    try {
+      return await executeErrorAnalysis(inputText, dbPool);
+    } catch (error) {
+      console.error('[ERROR_ANALYSIS] ❌ Error en análisis:', error?.message || error);
+      return null;
+    }
+  }
+
   return {
+    decideQueryExecutionMode,
+    resolveErrorAnalysisResponse,
     executeSafeSelectQuery,
     executeErrorAnalysis,
     executeManualSqlScript,

@@ -94,6 +94,7 @@ import {
   buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
 } from './dominio/sql/relacional.js';
 import { crearGuardianesDeSoporte } from './adaptadores/http/sesion-soporte.js';
+import { crearConexionPostgres } from './adaptadores/postgres/conexion.js';
 import { ALLOWED_ACTIONS } from './aplicacion/acciones.js';
 import { crearAprendizajeSemantico } from './aplicacion/aprendizaje.js';
 import { crearEjecucionDeScripts } from './aplicacion/ejecucion.js';
@@ -155,40 +156,29 @@ https.request = function guardedHttpsRequest(options, callback) {
 
 logger.info('Politica local-only activa: solo localhost permitido para HTTP/HTTPS saliente');
 
-function getConfiguredDatabaseUrl() {
-  try {
-    // Busca postgres específicamente (para el pool interno del backend)
-    // Si no hay postgres, intenta cualquier base disponible como fallback
-    return multiDbRegistry.resolvePrimaryConnection({ expectedType: 'postgres', allowEnvFallback: true }).connectionString;
-  } catch {
-    try {
-      return multiDbRegistry.resolvePrimaryConnection({ allowEnvFallback: true }).connectionString;
-    } catch {
-      return String(process.env.DATABASE_URL || '').trim() || null;
-    }
-  }
-}
 
-function createPgPool() {
-  const connectionString = getConfiguredDatabaseUrl();
-  if (!connectionString) {
-    console.warn('[DB] No se encontró postgres en el registro — el pool interno del backend no está disponible.');
-    return null;
-  }
 
-  return new Pool({
-    connectionString,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-    // Generous default (2 min) so long / complex admin SQL is never cut short —
-    // "if DBeaver can run it, we can too". Override with SQL_QUERY_TIMEOUT_MS.
-    statement_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000),
-    query_timeout: Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000),
-  });
-}
+// ── La conexión a PostgreSQL ──────────────────────────────────────────────────
+//
+// `pool` se declara antes de la fábrica y vacío a propósito: la fábrica recibe un
+// getter que lo lee, y el getter solo corre cuando alguien pide el pool — nunca
+// durante esta línea. Así el orden no importa y no hay que repetir la lógica de
+// construir el pool en los dos sitios que lo hacen.
+let pool = null;
 
-let pool = createPgPool();
+const {
+  createPgPool,
+  probeConfiguredDatabasesConnectivity,
+  testDatabaseConnection,
+} = crearConexionPostgres({
+  obtenerPool: () => pool,
+  multiDbRegistry,
+  // Por función y no por objeto: schemaDetector se construye más abajo, porque
+  // necesita el pool que esta misma fábrica crea.
+  refrescarHuella: () => schemaDetector.refreshConnectionFingerprint(),
+});
+
+pool = createPgPool();
 initSessionStore(pool); // Permitir restaurar sesiones desde la BD tras reinicios
 
 // Timeout for admin-authored manual SQL / article execution. Generous (2 min)
@@ -251,65 +241,6 @@ async function ensureMultiDbReady(options = {}) {
   return MULTI_DB_BOOTSTRAP_STATE.runningPromise;
 }
 
-async function probeConfiguredDatabasesConnectivity(reason = 'runtime') {
-  const configured = multiDbRegistry.getConfigSnapshot()?.databases || [];
-
-  if (configured.length === 0) {
-    console.warn(`⚠ MultiDB probe (${reason}): no hay bases configuradas`);
-    return [];
-  }
-
-  console.log(`🔌 MultiDB probe (${reason}): verificando ${configured.length} base(s)...`);
-
-  // Ejecutar todas las pruebas de conectividad en paralelo (antes era secuencial)
-  const summary = await Promise.all(
-    configured.map(async (database) => {
-      const id = String(database?.id || 'unknown').trim() || 'unknown';
-      const type = String(database?.type || 'unknown').trim() || 'unknown';
-
-      if (database?.enabled === false) {
-        logger.debug('DB probe: SKIP (disabled)', { dbId: id, type, reason });
-        return { id, type, status: 'skipped-disabled' };
-      }
-
-      const missing = ['host', 'port', 'database', 'user', 'password']
-        .filter((key) => database?.[key] === undefined || database?.[key] === null || String(database?.[key]).trim() === '');
-
-      if (missing.length > 0) {
-        logger.warn('DB probe: SKIP (faltan campos)', { dbId: id, type, reason, missing });
-        return { id, type, status: 'skipped-missing-fields', missing };
-      }
-
-      try {
-        // MongoDB y MSSQL no usan el conector universal SQL — usan ensureClient directamente
-        if (type === 'mongodb' || type === 'mssql') {
-          await multiDbRegistry.ensureClient(database);
-          console.log(`[DB:${id}|${type}] ✅ OK (${database.host}:${database.port}/${database.database})`);
-          multiDbRegistry.setConnectionStatus(id, 'ok');
-          return { id, type, status: 'ok' };
-        }
-        const result = await probeUniversalConnection(database);
-        console.log(`[DB:${id}|${type}] ✅ OK (${database.host}:${database.port}/${database.database})`);
-        multiDbRegistry.setConnectionStatus(id, 'ok');
-        if (result?.dbId && !result?.reused) {
-          await closeUniversalConnection(result.dbId).catch(() => {});
-        }
-        return { id, type, status: 'ok' };
-      } catch (error) {
-        console.error(`[DB:${id}|${type}] ❌ FAIL: ${error?.message || error}`);
-        multiDbRegistry.setConnectionStatus(id, 'fail');
-        return { id, type, status: 'fail', error: String(error?.message || error) };
-      }
-    }),
-  );
-
-  const okCount = summary.filter((item) => item.status === 'ok').length;
-  const failCount = summary.filter((item) => item.status === 'fail').length;
-  const skippedCount = summary.length - okCount - failCount;
-  console.log(`🔌 MultiDB probe (${reason}) resumen: OK=${okCount}, FAIL=${failCount}, SKIP=${skippedCount}`);
-
-  return summary;
-}
 
 
 
@@ -401,22 +332,6 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
   }
 }
 
-async function testDatabaseConnection() {
-  if (!pool || typeof pool.query !== 'function') {
-    console.warn('⚠ No hay pool PostgreSQL interno disponible. Continuando en modo multibase.');
-    return false;
-  }
-
-  try {
-    const result = await pool.query('SELECT NOW()');
-    await schemaDetector.refreshConnectionFingerprint();
-    logger.info('Conexión a PostgreSQL exitosa', { now: result.rows[0]?.now });
-    return true;
-  } catch (err) {
-    logger.error('Error conectando a PostgreSQL', { error: err.message || String(err) });
-    return false;
-  }
-}
 
 
 
@@ -571,6 +486,8 @@ const STRUCTURED_ACTIONS = Object.fromEntries(
 // ejecución apuntando a una conexión cerrada en cuanto alguien toque el fichero de
 // configuración, y lo haría sin un error visible.
 const {
+  decideQueryExecutionMode,
+  resolveErrorAnalysisResponse,
   executeArticleById,
   executeDistributedWithExplanation,
   executeErrorAnalysis,
@@ -635,19 +552,6 @@ const {
 
 
 
-async function resolveErrorAnalysisResponse(text, dbPool) {
-  const inputText = String(text || '').trim();
-  if (!detectErrorAnalysisMode(inputText)) {
-    return null;
-  }
-
-  try {
-    return await executeErrorAnalysis(inputText, dbPool);
-  } catch (error) {
-    console.error('[ERROR_ANALYSIS] ❌ Error en análisis:', error?.message || error);
-    return null;
-  }
-}
 
 // ============================================================
 // FIN MODO ANÁLISIS DE ERRORES
@@ -850,51 +754,6 @@ app.get('/api', (req, res) => {
 
 // POST /api/query/distributed → distributedRoute.js
 
-function decideQueryExecutionMode(text, requestedDatabases = []) {
-  const inputText = String(text || '').trim();
-  if (!inputText) {
-    return {
-      mode: 'normal',
-      reason: 'empty-text',
-      matchedDatabases: [],
-      matchedEntities: [],
-    };
-  }
-
-  try {
-    const effectiveRequestedDatabases = resolveRequestedDatabasesForQuery(inputText, requestedDatabases);
-    const configuredDatabases = multiDbRegistry.getDatabases();
-    if (configuredDatabases.length <= 1) {
-      return {
-        mode: 'normal',
-        reason: 'single-database-config',
-        matchedDatabases: configuredDatabases.map((database) => database.id),
-        matchedEntities: [],
-      };
-    }
-
-    const resolution = multiDatabaseEngine.resolveEntitiesAcrossDatabases(inputText, effectiveRequestedDatabases);
-    const decision = multiDatabaseEngine.decideExecution(resolution);
-
-    return {
-      mode: decision.mode,
-      reason: decision.executionType.toLowerCase(),
-      matchedDatabases: decision.source || [],
-      matchedEntities: (resolution.entities || []).map((entity) => entity.primary?.tableName || entity.entity).filter(Boolean),
-      requestedDatabases: effectiveRequestedDatabases,
-      resolution,
-      executionType: decision.executionType,
-    };
-  } catch (error) {
-    return {
-      mode: 'normal',
-      reason: 'decision-fallback-error',
-      matchedDatabases: [],
-      matchedEntities: [],
-      error: error?.message || String(error),
-    };
-  }
-}
 
 
 

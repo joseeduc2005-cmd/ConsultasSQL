@@ -11,13 +11,9 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import https from 'https';
-import { Pool } from 'pg';
-import bcrypt from 'bcryptjs';
 import {
   BUSINESS_ACTION_CATALOG,
   createBusinessActionsRegistry,
-  getBusinessActionMetadata,
-  getRequiredParamsForActions,
 } from './actionsRegistry.js';
 import SchemaDetector from './infrastructure/database/SchemaDetector.js';
 import SchemaCache from './infrastructure/cache/SchemaCache.js';
@@ -25,29 +21,20 @@ import QueryBuilder from './infrastructure/query/QueryBuilder.js';
 import QueryAnalyzer from './dominio/consultas/QueryAnalyzer.js';
 import ResultExplainer from './dominio/presentacion/ResultExplainer.js';
 import QueryParameterizer from './dominio/consultas/QueryParameterizer.js';
-import {
-  analyzeErrorInput,
-  buildErrorAnalysisResponse,
-  detectErrorAnalysisInput,
-  enrichErrorAnalysisWithAi,
-  searchErrorLogs,
-} from './infrastructure/query/ErrorAnalysisEngine.js';
 import MultiDbRegistry from './infrastructure/distributed/MultiDbRegistry.js';
 import MultiDatabaseEngine from './infrastructure/distributed/MultiDatabaseEngine.js';
-import { isComplexSqlScript, shouldForceProceduralMode, parsePlSqlScript, applyLoopVarResolution } from './dominio/sql/plsql.js';
+import { isComplexSqlScript, shouldForceProceduralMode } from './dominio/sql/plsql.js';
 import {
   detectSqlSyntaxEngine,
-  detectQueryType,
   extractDatabaseDirective,
   isNativePlSql,
   buildEngineLog,
 } from './dominio/sql/SqlEngineDetector.js';
 import { bootstrapGlobalSystems } from './bootstrap.js';
-import { connectDatabase as probeUniversalConnection, closeConnection as closeUniversalConnection } from './infrastructure/universal-db/index.js';
 import { createQueryRouter } from './adaptadores/http/QueryRoute.js';
 import { initDynamicRoutes } from './adaptadores/http/DynamicRoutes.js';
 import { createResponseSecurityMiddleware } from './adaptadores/http/responseSecurity.js';
-import { sessions, getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './adaptadores/http/sesion.js';
+import { getUserFromRequest, getUserFromRequestAsync, initSessionStore, adjuntarSesion } from './adaptadores/http/sesion.js';
 import { createAuthRouter } from './adaptadores/http/authRoute.js';
 import { createContentRouter } from './adaptadores/http/contentRoute.js';
 import { createExecuteRouter, createRepairRouter } from './adaptadores/http/executeRoute.js';
@@ -62,15 +49,14 @@ import { createDistributedRouter } from './adaptadores/http/distributedRoute.js'
 import { crearSoporteClienteRouter, crearSoporteRouter, iniciarSoporte } from './soporte/index.ts';
 import logger from './infrastructure/logger/logger.js';
 import { correlationIdMiddleware } from './adaptadores/http/correlationId.js';
-import { SQL_BLOCKED_KEYWORDS, containsBlockedSql, extractSqlReferencedTables, getDatabaseSchemaTableNames, normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from './dominio/sql/guardas.js';
-import { ROLE_LEVELS, getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
-import { ALLOWED_OUTBOUND_HOSTS, BLOCKED_OUTBOUND_PATTERNS, CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked, sanitizeOrigin } from './dominio/red/salida.js';
+import { normalizeSchemaIdentifier } from './dominio/sql/guardas.js';
+import { getRoleFromRequest, hasRequiredRole, normalizeRole } from './dominio/acceso/roles.js';
+import { CORS_ALLOWED_ORIGINS, extractHostFromRequestOptions, isOriginAllowed, isOutboundBlocked } from './dominio/red/salida.js';
 import { extractDatabaseHintsFromText as deducirBases, resolveRequestedDatabasesForQuery as resolverBasesPedidas } from './dominio/bases/resolucion.js';
-import { dedupeSemanticValues, normalizeGeneratedSelectSql, normalizeSemanticLearningTerm, slugifyProcessName } from './dominio/texto/normalizar.js';
+import { normalizeGeneratedSelectSql, slugifyProcessName } from './dominio/texto/normalizar.js';
 import { crearRutasConsultas } from './adaptadores/http/consultas.js';
-import { ALLOWED_WHERE_OPERATORS, DYNAMIC_SCRIPT_ALLOWED_TYPES, MANUAL_SQL_BLOCKED_KEYWORDS, WORKFLOW_ALLOWED_STEP_TYPES, assertDynamicScriptAllowed, assertManualSqlAllowed, buildRelationKey, detectSqlOperation, ensureDynamicColumnAllowed, ensureDynamicJoinRelationAllowed, isPlainObject, normalizeBusinessStep, normalizeDynamicScriptType, parseQualifiedFieldRef, resolveWhereEntry, validateBusinessScriptDefinition, validateRelationalMutationScriptDefinition, validateRelationalScriptDefinition, validateWorkflowBuilderDefinition } from './dominio/scripts/validacion.js';
-import { buildHumanSqlExplanation, buildProductionSqlResponse, sanitizeProductionResultObject } from './dominio/presentacion/explicacion.js';
-import { applyCastToSqlPlaceholder, applyOptionalSqlFilterTransform, buildAnalyticSelectQuery, buildManualSqlQuery, collectManualSqlPlaceholderMetadata, countPositionalSqlPlaceholders, getValueByPath, inferManualPlaceholderCast, inferStructuredParamSemantic, isMissingParamValue, isOptionalUserPlaceholder, isWriteConfirmed, normalizeLimitValue, normalizeManualSqlParamsInput, resolveDynamicScriptNode, resolveValue, resolveValueMultiSource, resolveWorkflowContextPlaceholder, sanitizeStructuredParamValue, validateStructuredParamByName, MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, MANUAL_SQL_POSITIONAL_PLACEHOLDER_REGEX, STRUCTURED_PLACEHOLDER_REGEX } from './dominio/sql/construccion.js';
+import { validateBusinessScriptDefinition } from './dominio/scripts/validacion.js';
+import { buildHumanSqlExplanation, buildProductionSqlResponse } from './dominio/presentacion/explicacion.js';
 import { configurarPool as configurarPoolAuditoria, logArticleChange, logArticleExecution, logError, logLoginEvent, logQueryHistory, logRequest, logSystemEvent } from './adaptadores/postgres/auditoria.js';
 import { capturarCuerpoParaAuditoria, crearAuditoriaDePeticiones } from './adaptadores/http/auditoria.js';
 import { registrarCicloDeVida } from './adaptadores/proceso/ciclo-de-vida.js';
@@ -86,24 +72,22 @@ import {
   ensureAuditTimelineView,
 } from './adaptadores/postgres/esquemas.js';
 import {
-  columnasPermitidas, configurarEsquemaDinamico, ensureDynamicSchemaReady, refreshDynamicSchemaCache,
+  clavesDeRelacion, columnasPermitidas, configurarEsquemaDinamico, ensureDynamicSchemaReady,
+  refreshDynamicSchemaCache,
   relacionesDelEsquema, resetDynamicSchemaCache, tablasPermitidas, tiposDeColumna,
 } from './adaptadores/postgres/esquema-dinamico.js';
 import {
-  asegurarTipoDeColumna, buildRelationalMutationQuery, buildRelationalSelectQuery,
-  buildSelectProjectionSql, buildWriteDetailExplanation, normalizeStrictSqlRawPayload,
+  asegurarTipoDeColumna,
 } from './dominio/sql/relacional.js';
 import { crearGuardianesDeSoporte } from './adaptadores/http/sesion-soporte.js';
 import { crearConexionPostgres } from './adaptadores/postgres/conexion.js';
 import { ALLOWED_ACTIONS } from './aplicacion/acciones.js';
 import { crearAprendizajeSemantico } from './aplicacion/aprendizaje.js';
 import { crearEjecucionDeScripts } from './aplicacion/ejecucion.js';
-import { INTELLIGENT_QUERY_CACHE, QUERY_CACHE_TTL_MS, bumpQueryCacheDataVersion, getQueryCacheDataVersion, getQueryCacheEntry, setQueryCacheEntry } from './adaptadores/memoria/cache-consultas.js';
-import { collectStructuredVariables, evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, interpolateStructuredNode, isEmptyWorkflowValue, normalizeWorkflowStoredValue, parseStepOrder, replaceVariables, resolveTemplateVariable } from './dominio/flujos/pasos.js';
-import { ALIAS_DE_ACCION, EXECUTABLE_SOLUTION_TYPES, MANUAL_SQL_NAMED_PLACEHOLDER_REGEX, MANUAL_SQL_TIMEOUT_MS, normalizeAndValidateStructuredParams, normalizeStructuredParams, parseStructuredScript } from './dominio/scripts/estructurado.js';
-import { MONGO_WRITE_OPS_RE, SQL_WRITE_KEYWORDS_RE, buildWhereClause, detectMongoOperation, parseWriteTarget, renumberWhereParams, scriptContainsMutation, sqlTextContainsMutation } from './dominio/sql/mutaciones.js';
-import { addWithUniqueKey, buildAggregatedResultFromStepPayload, buildComplexWorkflowExplanation, buildDistributedSyntheticSql, buildPerStepWriteSummary, extractObjectForAggregation } from './dominio/presentacion/agregacion.js';
-import { MANUAL_SQL_PLACEHOLDER_REGEX, buildAutoDashboard, buildCrossDbSelectOptions, collectStructuredRequiredParams, detectErrorAnalysisMode, detectMainTableFromText, enforceStrictProductionSqlPayload, hasUnsafeMutationWithoutWhere, isStrictSqlResponsePath, tableLooksLikeUsers } from './dominio/consultas/decidir.js';
+import { QUERY_CACHE_TTL_MS, bumpQueryCacheDataVersion, getQueryCacheDataVersion, getQueryCacheEntry, setQueryCacheEntry } from './adaptadores/memoria/cache-consultas.js';
+import { ALIAS_DE_ACCION, parseStructuredScript } from './dominio/scripts/estructurado.js';
+
+import { buildCrossDbSelectOptions, enforceStrictProductionSqlPayload, isStrictSqlResponsePath } from './dominio/consultas/decidir.js';
 
 // El pool se reasigna al recargar la configuración multi-base, así que la auditoría
 // recibe un getter y no el valor: guardar el de ahora sería escribir contra una

@@ -12,6 +12,8 @@
     "dev": "node src/app.js",
     "build": "tsc",
     "start": "node src/app.js",
+    "lint": "eslint src --ext .js,.ts",
+    "lint:errores": "eslint src --ext .js,.ts --quiet",
     "test": "node --test --experimental-strip-types \"src/dominio/**/*.test.js\" \"src/adaptadores/**/*.test.js\" src/soporte/soporte.test.ts",
     "test:soporte": "node --test src/soporte/soporte.test.ts"
   },

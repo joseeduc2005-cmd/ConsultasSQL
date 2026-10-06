@@ -52,7 +52,7 @@ export function stripLeadingSqlComments(sqlText = '') {
  *   - double-quoted identifiers "..." ("" = escaped)
  *   - backtick identifiers (MySQL)  `...`
  *   - line comments  -- ...
- *   - block comments /* ... *​/
+ *   - block comments (de barra-asterisco a asterisco-barra)
  *   - dollar-quoted blocks (PostgreSQL)  $$...$$  or  $tag$...$tag$
  * This lets arbitrarily long / complex scripts (DBeaver-style) be split safely.
  */

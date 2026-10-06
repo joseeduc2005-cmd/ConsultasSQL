@@ -10,6 +10,9 @@
  * 
  * Usa information_schema de PostgreSQL (motor determinístico)
  */
+import fs from 'fs';
+import path from 'path';
+
 
 export class SchemaDetector {
   constructor(pool) {
@@ -67,8 +70,8 @@ export class SchemaDetector {
       'llamado': ['username', 'user_name', 'nombre', 'name', 'full_name'],
       'user': ['username', 'user_name', 'nombre', 'name', 'email'],
       'usuario': ['username', 'user_name', 'nombre', 'name', 'email'],
-      'cliente': ['username', 'client_name', 'nombre', 'name', 'email', 'customer_name'],
-      'personal': ['first_name', 'last_name', 'nombre', 'apellido', 'full_name'],
+      'cliente': ['username', 'client_name', 'nombre', 'name', 'email', 'customer_name', 'customer', 'cliente', 'client', 'account'],
+      'personal': ['first_name', 'last_name', 'nombre', 'apellido', 'full_name', 'personnel', 'personal', 'staff', 'employees'],
       'apellido': ['last_name', 'apellido', 'surname'],
       'email': ['email', 'correo', 'correo_electronico', 'email_address', 'mail'],
       'correo': ['email', 'correo', 'correo_electronico', 'email_address'],
@@ -120,7 +123,7 @@ export class SchemaDetector {
       'válido': ['valid', 'valido', 'estado', 'status'],
       'inválido': ['invalid', 'invalido', 'estado', 'status'],
       'pendiente': ['pending', 'pendiente', 'estado', 'status', 'is_pending'],
-      'aprobado': ['approved', 'aprobado', 'estado', 'status', 'is_approved'],
+      'aprobado': ['approved', 'aprobado', 'estado', 'status', 'is_approved', 'passed'],
       'rechazado': ['rejected', 'rechazado', 'estado', 'status', 'is_rejected'],
       
       // ===== DATOS PERSONALES / SEGURIDAD =====
@@ -129,7 +132,7 @@ export class SchemaDetector {
       'clave': ['password', 'passwd', 'clave', 'contraseña'],
       'token': ['token', 'access_token', 'refresh_token', 'secret', 'api_key', 'auth_token'],
       'secreto': ['secret', 'secreto', 'token', 'api_key'],
-      'acceso': ['token', 'access_token', 'password', 'permiso', 'access_level'],
+      'acceso': ['token', 'access_token', 'password', 'permiso', 'access_level', 'access', 'acceso', 'login', 'permission'],
       'sesión': ['session', 'sesion', 'session_id', 'session_token'],
       'session': ['session', 'sesion', 'session_id', 'session_token'],
       'teléfono': ['phone', 'telefono', 'phone_number', 'numero_telefonico', 'telephone'],
@@ -150,7 +153,7 @@ export class SchemaDetector {
       'actividad': ['actividad', 'activity', 'log', 'logs', 'evento', 'action'],
       'detalles': ['details', 'detalle', 'descripcion', 'description', 'nota', 'notes', 'remarks'],
       'descripción': ['description', 'descripcion', 'detalle', 'details', 'nota', 'notas', 'memo'],
-      'nota': ['note', 'nota', 'notas', 'remarks', 'comment'],
+      'nota': ['note', 'nota', 'notas', 'remarks', 'comment', 'grade', 'rating', 'score'],
       'comentario': ['comment', 'comentario', 'nota', 'remarks'],
       'mensaje': ['message', 'mensaje', 'texto', 'text', 'content'],
       'contenido': ['content', 'contenido', 'data', 'datos', 'description', 'descripcion', 'body'],
@@ -226,7 +229,6 @@ export class SchemaDetector {
       'inventario': ['inventory', 'inventario', 'stock', 'available'],
       'almacén': ['warehouse', 'almacen', 'storage', 'depot'],
       'existencia': ['stock', 'existencia', 'available', 'quantity'],
-      'disponible': ['available', 'disponible', 'in_stock', 'stock'],
       'agotado': ['out_of_stock', 'agotado', 'unavailable'],
       'reorden': ['reorder', 'reorden', 'request'],
       'lote': ['lot', 'lote', 'batch', 'group'],
@@ -234,7 +236,6 @@ export class SchemaDetector {
       'código_barras': ['barcode', 'codigo_barras', 'sku'],
       
       // ===== CLIENTES / PROVEEDORES / CONTACTOS =====
-      'cliente': ['customer', 'cliente', 'client', 'account', 'customer_name'],
       'proveedor': ['supplier', 'proveedor', 'vendor', 'provider'],
       'vendedor': ['seller', 'vendedor', 'salesman', 'sales_rep'],
       'comprador': ['buyer', 'comprador', 'purchaser'],
@@ -243,7 +244,6 @@ export class SchemaDetector {
       'organización': ['organization', 'organizacion', 'company', 'empresa'],
       'socio': ['partner', 'socio', 'colleague'],
       'empleado': ['employee', 'empleado', 'staff', 'personal'],
-      'personal': ['personnel', 'personal', 'staff', 'employees'],
       'agente': ['agent', 'agente', 'representative', 'rep'],
       'representante': ['representative', 'representante', 'agent', 'rep'],
       
@@ -290,8 +290,6 @@ export class SchemaDetector {
       'calidad': ['quality', 'calidad', 'rating', 'assessment'],
       'puntuación': ['score', 'puntuacion', 'rating', 'points'],
       'calificación': ['rating', 'calificacion', 'grade', 'assessment'],
-      'nota': ['grade', 'nota', 'rating', 'score'],
-      'aprobado': ['passed', 'aprobado', 'approved', 'status'],
       'reprobado': ['failed', 'reprobado', 'rejected'],
       'satisfacción': ['satisfaction', 'satisfaccion', 'rating', 'feedback'],
       'retroalimentación': ['feedback', 'retroalimentacion', 'comment', 'review'],
@@ -314,10 +312,8 @@ export class SchemaDetector {
       'necesidad': ['need', 'necesidad', 'requirement', 'demand'],
       
       // ===== USUARIOS / AUTENTICACIÓN =====
-      'contraseña': ['password', 'passwd', 'clave', 'contraseña'],
       'autenticación': ['authentication', 'autenticacion', 'login', 'auth'],
       'autorización': ['authorization', 'autorizacion', 'permission', 'access'],
-      'acceso': ['access', 'acceso', 'login', 'permission'],
       'entrada': ['login', 'entrada', 'access', 'sign_in'],
       'salida': ['logout', 'salida', 'exit', 'sign_out'],
       'registro': ['registration', 'registro', 'sign_up', 'account_creation'],
@@ -430,6 +426,17 @@ export class SchemaDetector {
               const direct = String(primary.connectionString || primary.url || '').trim();
               if (direct) {
                 dbUrl = direct;
+              } else if (primary.host && primary.database) {
+                // El fichero de configuración de este proyecto no guarda una cadena de
+                // conexión, guarda los campos por separado. Sin esta rama la huella se
+                // quedaba en «env-parts:|||» —una constante que no identifica ninguna
+                // base—, y la huella es justo lo que invalida los cachés al cambiar de
+                // base. La contraseña no entra: la huella se escribe en semantic_learning.
+                const host = this.sanitizeFingerprintPart(primary.host);
+                const port = this.sanitizeFingerprintPart(primary.port || 5432);
+                const database = this.sanitizeFingerprintPart(primary.database);
+                const user = this.sanitizeFingerprintPart(primary.user || '');
+                return `config:${host}|${port}|${database}|${user}`;
               }
             }
           }

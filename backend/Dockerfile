@@ -1,8 +1,11 @@
+# Version fijada a proposito. El modulo de soporte corre TypeScript sin compilar y
+# eso necesita Node >= 22.18; «node:22-alpine» es flotante y el dia que resolviera
+# a 22.17 el contenedor no arrancaria. Al subir de version, probar el arranque.
 # Node 22 (>= 22.18) es obligatorio: el modulo src/soporte esta en TypeScript y se
 # ejecuta sin compilar gracias al type-stripping nativo. Ver SOPORTE.md.
 
 # ─── Stage 1: dependencies ───────────────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:22.18-alpine AS deps
 WORKDIR /app
 
 # pnpm via corepack (project migrated from npm → pnpm)
@@ -16,7 +19,7 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # ─── Stage 2: runtime ────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22.18-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -3,7 +3,6 @@
 #
 #  Servicios:
 #    postgres  → PostgreSQL 16  (base primaria del sistema: knowledge_base)
-#    ollama    → IA local deepseek-coder
 #    backend   → API Express Node.js 20
 #    frontend  → Next.js 15
 #
@@ -14,7 +13,6 @@
 #    3000  → Frontend
 #    3002  → Backend API
 #    5432  → PostgreSQL
-#   11434  → Ollama
 # ═══════════════════════════════════════════════════════════════════
 
 services:
@@ -27,7 +25,7 @@ services:
     environment:
       POSTGRES_DB: knowledge_base
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en el .env de la raiz}
       POSTGRES_INITDB_ARGS: "--locale=en_US.UTF-8"
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -44,18 +42,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Ollama (IA local) ─────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: practicas-ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    # Cargar modelo la primera vez:
-    #   docker exec -it practicas-ollama ollama pull deepseek-coder
-
   # ── Backend (Express API) ─────────────────────────────────────────
   backend:
     image: consultas-sql-backend:pruebas
@@ -68,9 +54,8 @@ services:
     env_file:
       - ${BACKEND_ENV_PATH:-./backend/.env}
     environment:
-      - OLLAMA_URL=http://localhost:11434/api/generate
       - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002,http://172.20.91.3:3000,http://172.20.91.3:3002
-      - DATABASE_URL=postgres://postgres:admin123@localhost:5432/knowledge_base
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en el .env de la raiz}@localhost:5432/knowledge_base
       - MULTI_DB_CONFIG_FILE=/app/config/multidb.databases.json
       - SKIP_DB_INIT=true
     volumes:
@@ -84,8 +69,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
 
   # ── Frontend (Next.js) ────────────────────────────────────────────
   frontend:
@@ -102,7 +85,7 @@ services:
       - BACKEND_URL=http://host.docker.internal:3002
       # La ruta /api/repair del frontend conecta directo a PostgreSQL.
       # frontend y postgres comparten la red bridge → se resuelve por nombre de servicio.
-      - DATABASE_URL=postgres://postgres:admin123@postgres:5432/knowledge_base
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en el .env de la raiz}@postgres:5432/knowledge_base
     depends_on:
       backend:
         condition: service_healthy
@@ -111,11 +94,56 @@ services:
     ports:
       - "3000:3000"
 
+  # ── Respaldo de la base de conocimiento ───────────────────────────
+  #
+  # Lo que la gente va escribiendo aqui no se puede regenerar: son los casos que
+  # resolvieron, con sus scripts. Habia un restore.sh, pero ese script siembra un
+  # contenedor nuevo; no es una copia de seguridad. Esto si lo es.
+  #
+  # Saca una copia al arrancar y luego cada RESPALDO_CADA_HORAS, y conserva las
+  # ultimas RESPALDO_CONSERVAR. Las copias van a ./respaldos del host, no a un
+  # volumen de Docker, para que se puedan llevar a otra maquina sin Docker de por
+  # medio.
+  #
+  # Para restaurar una:
+  #   docker compose exec -T postgres pg_restore -U postgres -d knowledge_base \
+  #     --clean --if-exists < respaldos/knowledge_base-AAAAMMDD-HHMMSS.dump
+  db-backup:
+    image: postgres:16-alpine
+    container_name: practicas-respaldo
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en el .env de la raiz}
+      CADA_HORAS: ${RESPALDO_CADA_HORAS:-24}
+      CONSERVAR: ${RESPALDO_CONSERVAR:-14}
+    volumes:
+      - ./respaldos:/respaldos
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -u
+        echo "[respaldo] cada $${CADA_HORAS}h, conservando $${CONSERVAR} copias"
+        while true; do
+          f="/respaldos/knowledge_base-$$(date +%Y%m%d-%H%M%S).dump"
+          if pg_dump -h postgres -U postgres -d knowledge_base -Fc -f "$$f"; then
+            echo "[respaldo] ok $$f ($$(du -h "$$f" | cut -f1))"
+          else
+            echo "[respaldo] FALLO al escribir $$f"
+            rm -f "$$f"
+          fi
+          # Borra las mas viejas, dejando las ultimas CONSERVAR.
+          ls -1t /respaldos/knowledge_base-*.dump 2>/dev/null \
+            | tail -n +$$((CONSERVAR + 1)) | xargs -r rm -f
+          sleep $$((CADA_HORAS * 3600))
+        done
+
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
   postgres_data:
-    driver: local
-  ollama_data:
     driver: local
 
 networks:

@@ -1,5 +1,14 @@
 'use client';
 
+/*
+ * El visor de un resultado de diagnostico.
+ *
+ * Los diagnosticos se retiraron del sistema, pero este fichero se quedo: el detalle de
+ * un ticket puede traer un resultado guardado de antes, y poder leerlo no es lo mismo
+ * que poder ejecutar uno nuevo. Lo que si se quito de aqui es el boton de «registrar
+ * en un ticket», que era una accion de ese flujo y ya no lleva a ninguna parte.
+ */
+
 import {
   ChevronDown,
   CircleAlert,
@@ -33,7 +42,6 @@ import type {
   SolucionPublicada,
 } from '@/soporte/lib/types';
 import { cn } from '@/soporte/lib/utils';
-import { RegistrarEnTicket } from './registrar-en-ticket';
 
 const BORDE_SEVERIDAD: Record<Severidad, string> = {
   critica: 'before:bg-danger',
@@ -101,7 +109,6 @@ export function ResultadoDiagnosticoVista({
             {resultado.id !== undefined && resultado.hallazgos.length > 0 && (
               <PublicarSolucion resultado={resultado} exploracion={exploracion?.propuesta} />
             )}
-            {resultado.id !== undefined && <RegistrarEnTicket diagnosticoId={resultado.id} ticketActual={resultado.ticket} />}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-5 py-2.5 text-[12.5px] text-muted-foreground">

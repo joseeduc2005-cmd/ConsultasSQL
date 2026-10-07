@@ -7,14 +7,13 @@
  *
  * Pendiente a propósito: /interpretar, porque depende del modelo de lenguaje.
  */
+import { contarAportesPendientes } from '../../aportes.ts';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from '../../aportes.ts';
 import { config } from '../../config.ts';
 import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './errores.ts';
-import { contarAlertasAbiertas, type EstadoAlerta } from '../../knowledge/alertas.ts';
-import { categoriasConsultas, contarConsultas, listarConsultas, obtenerConsulta } from '../../knowledge/consultas.ts';
+import { categoriasConsultas, listarConsultas, obtenerConsulta } from '../../knowledge/consultas.ts';
 import { filas } from '../../knowledge/db.ts';
-import { contarDiagnosticos } from '../../knowledge/diagnosticos.ts';
 import {
   ESTADOS_TICKET,
   actualizarTicket,
@@ -190,15 +189,15 @@ export function crearSoporteRouter(
   router.get(
     '/resumen',
     h(async () => {
-      const [porEstado, porSistema, veredictos, alertas, diagnosticos7, consultas] = await Promise.all([
+      // Sin alertas ni diagnosticos: esas dos pantallas se retiraron, y un panel que
+      // cuenta cosas que ya nadie puede abrir solo ocupa sitio. En su lugar, lo que de
+      // verdad hay que mirar cada dia: cuantos aportes esperan revision.
+      const [porEstado, porSistema, aportesPendientes, temas] = await Promise.all([
         filas<{ estado: string; total: number }>('SELECT estado, COUNT(*)::int AS total FROM soporte.tickets GROUP BY estado'),
         filas(`SELECT COALESCE(sistema, 'Sin sistema') AS sistema, COUNT(*)::int AS total
                FROM soporte.tickets GROUP BY 1 ORDER BY total DESC`),
-        filas(`SELECT veredicto, COUNT(*)::int AS total FROM soporte.diagnosticos
-               WHERE creado_en >= now() - interval '30 days' GROUP BY veredicto`),
-        contarAlertasAbiertas(),
-        contarDiagnosticos(7),
-        contarConsultas(),
+        contarAportesPendientes(),
+        filas<{ total: number }>('SELECT COUNT(*)::int AS total FROM knowledge_base'),
       ]);
       const total = (e: string) => porEstado.find((x) => x.estado === e)?.total ?? 0;
       return {
@@ -209,9 +208,8 @@ export function crearSoporteRouter(
           resueltos: total('resuelto'),
           porSistema,
         },
-        alertas,
-        diagnosticos: { ultimos7dias: diagnosticos7, veredictos30dias: veredictos },
-        consultas,
+        aportesPendientes,
+        temas: temas[0]?.total ?? 0,
       };
     }),
   );

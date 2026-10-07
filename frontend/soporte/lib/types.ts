@@ -30,9 +30,10 @@ export interface Resumen {
     resueltos: number;
     porSistema: { sistema: string; total: number }[];
   };
-  alertas: { total: number; criticas: number };
-  diagnosticos: { ultimos7dias: number; veredictos30dias: { veredicto: Veredicto; total: number }[] };
-  consultas: number;
+  // Antes tambien traia alertas, diagnosticos y el conteo de la Biblioteca. Esas tres
+  // pantallas se retiraron, asi que el resumen cuenta lo que queda por mirar cada dia.
+  aportesPendientes: number;
+  temas: number;
 }
 
 export interface Ticket {

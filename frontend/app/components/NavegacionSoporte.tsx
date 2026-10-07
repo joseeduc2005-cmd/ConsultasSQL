@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, LayoutDashboard, Lightbulb, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
+import { LayoutDashboard, Lightbulb, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -27,17 +27,19 @@ const SECCIONES = [
   // La búsqueda por conocimiento va arriba: es lo que responde siempre, con o sin
   // base conectada, y para la mayoría de los casos es la única puerta que hace falta.
   { ruta: '/admin/solucionar', etiqueta: 'Buscar solución', icono: Search },
-  // Diagnósticos y Vigilancia solo tienen sentido con una base que investigar: uno
-  // ejecuta playbooks contra ella y el otro la sondea en segundo plano. Sin conexión
-  // se muestran apagados, en vez de dejar entrar a una pantalla que no puede hacer
-  // nada. Se reactivan solos cuando la configuración tenga una base.
-  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch, requiereBase: true },
   { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket },
   // Lo que mandan los usuarios espera aquí. Lleva contador porque es una bandeja: si
   // no se ve que hay algo por revisar, se queda sin revisar.
   { ruta: '/admin/aportes', etiqueta: 'Aportes', icono: Lightbulb, contador: true },
-  { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL', icono: BookOpen },
-  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar, requiereBase: true },
+  // Se quitaron tres opciones del menú:
+  //
+  //   Diagnósticos   ejecutaba playbooks contra una base
+  //   Biblioteca SQL las consultas catalogadas; el SQL vive ahora en las categorías
+  //   Vigilancia     sondeaba la base en segundo plano
+  //
+  // La Biblioteca sigue existiendo por debajo a propósito: sus consultas son el corpus
+  // que le enseña al motor qué palabra del negocio apunta a qué tabla. Quitar la
+  // pantalla no toca eso; borrar los datos sí habría empeorado las búsquedas.
 ];
 
 export default function NavegacionSoporte({
@@ -52,17 +54,14 @@ export default function NavegacionSoporte({
   const claro = theme === 'light';
   // Se consulta a mano y no con useQuery: esta barra también se monta en /admin, que
   // no tiene QueryClientProvider, y un hook de react-query ahí revienta la página
-  // entera. `baseDiagnosticos` viene en null cuando no hay base configurada.
-  const [sinBase, setSinBase] = useState(false);
+  // entera.
+  //
+  // Antes también se preguntaba si había base configurada, para apagar Diagnósticos y
+  // Vigilancia cuando no la hubiera. Esas dos opciones ya no existen y ninguna de las
+  // que quedan necesita una base, así que esa consulta se fue con ellas.
   const [pendientes, setPendientes] = useState(0);
   useEffect(() => {
     let vigente = true;
-    fetch('/api/soporte/estado', { headers: cabeceras() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((estado) => {
-        if (vigente && estado) setSinBase(!estado.baseDiagnosticos);
-      })
-      .catch(() => undefined);
     fetch('/api/soporte/aportes?estado=pendiente', { headers: cabeceras() })
       .then((r) => (r.ok ? r.json() : null))
       .then((lista) => {
@@ -82,9 +81,9 @@ export default function NavegacionSoporte({
         </p>
       )}
 
-      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, requiereBase, contador }) => {
+      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, contador }) => {
         const activa = exacta ? ruta === destino : ruta.startsWith(destino);
-        const apagada = Boolean(requiereBase) && sinBase;
+        const apagada = false;
 
         if (apagada) {
           return (

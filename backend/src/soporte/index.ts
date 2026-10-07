@@ -91,12 +91,12 @@ export async function iniciarSoporte({ obtenerPool, log, motor, registro, audito
   // El sondeo de Oracle se adelanta al arranque para que la interfaz no espere.
   precalentarEstadoOracle();
 
-  if (config.vigilancia.habilitada) {
-    iniciarVigilancia(fuente, (m) => registrar(`  ${m}`), auditoria);
-    registrar(auditoria
-      ? '✓ [soporte] Vigilancia activada (auditada)'
-      : '⚠ [soporte] Vigilancia activada SIN auditoría: no se le pasó dónde registrar');
-  }
+  // La vigilancia se retiró junto con su pantalla: sondeaba la base cada minuto y
+  // escribía en soporte.alertas, y ya no hay dónde mirar esas alertas. El programador
+  // y los monitores siguen en el código; lo que se quitó es que arranquen solos.
+  //
+  // Las tablas soporte.alertas y soporte.vigilancia_ejecuciones se quedan con lo que
+  // tengan: son el registro de lo que pasó, y eso es auditoría.
   return true;
 }
 

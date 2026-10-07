@@ -11,10 +11,10 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from '../../aportes.ts';
 import { config } from '../../config.ts';
 import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './errores.ts';
-import { cambiarEstadoAlerta, contarAlertasAbiertas, listarAlertas, ultimaEjecucion, type EstadoAlerta } from '../../knowledge/alertas.ts';
+import { contarAlertasAbiertas, type EstadoAlerta } from '../../knowledge/alertas.ts';
 import { categoriasConsultas, contarConsultas, listarConsultas, obtenerConsulta } from '../../knowledge/consultas.ts';
 import { filas } from '../../knowledge/db.ts';
-import { contarDiagnosticos, guardarDiagnostico, listarDiagnosticos, obtenerDiagnostico, vincularDiagnostico } from '../../knowledge/diagnosticos.ts';
+import { contarDiagnosticos } from '../../knowledge/diagnosticos.ts';
 import {
   ESTADOS_TICKET,
   actualizarTicket,
@@ -24,17 +24,11 @@ import {
   listarTickets,
   obtenerTicket,
 } from '../../knowledge/tickets.ts';
-import { MONITORES, obtenerMonitor } from '../../monitors/monitores.ts';
-import { ejecutarMonitor, monitorEnCurso } from '../../monitors/programador.ts';
-import { basesParaTickets, fuente, fuentePara } from '../../oracle/index.ts';
+import { basesParaTickets, fuente } from '../../oracle/index.ts';
 import type { EstadoFuente } from '../../puertos/fuente-datos.ts';
-import { CORRECCIONES, publicarCorrecciones } from '../../correcciones.ts';
-import { explorarDesdeEntrada } from '../../exploracion.ts';
 import { buscarPrecedentes, busquedasFallidas } from '../../precedentes.ts';
-import { correccionesDelDiagnostico, diagnosticarTicket, publicarSolucion, publicarSolucionDeTicket } from '../../solucion.ts';
+import { diagnosticarTicket, publicarSolucionDeTicket } from '../../solucion.ts';
 import { construirVocabulario, sembrarVocabulario } from '../../vocabulario.ts';
-import { PLAYBOOKS, describirPlaybook, obtenerPlaybook } from '../../playbooks/index.ts';
-import { ejecutarPlaybook, validarEntrada } from '../../playbooks/motor.ts';
 import type { ResultadoDiagnostico } from '../../playbooks/tipos.ts';
 
 type Manejador = (req: Request, res: Response) => Promise<unknown>;
@@ -62,7 +56,6 @@ const CAMPOS_TICKET = [
   'base_datos',
 ] as const;
 
-const ESTADOS_ALERTA: EstadoAlerta[] = ['abierta', 'atendida', 'resuelta'];
 
 const ETIQUETA_ESTADO = { ok: 'OK', alerta: 'ALERTA', falla: 'FALLA', omitido: 'OMITIDO', error: 'ERROR' } as const;
 
@@ -411,53 +404,10 @@ export function crearSoporteRouter(
   );
 
   // ─── Diagnósticos ─────────────────────────────────────────────────────────
-  router.get('/playbooks', h(async () => PLAYBOOKS.map(describirPlaybook)));
 
-  router.post(
-    '/playbooks/:id/ejecutar',
-    h(async (req) => {
-      const cuerpo = (req.body ?? {}) as { entrada?: Record<string, unknown>; ticket?: string };
-      const playbook = obtenerPlaybook(req.params.id);
-      if (!playbook) throw noEncontrado('Diagnóstico no encontrado.');
-      const ticket = texto(cuerpo.ticket);
-      if (ticket && !(await obtenerTicket(ticket))) throw solicitudInvalida(`El ticket ${ticket} no existe.`);
-      const entrada = validarEntrada(playbook, cuerpo.entrada ?? {});
-      const resultado = await ejecutarPlaybook(playbook, entrada, fuente);
-      const id = await guardarDiagnostico(resultado, ticket);
-      registrar({ playbook: playbook.id, veredicto: resultado.veredicto, id }, 'diagnóstico ejecutado');
-      return { ...resultado, id, ticket };
-    }),
-  );
 
-  router.get(
-    '/diagnosticos',
-    h(async (req) => listarDiagnosticos(Math.min(Number(req.query.limite) || 20, 100))),
-  );
 
-  router.get(
-    '/diagnosticos/:id',
-    h(async (req) => {
-      const resultado = await obtenerDiagnostico(Number(req.params.id));
-      if (!resultado) throw noEncontrado('Diagnóstico no encontrado.');
-      return resultado;
-    }),
-  );
 
-  router.post(
-    '/diagnosticos/:id/registrar',
-    h(async (req, res) => {
-      const cuerpo = (req.body ?? {}) as { ticket?: string };
-      const resultado = await obtenerDiagnostico(Number(req.params.id));
-      if (!resultado) throw noEncontrado('Diagnóstico no encontrado.');
-      const ticket = texto(cuerpo.ticket);
-      if (!ticket) throw solicitudInvalida('Indique el número de ticket.');
-      if (!(await obtenerTicket(ticket))) throw noEncontrado(`El ticket ${ticket} no existe.`);
-      const paso = await agregarPaso(ticket, pasoDesdeDiagnostico(resultado));
-      await vincularDiagnostico(resultado.id!, ticket);
-      res.status(201);
-      return paso;
-    }),
-  );
 
   // ─── Puente con el motor de consultas ─────────────────────────────────────
   // La Biblioteca SQL es un corpus curado que mapea lenguaje de negocio a las
@@ -491,151 +441,15 @@ export function crearSoporteRouter(
 
   // ─── Correcciones publicadas como artículos ───────────────────────────────
 
-  router.get(
-    '/correcciones',
-    h(async () =>
-      Object.values(CORRECCIONES).map((c) => ({
-        id: c.id,
-        titulo: c.titulo,
-        descripcion: c.descripcion,
-        categoria: c.categoria,
-        subcategoria: c.subcategoria,
-        biblioteca: c.biblioteca ?? null,
-        responsable: c.responsable,
-        plantilla: c.plantilla,
-        campos: c.campos,
-        advertencia: c.advertencia ?? null,
-      })),
-    ),
-  );
 
-  router.post(
-    '/correcciones/publicar',
-    h(async (req) => {
-      const cuerpo = (req.body ?? {}) as { databaseId?: string; ejecutable?: boolean };
-      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
-      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
-      const resultado = await publicarCorrecciones({
-        databaseId: texto(cuerpo.databaseId) ?? config.oracle.dbId,
-        autorId: usuario.id,
-        autorNombre: usuario.username,
-        // Aunque lo pidan, sin la llave global no se publica nada ejecutable.
-        ejecutable: cuerpo.ejecutable === true && config.correccionesEjecutables,
-      });
-      registrar(resultado, 'correcciones publicadas como artículos');
-      return resultado;
-    }),
-  );
 
-  router.post(
-    '/diagnosticos/:id/publicar',
-    h(async (req, res) => {
-      const resultado = await obtenerDiagnostico(Number(req.params.id));
-      if (!resultado) throw noEncontrado('Diagnóstico no encontrado.');
-      if (resultado.hallazgos.length === 0) {
-        throw solicitudInvalida('Este diagnóstico no encontró nada que documentar como solución.');
-      }
-      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
-      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
-
-      // Sin lista se publican todas: el selector de la pantalla siempre manda una,
-      // pero la API sigue sirviendo para publicar el diagnóstico entero de un tirón.
-      const cuerpo = (req.body ?? {}) as {
-        correcciones?: unknown;
-        exploracion?: unknown;
-        propio?: { titulo?: string; sql?: string; pasos?: string; dinamico?: boolean };
-      };
-      let elegidas: string[] | null = null;
-      if (Array.isArray(cuerpo.correcciones)) {
-        const disponibles = new Set(correccionesDelDiagnostico(resultado).map((c) => c.id));
-        elegidas = cuerpo.correcciones.map(String);
-        const ajenas = elegidas.filter((id) => !disponibles.has(id));
-        if (ajenas.length > 0) {
-          throw solicitudInvalida(`Este diagnóstico no propone la corrección «${ajenas[0]}».`);
-        }
-      }
-
-      // La propuesta de exploración se vuelve a derivar aquí en vez de aceptarla del
-      // navegador: así el SQL que se publica sale siempre de lo que Oracle dice ahora,
-      // y no de un cuerpo que alguien pudo cambiar por el camino.
-      const ticket = resultado.ticket ? await obtenerTicket(resultado.ticket) : null;
-      let exploracion = null;
-      if (cuerpo.exploracion === true) {
-        const suFuente = fuentePara(ticket?.base_datos) ?? fuente;
-        const r = await explorarDesdeEntrada(suFuente, resultado.entrada);
-        if (!r.propuesta) {
-          throw solicitudInvalida(r.motivo ?? 'La exploración ya no propone ninguna corrección para este caso.');
-        }
-        exploracion = r.propuesta;
-      }
-
-      const publicado = await publicarSolucion(resultado, {
-        sistema: ticket?.sistema ?? null,
-        baseDatos: ticket?.base_datos ?? config.oracle.dbId,
-        autorId: usuario.id,
-        autorNombre: usuario.username,
-        correcciones: elegidas,
-        exploracion,
-        propio:
-          texto(cuerpo.propio?.sql) || texto(cuerpo.propio?.pasos)
-            ? {
-                titulo: texto(cuerpo.propio?.titulo) ?? null,
-                sql: texto(cuerpo.propio?.sql) ?? null,
-                pasos: texto(cuerpo.propio?.pasos) ?? null,
-                dinamico: cuerpo.propio?.dinamico !== false,
-              }
-            : null,
-      });
-      registrar(publicado, 'solución publicada como artículos');
-      res.status(publicado.articulo.creado ? 201 : 200);
-      return publicado;
-    }),
-  );
 
   router.get('/bases-tickets', h(async () => basesParaTickets()));
 
   // ─── Vigilancia ───────────────────────────────────────────────────────────
-  router.get(
-    '/monitores',
-    h(async () =>
-      Promise.all(
-        MONITORES.map(async (m) => ({
-          id: m.id,
-          nombre: m.nombre,
-          descripcion: m.descripcion,
-          intervaloMin: m.intervaloMin,
-          ticketsReferencia: m.ticketsReferencia,
-          playbook: m.playbook ?? null,
-          enCurso: monitorEnCurso(m.id),
-          ultimaEjecucion: await ultimaEjecucion(m.id),
-        })),
-      ),
-    ),
-  );
 
-  router.post(
-    '/monitores/:id/ejecutar',
-    h(async (req) => {
-      const monitor = obtenerMonitor(req.params.id);
-      if (!monitor) throw noEncontrado('Monitor no encontrado.');
-      return ejecutarMonitor(monitor, fuente);
-    }),
-  );
 
-  router.get('/alertas', h(async (req) => listarAlertas(texto(req.query.estado))));
 
-  router.patch(
-    '/alertas/:id',
-    h(async (req) => {
-      const estado = (req.body ?? {}).estado as EstadoAlerta;
-      if (!ESTADOS_ALERTA.includes(estado)) {
-        throw solicitudInvalida(`Estado inválido. Valores permitidos: ${ESTADOS_ALERTA.join(', ')}.`);
-      }
-      const alerta = await cambiarEstadoAlerta(Number(req.params.id), estado);
-      if (!alerta) throw noEncontrado('Alerta no encontrada.');
-      return alerta;
-    }),
-  );
 
   // ─── Aportes de quien reporta ─────────────────────────────────────────────
   //

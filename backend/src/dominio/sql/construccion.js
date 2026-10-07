@@ -267,25 +267,36 @@ export function applyCastToSqlPlaceholder(sqlPlaceholder = '', castType = null) 
 export function applyOptionalSqlFilterTransform(sqlText = '') {
   let sql = String(sqlText || '');
 
-  // campo = {{variable}}  -> ({{variable}} IS NULL OR campo = {{variable}})
-  // campo = :variable     -> (:variable IS NULL OR campo = :variable)
+  // El filtro opcional: si no mandan el dato, no se filtra por el.
+  //
+  // El orden de los dos lados del OR no es cosmetico. Antes se generaba
+  // «($1 IS NULL OR campo = $1)», y asi PostgreSQL no podia deducir el tipo del
+  // parametro: lo resuelve por su primera aparicion, y en «$1 IS NULL» no hay nada
+  // de donde deducirlo. El resultado era que toda consulta con un parametro fallaba
+  // con «no se pudo determinar el tipo del parametro $1» — justamente el caso de un
+  // articulo que pide una cedula.
+  //
+  // Poniendo la comparacion primero, el tipo sale de la columna. El significado es
+  // el mismo porque el OR es conmutativo, y esta comprobado contra PostgreSQL: con
+  // valor devuelve la fila, sin valor devuelve todas.
+
+  // campo = :variable  ->  (campo = :variable OR :variable IS NULL)
   sql = sql.replace(
     /([\w".]+)\s*=\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?!\s*\))/gi,
     (match, leftExpr, placeholderExpr, curlyName, namedName) => {
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
-      return `(${placeholderExpr} IS NULL OR ${leftExpr} = ${placeholderExpr})`;
+      return `(${leftExpr} = ${placeholderExpr} OR ${placeholderExpr} IS NULL)`;
     },
   );
 
-  // campo ILIKE {{variable}} -> ({{variable}} IS NULL OR campo ILIKE '%' || {{variable}} || '%')
-  // campo ILIKE :variable    -> (:variable IS NULL OR campo ILIKE '%' || :variable || '%')
+  // campo ILIKE :variable  ->  (campo ILIKE '%' || :variable || '%' OR :variable IS NULL)
   sql = sql.replace(
     /([\w".]+)\s+ILIKE\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?!\s*\|\|)/gi,
     (match, leftExpr, placeholderExpr, curlyName, namedName) => {
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
-      return `(${placeholderExpr} IS NULL OR ${leftExpr} ILIKE '%' || ${placeholderExpr} || '%')`;
+      return `(${leftExpr} ILIKE '%' || ${placeholderExpr} || '%' OR ${placeholderExpr} IS NULL)`;
     },
   );
 

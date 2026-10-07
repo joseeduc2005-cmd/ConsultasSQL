@@ -1,5 +1,7 @@
 // ─── Content routes: /api/articles/*, /api/comments/* ────────────────────────
 import { Router } from 'express';
+
+import { EXECUTABLE_SOLUTION_TYPES, SOLUTION_TYPES_ACEPTADOS, SOLUTION_TYPES_OFRECIDOS } from '../../dominio/scripts/estructurado.js';
 import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 /**
@@ -21,7 +23,10 @@ export function createContentRouter({
 }) {
   const router = Router();
 
-  const VALID_SOLUTION_TYPES = ['lectura', 'ejecutable', 'database', 'script'];
+  // La lista la sabe el dominio, no esta ruta. Tenía su propia copia y por eso
+  // «dinamico» —el tipo nuevo— daba «tipo_solucion debe ser ...»: la copia no lo
+  // conocía. Dos sitios con la misma lista y uno desactualizado.
+  const VALID_SOLUTION_TYPES = SOLUTION_TYPES_ACEPTADOS;
 
   // ── Articles ──────────────────────────────────────────────────────────────
 
@@ -117,13 +122,23 @@ export function createContentRouter({
       }
 
       if (!VALID_SOLUTION_TYPES.includes(tipo_solucion)) {
-        return res.status(400).json({ success: false, error: 'tipo_solucion debe ser "lectura", "ejecutable", "database" o "script"' });
+        return res.status(400).json({
+          success: false,
+          error: `tipo_solucion debe ser uno de: ${SOLUTION_TYPES_OFRECIDOS.join(', ')}`
+            + ` (se aceptan además los nombres antiguos: ${[...EXECUTABLE_SOLUTION_TYPES].filter((x) => x !== 'dinamico').join(', ')})`,
+        });
       }
 
       const VALID_VISIBILITIES = ['todos', 'admin', 'usuario'];
       const resolvedVisibility = VALID_VISIBILITIES.includes(visible_para) ? visible_para : 'todos';
 
-      if (tipo_solucion === 'script') {
+      // Cualquier tipo que ejecute algo, no solo el llamado 'script'.
+      //
+      // Esto decia `tipo_solucion === 'script'`, asi que un articulo guardado como
+      // 'database' —o como 'dinamico'— no pasaba por la validacion del script: se
+      // guardaba cualquier cosa, incluido un UPDATE. El tipo es una etiqueta; lo que
+      // decide si hay que mirar el script es si el articulo ejecuta.
+      if (EXECUTABLE_SOLUTION_TYPES.has(tipo_solucion)) {
         await ensureDynamicSchemaReady(false);
         const parsedBusinessScript = parseStructuredScript(script_json);
         try {
@@ -268,7 +283,11 @@ export function createContentRouter({
       }
 
       if (!VALID_SOLUTION_TYPES.includes(tipo_solucion)) {
-        return res.status(400).json({ success: false, error: 'tipo_solucion debe ser "lectura", "ejecutable", "database" o "script"' });
+        return res.status(400).json({
+          success: false,
+          error: `tipo_solucion debe ser uno de: ${SOLUTION_TYPES_OFRECIDOS.join(', ')}`
+            + ` (se aceptan además los nombres antiguos: ${[...EXECUTABLE_SOLUTION_TYPES].filter((x) => x !== 'dinamico').join(', ')})`,
+        });
       }
 
       const VALID_VISIBILITIES = ['todos', 'admin', 'usuario'];
@@ -276,7 +295,13 @@ export function createContentRouter({
 
       const editorUsername = (getUserFromRequest(req))?.username || role || 'admin';
 
-      if (tipo_solucion === 'script') {
+      // Cualquier tipo que ejecute algo, no solo el llamado 'script'.
+      //
+      // Esto decia `tipo_solucion === 'script'`, asi que un articulo guardado como
+      // 'database' —o como 'dinamico'— no pasaba por la validacion del script: se
+      // guardaba cualquier cosa, incluido un UPDATE. El tipo es una etiqueta; lo que
+      // decide si hay que mirar el script es si el articulo ejecuta.
+      if (EXECUTABLE_SOLUTION_TYPES.has(tipo_solucion)) {
         await ensureDynamicSchemaReady(false);
         const parsedBusinessScript = parseStructuredScript(script_json);
         try {

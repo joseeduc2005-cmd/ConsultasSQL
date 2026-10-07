@@ -2,8 +2,7 @@
 import { KnowledgeArticle } from '../../types';
 import {
   WorkflowRow, WorkflowActionType, WorkflowTableName, WorkflowValidationCondition,
-  WORKFLOW_ACTION_TYPES, WORKFLOW_TABLES, VALIDATION_CONDITIONS,
-} from './adminTypes';
+  WORKFLOW_ACTION_TYPES, WORKFLOW_TABLES, VALIDATION_CONDITIONS, WorkflowActionTypeLeible,} from './adminTypes';
 import { createEmptyWorkflowRow, createEmptyWorkflowConfig, normalizeWorkflowRows } from './workflowUtils';
 
 export function getFirstEntry(record: unknown): [string, unknown] | null {
@@ -37,7 +36,14 @@ export function parseWorkflowRowsFromScript(scriptJson: KnowledgeArticle['script
       const row = createEmptyWorkflowRow(index + 1);
       const type = String(step.tipo || '').trim().toLowerCase();
       row.descripcion = String(step.descripcion || `Paso ${index + 1}`);
-      row.tipo = WORKFLOW_ACTION_TYPES.includes(type as WorkflowActionType) ? (type as WorkflowActionType) : '';
+      // Se conservan tambien los tipos retirados (update, insert, delete) al LEER: un
+      // articulo creado antes del cambio tiene que poder abrirse en el editor con sus
+      // datos a la vista para convertirlo o borrarlo. Crearlos es otra cosa, y la
+      // validacion los rechaza.
+      const TIPOS_LEIBLES: WorkflowActionTypeLeible[] = [...WORKFLOW_ACTION_TYPES, 'update', 'insert', 'delete'];
+      row.tipo = TIPOS_LEIBLES.includes(type as WorkflowActionTypeLeible)
+        ? (type as WorkflowActionTypeLeible)
+        : '';
 
       if (row.tipo === 'validacion') {
         row.config.variable = String(step.variable || '');

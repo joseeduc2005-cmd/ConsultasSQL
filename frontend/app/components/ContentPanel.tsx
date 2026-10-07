@@ -66,7 +66,9 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
   const hasStructuredScript = Boolean(parseStructuredScript(selectedArticle?.script_json));
   const businessScriptDetails = getBusinessScriptDetails(selectedArticle);
   const solutionType = (selectedArticle?.tipo_solucion || 'lectura').toLowerCase();
-  const isExecutableArticle = solutionType === 'ejecutable' || solutionType === 'database' || solutionType === 'script';
+  // «dinamico» es el tipo de ahora; los tres viejos siguen reconociendose para que
+  // el contenido ya creado se pueda seguir abriendo.
+  const isExecutableArticle = ['dinamico', 'ejecutable', 'database', 'script'].includes(solutionType);
   const scriptExecutionFields = getScriptExecutionFields(selectedArticle);
   const legacyExecutionFields = ((selectedArticle?.camposFormulario || []) as any[]).filter((field: any) => field.mode !== 'output');
   const executionFields = hasStructuredScript ? scriptExecutionFields : legacyExecutionFields;

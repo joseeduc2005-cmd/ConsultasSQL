@@ -13,7 +13,26 @@ import { sanitizeStructuredParamValue, validateStructuredParamByName } from '../
 
 export const MANUAL_SQL_TIMEOUT_MS = Math.max(1000, Number(process.env.SQL_QUERY_TIMEOUT_MS) || 120000);
 
-export const EXECUTABLE_SOLUTION_TYPES = new Set(['ejecutable', 'database', 'script']);
+/**
+ * Los tipos de artículo que ejecutan algo.
+ *
+ * «dinamico» es el nombre de ahora: un artículo que pide los datos que le falten —una
+ * cédula, un número de transacción— y consulta. Los tres nombres viejos siguen
+ * aceptándose para que no quede sin abrir contenido ya creado, y significan lo mismo:
+ * solo lectura. Lo que cambió no es el nombre, es que ninguno escribe.
+ */
+export const SOLUTION_TYPE_DINAMICO = 'dinamico';
+
+export const EXECUTABLE_SOLUTION_TYPES = new Set([
+  SOLUTION_TYPE_DINAMICO,
+  'ejecutable', 'database', 'script',
+]);
+
+/** Lo que se ofrece al crear un artículo: los viejos se aceptan, no se ofrecen. */
+export const SOLUTION_TYPES_OFRECIDOS = ['lectura', SOLUTION_TYPE_DINAMICO];
+
+/** Todo lo que se admite al guardar, nombres viejos incluidos. */
+export const SOLUTION_TYPES_ACEPTADOS = ['lectura', ...EXECUTABLE_SOLUTION_TYPES];
 
 /**
  * Los nombres con los que se puede pedir cada parametro de una accion.

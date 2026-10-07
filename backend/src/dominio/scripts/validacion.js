@@ -16,7 +16,21 @@ import { normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments
 
 export const ALLOWED_WHERE_OPERATORS = new Set(['=', '!=', '>', '<', '>=', '<=', 'LIKE']);
 
-export const DYNAMIC_SCRIPT_ALLOWED_TYPES = ['update', 'insert', 'delete', 'select'];
+/**
+ * Qué puede hacer el script de un artículo.
+ *
+ * Solo leer. Antes la lista era ['update', 'insert', 'delete', 'select'] y el sistema
+ * sabía escribir en producción con una confirmación; se decidió que no lo haga. Un
+ * artículo pide los datos que le falten —una cédula, un número de transacción— y
+ * devuelve lo que encuentra, y ahí acaba lo que puede hacer.
+ *
+ * Que la lista sea de uno es la garantía: añadir una escritura obliga a escribirla
+ * aquí, y entonces es la decisión de alguien y no un descuido.
+ */
+export const DYNAMIC_SCRIPT_ALLOWED_TYPES = ['select'];
+
+/** Lo que el sistema sabía hacer y ya no hace. Está para poder explicarlo al rechazar. */
+export const DYNAMIC_SCRIPT_RETIRED_TYPES = ['update', 'insert', 'delete'];
 
 export const MANUAL_SQL_BLOCKED_KEYWORDS = /\b(insert|update|delete|drop|alter|truncate|create|grant|revoke)\b/i;
 
@@ -155,7 +169,13 @@ export function assertDynamicScriptAllowed(script, esquema) {
   const tableName = String(script.tabla || '').trim().toLowerCase();
 
   if (!DYNAMIC_SCRIPT_ALLOWED_TYPES.includes(type)) {
-    throw new Error('Operación no permitida');
+    if (DYNAMIC_SCRIPT_RETIRED_TYPES.includes(type)) {
+      throw new Error(
+        `El sistema ya no ejecuta ${type.toUpperCase()}: un artículo solo consulta. `
+        + 'Use un script de tipo select con los campos que haya que pedir.'
+      );
+    }
+    throw new Error(`Operación no permitida: ${type || '(sin tipo)'}. Solo se admite select.`);
   }
 
   if (!esquema.permiteTabla(tableName)) {
@@ -234,6 +254,37 @@ export function assertDynamicScriptAllowed(script, esquema) {
  *                 El control de acceso es la visibilidad del artículo (visible_para).
  * trusted=false → consola SQL directa: se aplican restricciones de seguridad.
  */
+/**
+ * Las operaciones que el sistema ya no ejecuta, sea cual sea la base.
+ *
+ * «ddl» incluye TRUNCATE, DROP, ALTER y CREATE: detectSqlOperation los agrupa bajo ese
+ * nombre, y por eso TRUNCATE se colaba cuando la lista decia 'truncate'.
+ */
+export const OPERACIONES_QUE_ESCRIBEN = new Set([
+  'update', 'delete', 'insert', 'merge', 'truncate', 'ddl', 'call',
+]);
+
+/**
+ * Se niega si la sentencia escribe. Una sola puerta, y antes de cualquier rama.
+ *
+ * Esto existe porque el bloqueo se escapaba por dos sitios: los scripts que
+ * isComplexSqlScript considera complejos —un INSERT con parentesis, un MERGE— salian
+ * por una rama que no llegaba a comprobar nada, y TRUNCATE no se reconocia porque
+ * detectSqlOperation lo llama 'ddl'. Tener la comprobacion en un solo sitio y
+ * llamarla primero es lo que cierra las dos.
+ */
+export function asegurarSoloConsulta(sqlText) {
+  const limpio = stripLeadingSqlComments(String(sqlText || '').replace(/;\s*$/, '').trim());
+  if (!limpio) return;
+  const operacion = detectSqlOperation(limpio);
+  if (OPERACIONES_QUE_ESCRIBEN.has(operacion)) {
+    throw new Error(
+      `El sistema ya no ejecuta ${operacion.toUpperCase()}: un articulo solo consulta. `
+      + 'Escriba un SELECT con los campos que haya que pedir.'
+    );
+  }
+}
+
 export function assertManualSqlAllowed(sqlText, options = {}) {
   const {
     allowMutations = false,
@@ -245,15 +296,26 @@ export function assertManualSqlAllowed(sqlText, options = {}) {
   const raw = String(sqlText || '').trim();
   if (!raw) throw new Error('SQL manual vacío');
 
-  // ── Modo confiable (artículos de admin): solo verificamos que no esté vacío ──
-  if (trusted) return;
-
-  // ── Modo consola directa: aplicar restricciones ───────────────────────────
   const cleaned = stripLeadingSqlComments(raw.replace(/;\s*$/, '').trim());
   const operation = detectSqlOperation(cleaned);
 
   const WRITE_OPS = new Set(['update', 'delete', 'insert', 'merge', 'truncate']);
   const PROC_OPS  = new Set(['call']);
+
+  // ── Ninguna escritura, venga de donde venga ────────────────────────────────
+  //
+  // Va ANTES del modo confiable a proposito. El modo confiable —el de los articulos
+  // de admin— hacia `if (trusted) return;` y se saltaba todo, asi que un articulo con
+  // UPDATE se guardaba sin que nadie lo mirara. Ser de admin permite escribir SQL
+  // raro; no permite escribir en la base.
+  //
+  // Vale para cualquier base conectada, no solo PostgreSQL: por aqui pasa todo el SQL
+  // manual, sea cual sea el motor al que vaya.
+  asegurarSoloConsulta(cleaned);
+
+  // ── Modo confiable (articulos de admin): sin restricciones de sintaxis ──────
+  if (trusted) return;
+
 
   if (!['select', ...WRITE_OPS, ...PROC_OPS].includes(operation)) {
     throw new Error('Operación no permitida en la consola. Usa SELECT, INSERT, UPDATE, DELETE, MERGE, CALL.');
@@ -409,86 +471,18 @@ export function validateRelationalScriptDefinition(script, esquema) {
 }
 
 export function validateRelationalMutationScriptDefinition(script, mutationType, esquema) {
-  if (!script || typeof script !== 'object' || Array.isArray(script)) {
-    throw new Error('Script relacional inválido');
-  }
-
-  const type = normalizeDynamicScriptType(script.tipo);
-  if (type !== mutationType || !['update', 'delete'].includes(type)) {
-    throw new Error(`Script relacional solo soporta tipo ${mutationType}`);
-  }
-
-  const baseTable = String(script.tabla || '').trim().toLowerCase();
-  if (!esquema.permiteTabla(baseTable)) {
-    throw new Error(`Tabla base no permitida: ${baseTable || 'vacía'}`);
-  }
-
-  const joins = Array.isArray(script.join) ? script.join : [];
-  if (joins.length === 0) {
-    throw new Error('Script relacional requiere al menos un join');
-  }
-
-  joins.forEach((joinItem, index) => {
-    if (!isPlainObject(joinItem)) {
-      throw new Error(`Join ${index + 1} inválido`);
-    }
-
-    const joinTable = String(joinItem.tabla || '').trim().toLowerCase();
-    if (!esquema.permiteTabla(joinTable)) {
-      throw new Error(`Join ${index + 1}: tabla no permitida (${joinTable || 'vacía'})`);
-    }
-
-    const onObject = isPlainObject(joinItem.on) ? joinItem.on : null;
-    if (!onObject || Object.keys(onObject).length === 0) {
-      throw new Error(`Join ${index + 1}: requiere objeto on`);
-    }
-
-    Object.entries(onObject).forEach(([leftRef, rightRef]) => {
-      const left = parseQualifiedFieldRef(leftRef, baseTable);
-      const right = parseQualifiedFieldRef(rightRef, baseTable);
-
-      if (!esquema.permiteTabla(left.table)) {
-        throw new Error(`Join ${index + 1}: tabla no permitida en ON (${left.table})`);
-      }
-      if (!esquema.permiteTabla(right.table)) {
-        throw new Error(`Join ${index + 1}: tabla no permitida en ON (${right.table})`);
-      }
-
-      ensureDynamicColumnAllowed(left.table, [left.column], esquema);
-      ensureDynamicColumnAllowed(right.table, [right.column], esquema);
-      ensureDynamicJoinRelationAllowed(left, right, `Join ${index + 1}`, esquema);
-    });
-  });
-
-  const whereObject = isPlainObject(script.where) ? script.where : null;
-  if (!whereObject || Object.keys(whereObject).length === 0) {
-    throw new Error(`${mutationType.toUpperCase()} relacional requiere un objeto where válido`);
-  }
-
-  Object.entries(whereObject).forEach(([fieldRef, rawValue]) => {
-    const { table, column } = parseQualifiedFieldRef(fieldRef, baseTable);
-    if (!esquema.permiteTabla(table)) {
-      throw new Error(`WHERE: tabla no permitida (${table})`);
-    }
-    ensureDynamicColumnAllowed(table, [column], esquema);
-
-    const { fieldRef: rightFieldRef } = resolveWhereEntry(rawValue);
-    if (rightFieldRef) {
-      const right = parseQualifiedFieldRef(rightFieldRef, baseTable);
-      if (!esquema.permiteTabla(right.table)) {
-        throw new Error(`WHERE: tabla no permitida (${right.table})`);
-      }
-      ensureDynamicColumnAllowed(right.table, [right.column], esquema);
-    }
-  });
-
-  if (type === 'update') {
-    const setObject = isPlainObject(script.set) ? script.set : null;
-    if (!setObject || Object.keys(setObject).length === 0) {
-      throw new Error('UPDATE relacional requiere un objeto set válido');
-    }
-    ensureDynamicColumnAllowed(baseTable, Object.keys(setObject), esquema);
-  }
+  // Esta funcion validaba los UPDATE y DELETE relacionales de un articulo. El sistema
+  // ya no escribe, asi que lo unico que queda de ella es negarse.
+  //
+  // Se deja en vez de borrarla, y rechazando en vez de devolviendo: si algun camino
+  // que no se vio todavia la llama, falla aqui y no ejecuta nada. Su cuerpo —noventa
+  // lineas que comprobaban columnas y uniones de una escritura— se quito porque el
+  // linter lo marco como inalcanzable, que es lo que era.
+  void script; void mutationType; void esquema;
+  throw new Error(
+    `El sistema ya no ejecuta ${String(mutationType || '').toUpperCase()} relacionales: `
+    + 'un articulo solo consulta.'
+  );
 }
 
 export function validateBusinessScriptDefinition(script, esquema) {
@@ -511,6 +505,15 @@ export function validateBusinessScriptDefinition(script, esquema) {
     const sqlText = String(script.sql || '').trim();
     if (!sqlText) throw new Error('SQL manual vacío');
 
+    // Ninguna escritura, y aqui arriba del todo.
+    //
+    // Antes la comprobacion vivia mas abajo y las dos ramas siguientes se la saltaban:
+    // un INSERT con parentesis o un MERGE los considera complejos isComplexSqlScript,
+    // y esa rama hacia return sin mirar nada. Por eso un articulo con INSERT se
+    // guardaba tan tranquilo. Comprobar primero y una sola vez es lo que lo cierra
+    // para cualquier forma de SQL y cualquier base conectada.
+    splitManualSqlSteps(sqlText).forEach((paso) => asegurarSoloConsulta(paso));
+
     // Complex PL/SQL scripts: validate via interpreter
     if (isComplexSqlScript(sqlText)) {
       const parsed = parsePlSqlScript(sqlText);
@@ -523,9 +526,13 @@ export function validateBusinessScriptDefinition(script, esquema) {
     // Standard multi-step SQL
     const sqlSteps = splitManualSqlSteps(sqlText);
     if (sqlSteps.length === 0) throw new Error('SQL manual vacío');
-    // trusted=true: artículos admin → cualquier SQL válido (DROP, ALTER, MERGE, etc.)
+      // allowMutations: false. Antes era true, con el motivo «articulos admin ->
+      // cualquier SQL valido (DROP, ALTER, MERGE, etc.)», y por eso un articulo con
+      // un UPDATE se guardaba sin problema y solo fallaba al ejecutarlo. Mejor
+      // negarse al guardar: nadie construye un articulo entero para descubrir
+      // despues que no corre. trusted=true se mantiene: el SQL lo escribe un admin.
     sqlSteps.forEach((stepSql) => {
-      assertManualSqlAllowed(stepSql, { allowMutations: true, writeConfirmed: true, trusted: true });
+      assertManualSqlAllowed(stepSql, { allowMutations: false, writeConfirmed: false, trusted: true });
     });
     return;
   }

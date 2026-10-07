@@ -45,10 +45,17 @@ export async function ensureKnowledgeBaseSchema() {
         END LOOP;
       END $$;
     `);
+    // La lista de tipos vivía en tres sitios: el dominio, la ruta de artículos y esta
+    // restricción. Por eso «dinamico» daba 500 después de arreglar los dos primeros:
+    // PostgreSQL seguía rechazándolo. Los tres nombres viejos se conservan para no
+    // invalidar contenido ya creado; significan lo mismo que dinamico, solo lectura.
+    //
+    // La restricción se borra y se recrea en cada arranque (las líneas de arriba), así
+    // que cambiar esta lista basta para que se aplique.
     await obtenerPool().query(`
       ALTER TABLE knowledge_base
       ADD CONSTRAINT knowledge_base_tipo_solucion_check
-      CHECK (tipo_solucion IN ('lectura', 'ejecutable', 'database', 'script'))
+      CHECK (tipo_solucion IN ('lectura', 'dinamico', 'ejecutable', 'database', 'script'))
     `);
     await obtenerPool().query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS pasos JSONB`);
     await obtenerPool().query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS campos_formulario JSONB`);

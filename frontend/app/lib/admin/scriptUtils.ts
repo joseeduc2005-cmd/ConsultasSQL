@@ -2,7 +2,7 @@
 import { generateScriptJson, validateWorkflow as validateWorkflowDefinition } from '@/lib/workflowBuilder';
 import {
   SolutionType, WorkflowRow, WorkflowValidationResult, BuilderFormState,
-  ScriptCreationMode,
+  ScriptCreationMode, WORKFLOW_ACTION_TYPES_RETIRADOS,
 } from './adminTypes';
 import {
   isDatabaseSolutionType, isScriptSolutionType, getAllowedActionTypes,
@@ -34,7 +34,16 @@ export function validateWorkflowRows(rows: WorkflowRow[], solutionType: Solution
     const errors: string[] = [];
     if (!row.descripcion.trim()) errors.push('La descripción es obligatoria.');
     if (!row.tipo) errors.push('Debes seleccionar un tipo.');
-    if (row.tipo && !allowedTypes.includes(row.tipo)) errors.push(`El tipo ${row.tipo} no está permitido.`);
+    if (row.tipo && !(allowedTypes as string[]).includes(row.tipo)) {
+      // Los tres retirados se nombran: el motivo no es que esten mal escritos, es que
+      // el sistema ya no escribe. Decir solo «no permitido» haria que alguien lo
+      // intentara de otra forma.
+      errors.push(
+        (WORKFLOW_ACTION_TYPES_RETIRADOS as readonly string[]).includes(row.tipo)
+          ? `El sistema ya no ejecuta ${row.tipo.toUpperCase()}: un artículo solo consulta. Cámbielo a select.`
+          : `El tipo ${row.tipo} no está permitido.`
+      );
+    }
     if (row.tipo && row.tipo !== 'validacion' && !row.tabla) errors.push('Debes seleccionar una tabla.');
 
     if (row.tipo === 'select' || row.tipo === 'insert') {

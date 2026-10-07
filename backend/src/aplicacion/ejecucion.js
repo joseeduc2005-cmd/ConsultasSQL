@@ -1793,8 +1793,16 @@ export function crearEjecucionDeScripts({
       && !isWorkflowScript
       && !isProceduralManualSql;
 
-    if (requiresExplicitWriteConfirmation && !isWriteConfirmed(validatedRuntimeParams)) {
-      const message = 'Esta acción modificará datos, confirma para continuar.';
+    // El sistema ya no escribe, asi que esto no pide confirmacion: se niega.
+    //
+    // Antes decia «confirma para continuar» y la escritura seguia sin ejecutarse
+    // —estaba cerrada mas abajo—, asi que quien lo intentaba confirmaba una y otra vez
+    // sin entender por que no pasaba nada. El mensaje tiene que decir lo que ocurre.
+    if (requiresWriteConfirmation) {
+      void requiresExplicitWriteConfirmation;
+      void isWriteConfirmed;
+      const message = 'Este articulo modifica datos y el sistema ya no ejecuta escrituras: '
+        + 'un articulo solo consulta. Conviertalo en una consulta con los campos que haya que pedir.';
       emit(`❌ ${message}`, 'error');
       return { success: false, message };
     }

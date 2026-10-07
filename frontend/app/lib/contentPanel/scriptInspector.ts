@@ -113,7 +113,23 @@ export function scriptHasMutation(node: unknown): boolean {
   return Object.values(current).some((value) => scriptHasMutation(value));
 }
 
-export function scriptRequiresWriteConfirmation(article: { script_json?: KnowledgeArticle['script_json'] } | null) {
+/**
+ * Siempre false: el sistema ya no escribe.
+ *
+ * Esto pintaba una casilla de «confirmo que esto modifica datos» antes de ejecutar.
+ * Un articulo ahora solo consulta —el backend rechaza cualquier UPDATE, INSERT o
+ * DELETE—, asi que pedir esa confirmacion seria pedirla para algo que no va a pasar.
+ *
+ * Se deja la funcion para no tocar quien la llama, y se deja scriptTieneEscritura
+ * exportada aparte: sirve para avisar de que un articulo viejo trae una escritura y
+ * por tanto ya no se va a poder ejecutar.
+ */
+export function scriptRequiresWriteConfirmation(_article: { script_json?: KnowledgeArticle['script_json'] } | null) {
+  return false;
+}
+
+/** Si un articulo guardado trae una escritura, que el sistema ya no ejecuta. */
+export function scriptTieneEscritura(article: { script_json?: KnowledgeArticle['script_json'] } | null) {
   return scriptHasMutation(parseStructuredScript(article?.script_json));
 }
 

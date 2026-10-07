@@ -116,11 +116,15 @@ try {
   const tema = await cliente(`/temas/${aceptado.cuerpo.articulo}`);
   comprobar(tema.cuerpo.contenido?.includes('Lo reabrí'), 'el artículo conserva los pasos');
   comprobar(/1\..*2\..*3\./s.test(tema.cuerpo.contenido ?? ''), 'los pasos quedan numerados y en orden');
-  comprobar(tema.cuerpo.contenido?.includes('Cambia datos'), 'se ve cuál de los pasos cambia datos');
+  // Antes aquí se comprobaba que se viera cuál de los pasos «cambia datos» y que la
+  // sentencia principal fuera esa. El sistema ya no ejecuta escrituras: todo script de
+  // un aporte es una consulta, y la sentencia principal es la primera que haya.
+  comprobar(tema.cuerpo.contenido?.includes('Solo consulta'), 'cada script se marca como consulta');
+  comprobar(!tema.cuerpo.contenido?.includes('Cambia datos'), 'ya no aparece «Cambia datos» en ningún paso');
   comprobar(tema.cuerpo.contenido?.includes('SELECT * FROM periodos'), 'el artículo conserva los scripts');
   comprobar(
-    creado.cuerpo.sql_sugerido?.startsWith('UPDATE'),
-    'la sentencia principal es la que cambia datos, no la primera que haya',
+    creado.cuerpo.sql_sugerido?.startsWith('SELECT'),
+    'la sentencia principal es la primera que haya',
   );
   comprobar(tema.cuerpo.contenido?.includes('ana.prueba'), 'queda dicho quién lo aportó');
 

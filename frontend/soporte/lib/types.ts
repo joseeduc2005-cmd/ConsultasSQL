@@ -329,7 +329,8 @@ export type EstadoAporte = 'pendiente' | 'aceptado' | 'rechazado';
 export interface PasoAporte {
   descripcion: string;
   script: string | null;
-  efecto: 'consulta' | 'cambio' | null;
+  // Ya no existe 'cambio': el sistema no ejecuta escrituras.
+  efecto: 'consulta' | null;
 }
 
 export interface Aporte {

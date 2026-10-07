@@ -19,8 +19,14 @@ export type EstadoAporte = 'pendiente' | 'aceptado' | 'rechazado';
 export interface PasoAporte {
   descripcion: string;
   script: string | null;
-  /** 'consulta' solo mira; 'cambio' modifica la base. */
-  efecto: 'consulta' | 'cambio' | null;
+  /**
+   * Solo 'consulta', o null si el paso no trae script.
+   *
+   * Antes tambien podia ser 'cambio', y quien escribia el aporte elegia si su script
+   * miraba o modificaba. El sistema ya no ejecuta escrituras, asi que preguntarlo
+   * seria ofrecer algo que no se puede hacer.
+   */
+  efecto: 'consulta' | null;
 }
 
 export interface Aporte {
@@ -65,8 +71,9 @@ export function normalizarPasos(valor: unknown): PasoAporte[] {
       const p = (bruto ?? {}) as Record<string, unknown>;
       const descripcion = typeof p.descripcion === 'string' ? p.descripcion.trim() : '';
       const script = typeof p.script === 'string' && p.script.trim() ? p.script.trim() : null;
-      const efecto = p.efecto === 'cambio' ? 'cambio' : p.efecto === 'consulta' ? 'consulta' : null;
-      return { descripcion, script, efecto: script ? (efecto ?? 'consulta') : null };
+        // Si hay script es una consulta; si no, no hay efecto. No se lee lo que venga
+        // en `efecto`: un aporte viejo puede traer 'cambio' y ya no significa nada.
+        return { descripcion, script, efecto: script ? 'consulta' : null };
     })
     .filter((p): p is PasoAporte => Boolean(p.descripcion || p.script));
 }
@@ -77,8 +84,7 @@ export function redactarPasos(pasos: PasoAporte[]): string {
     .map((p, i) => {
       const cabecera = `${i + 1}. ${p.descripcion || '(sin descripción)'}`;
       if (!p.script) return cabecera;
-      const marca = p.efecto === 'cambio' ? 'Cambia datos' : 'Solo consulta';
-      return `${cabecera}\n\n   _${marca}_\n\n\`\`\`sql\n${p.script}\n\`\`\``;
+      return `${cabecera}\n\n   _Solo consulta_\n\n\`\`\`sql\n${p.script}\n\`\`\``;
     })
     .join('\n\n');
 }
@@ -94,14 +100,13 @@ export function loEscrito(pasos: PasoAporte[]): string {
 }
 
 /**
- * El script que vale como «la sentencia» del aporte.
+ * El script que vale como «la sentencia» del aporte: el primero que haya.
  *
- * El primero que cambia algo, porque es el que hay que mirar con cuidado; si ninguno
- * cambia nada, el primero que haya. Es lo que ve el revisor de un vistazo.
+ * Antes buscaba primero el que cambiara algo, porque era el que habia que mirar con
+ * cuidado. Ya no hay scripts que cambien nada, asi que el criterio es el orden.
  */
 export function sentenciaPrincipal(pasos: PasoAporte[]): string | null {
-  const principal = pasos.find((p) => p.efecto === 'cambio' && p.script) ?? pasos.find((p) => p.script);
-  return principal?.script ?? null;
+  return pasos.find((p) => p.script)?.script ?? null;
 }
 
 /** El artículo tal como queda: lo que escribió quien lo vivió, con su nombre. */

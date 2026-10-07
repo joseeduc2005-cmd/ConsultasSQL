@@ -582,8 +582,8 @@ const PASO_VACIO: PasoAporte = { descripcion: '', script: null, efecto: null };
  * Lo que uno resolvió por su cuenta, para que no se pierda.
  *
  * Va por pasos y no como un texto corrido porque así es como se arregla algo: una cosa
- * después de otra, y a veces con un script en medio. Cada paso dice si su script solo
- * mira o si cambia datos — lo declara quien lo escribe, no se adivina del SQL, porque
+ * después de otra, y a veces con un script en medio. Todo script es una consulta: el
+ * sistema ya no ejecuta escrituras, y antes aquí se preguntaba si el script miraba o
  * una consulta puede llamar a algo que escribe y un `UPDATE` puede acabar en rollback.
  *
  * No se publica al enviarlo. Queda pendiente hasta que alguien de soporte lo lea, y el
@@ -614,7 +614,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
           .map((p) => ({
             descripcion: p.descripcion.trim(),
             script: p.script?.trim() || null,
-            efecto: p.script?.trim() ? (p.efecto ?? 'consulta') : null,
+            efecto: p.script?.trim() ? ('consulta' as const) : null,
           }))
           .filter((p) => p.descripcion || p.script),
         base: conScript ? base || undefined : undefined,
@@ -819,18 +819,18 @@ function Paso({
             onChange={(e) => onCambiar({ script: e.target.value })}
             rows={3}
             spellCheck={false}
-            placeholder="SELECT … / UPDATE …"
+            placeholder="SELECT …"
             className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
           />
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[12px] text-(--ink-500)">Este script</span>
-            <Opcion activo={paso.efecto !== 'cambio'} onClick={() => onCambiar({ efecto: 'consulta' })}>
-              solo consulta
-            </Opcion>
-            <Opcion activo={paso.efecto === 'cambio'} onClick={() => onCambiar({ efecto: 'cambio' })} peligro>
-              cambia datos
-            </Opcion>
+            {/*
+              Aqui se elegia si el script «solo consulta» o «cambia datos». Se quito:
+              el sistema ya no ejecuta escrituras, asi que ofrecerlo seria ofrecer algo
+              que luego se rechaza. Todo script de un aporte es una consulta, y se dice
+              sin preguntarlo.
+            */}
+            <span className="mr-1 text-[12px] text-(--ink-500)">Este script solo consulta</span>
             <button
               type="button"
               onClick={() => onCambiar({ script: null, efecto: null })}

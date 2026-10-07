@@ -208,14 +208,9 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                       <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{paso.descripcion}</p>
                       {paso.script && (
                         <>
-                          <span
-                            className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                              paso.efecto === 'cambio'
-                                ? 'bg-amber-500/15 text-amber-600'
-                                : 'bg-(--surface-2) text-(--ink-700)'
-                            }`}
-                          >
-                            {paso.efecto === 'cambio' ? 'Cambia datos' : 'Solo consulta'}
+                          {/* Sin estado de aviso: ya no hay scripts que cambien datos. */}
+                          <span className="mt-1.5 inline-block rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] font-medium text-(--ink-700)">
+                            Solo consulta
                           </span>
                           <pre className="mt-1.5 overflow-x-auto rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2.5 text-[12.5px] leading-relaxed">
                             <code>{paso.script}</code>

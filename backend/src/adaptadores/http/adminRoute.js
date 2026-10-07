@@ -1,5 +1,6 @@
 // ─── Admin + DB schema routes: /api/admin/*, /api/db/* ───────────────────────
 import { Router } from 'express';
+import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 /**
  * @param {{
@@ -27,7 +28,7 @@ export function createAdminRouter({
   router.get('/tables', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin' });
       }
@@ -46,7 +47,7 @@ export function createAdminRouter({
   router.get('/tables/:tableName/columns', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin' });
       }
@@ -105,7 +106,7 @@ export function createDbSchemaRouter({
   router.get('/schema', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin' });
       }

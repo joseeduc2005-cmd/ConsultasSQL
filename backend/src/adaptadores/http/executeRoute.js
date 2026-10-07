@@ -1,6 +1,7 @@
 // ─── Execute routes: /api/execute/*, /api/repair ─────────────────────────────
 import { Router } from 'express';
 import logger from '../../infrastructure/logger/logger.js';
+import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 /**
  * @param {{
@@ -63,7 +64,7 @@ export function createExecuteRouter({
         req.query?.username || sessionUser?.username || 'anonymous'
       ).trim();
       const userRole = String(
-        req.query?.userRole || req.headers['x-user-role'] || getRoleFromRequest(req, sessionUser) || 'user'
+        getRoleFromRequest(req, sessionUser)
       ).trim();
 
       reqLog.info('SSE execute start', { articleId, username, userRole });
@@ -122,8 +123,10 @@ export function createExecuteRouter({
         logArticleExecution({
           articleId: req.params?.articleId,
           articleTitulo: '',
-          ejecutadoPor: String(req.query?.username || 'anonymous'),
-          ejecutadoRol: String(req.query?.userRole || 'user'),
+          // Ni el nombre ni el rol salen de la URL: un registro de auditoria que guarda
+          // lo que el cliente dijo ser no sirve para auditar nada.
+          ejecutadoPor: String(getUserFromRequest(req)?.username || 'anonymous'),
+          ejecutadoRol: getRoleFromRequest(req, getUserFromRequest(req)),
           parametrosUsados: null,
           filasResultado: 0,
           duracionMs: 0,

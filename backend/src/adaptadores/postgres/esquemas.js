@@ -392,3 +392,29 @@ export async function ensureAuditTimelineView() {
     console.error('Error asegurando la vista auditoria_unificada:', error.message);
   }
 }
+
+export async function ensureSessionsSchema() {
+  try {
+    // Cada petición autenticada busca por token y la tabla solo tenía la clave
+    // primaria, así que era un escaneo completo en cada llamada. Con 91 filas da
+    // igual; con la cooperativa entera usándolo, no.
+    await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token)`);
+    await obtenerPool().query(`CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions (created_at DESC)`);
+
+    // Las caducadas se marcan inactivas al arrancar. No se borran: la fila es el
+    // rastro de que esa sesión existió, y eso es auditoría.
+    const horas = Math.max(1, Number(process.env.SESION_MAX_HORAS) || 12);
+    const r = await obtenerPool().query(
+      `UPDATE sessions SET activo = false
+       WHERE activo = true AND created_at <= NOW() - ($1 || ' hours')::interval`,
+      [String(horas)]
+    );
+    if (r.rowCount > 0) {
+      console.log(`✓ Esquema sessions asegurado — ${r.rowCount} sesión(es) caducada(s) cerradas`);
+    } else {
+      console.log('✓ Esquema sessions asegurado');
+    }
+  } catch (error) {
+    console.error('Error asegurando esquema sessions:', error.message);
+  }
+}

@@ -15,6 +15,7 @@
  * segunda.
  */
 import { Router } from 'express';
+import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 export function crearRutasConsultas({
   buildCrossDbSelectOptions,
@@ -350,7 +351,7 @@ export function crearRutasConsultas({
   router.post('/execute-generated', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = normalizeRole(req.headers['x-user-role'] || user?.role || 'user');
+      const role = getRoleFromRequest(req, user);
       const { sql } = req.body;
 
       if (!sql || sql.trim().length === 0) {
@@ -526,7 +527,7 @@ export function crearRutasConsultas({
       const user = getUserFromRequest(req);
       await logQueryHistory({
         username: user?.username || 'anonymous',
-        role: normalizeRole(req.headers['x-user-role'] || 'user'),
+        role: getRoleFromRequest(req, user),
         queryText: null,
         generatedSql: req.body.sql || '',
         executionMs: 0,
@@ -586,7 +587,7 @@ export function crearRutasConsultas({
   router.post('/execute-with-explanation', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = normalizeRole(req.headers['x-user-role'] || user?.role || 'user');
+      const role = getRoleFromRequest(req, user);
       const { text, inputValue, parameterValue, limit = 50, offset = 0, databases = [] } = req.body;
       await refreshSemanticLearningCache(false);
 
@@ -773,7 +774,7 @@ export function crearRutasConsultas({
       const user = getUserFromRequest(req);
       await logQueryHistory({
         username: user?.username || 'anonymous',
-        role: normalizeRole(req.headers['x-user-role'] || 'user'),
+        role: getRoleFromRequest(req, user),
         queryText: req.body.text || '',
         generatedSql: '',
         executionMs: 0,
@@ -800,7 +801,7 @@ export function crearRutasConsultas({
   router.post('/parameterized', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = normalizeRole(req.headers['x-user-role'] || user?.role || 'user');
+      const role = getRoleFromRequest(req, user);
       const { text, parameterValue, limit = 50, offset = 0, databases = [] } = req.body;
       await refreshSemanticLearningCache(false);
 
@@ -951,7 +952,7 @@ export function crearRutasConsultas({
       const user = getUserFromRequest(req);
       await logQueryHistory({
         username: user?.username || 'anonymous',
-        role: normalizeRole(req.headers['x-user-role'] || 'user'),
+        role: getRoleFromRequest(req, user),
         queryText: req.body.text || '',
         generatedSql: '',
         executionMs: 0,

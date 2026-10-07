@@ -1,5 +1,6 @@
 // ─── Content routes: /api/articles/*, /api/comments/* ────────────────────────
 import { Router } from 'express';
+import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 /**
  * @param {{
@@ -27,8 +28,13 @@ export function createContentRouter({
   // GET /api/articles
   router.get('/articles', async (req, res) => {
     try {
-      // Determine caller role for visibility filtering
-      const callerRole = String(req.headers['x-user-role'] || req.query.role || '').trim().toLowerCase();
+      // Qué artículos ve quien pregunta, según su sesión.
+      //
+      // Esto leía `x-user-role` de la cabecera y `?role=` de la URL, así que
+      // cualquiera sin sesión obtenía los artículos restringidos a admin —con sus
+      // scripts— añadiendo una cabecera. Ahora el rol sale de la sesión; sin sesión
+      // se ve solo lo marcado para todos, que es lo que ya pasaba sin la cabecera.
+      const callerRole = getRoleFromRequest(req, getUserFromRequest(req));
       const isAdmin = callerRole === 'admin';
 
       // Build visibility filter:
@@ -99,7 +105,7 @@ export function createContentRouter({
         return res.status(401).json({ success: false, error: 'Usuario no autenticado' });
       }
 
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin para crear artículos.' });
       }
@@ -207,7 +213,7 @@ export function createContentRouter({
   router.delete('/articles/:id', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin para eliminar artículos.' });
       }
@@ -247,7 +253,7 @@ export function createContentRouter({
   router.put('/articles/:id', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin para editar artículos.' });
       }
@@ -368,7 +374,7 @@ export function createContentRouter({
   router.get('/article-changes', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: solo admins' });
       }
@@ -403,7 +409,7 @@ export function createContentRouter({
   router.get('/article-executions', async (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: solo admins' });
       }
@@ -526,7 +532,7 @@ export function createContentRouter({
             articleTitulo: resolvedTitulo,
             accion:       'eliminar_comentario',
             realizadoPor: deletedBy?.username || req.headers['x-username'] || 'desconocido',
-            realizadoRol: deletedBy?.role     || req.headers['x-user-role'] || 'user',
+            realizadoRol: deletedBy?.role || 'user',
             detalle: {
               comentario_id:    c.id,
               autor_comentario: c.author_username,

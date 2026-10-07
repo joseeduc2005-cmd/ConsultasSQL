@@ -69,6 +69,7 @@ import {
   ensureErrorLogsSchema,
   ensureSemanticLearningSchema,
   ensureRequestAuditSchema,
+  ensureSessionsSchema,
   ensureAuditTimelineView,
 } from './adaptadores/postgres/esquemas.js';
 import {
@@ -262,6 +263,7 @@ async function reloadActiveDatabaseConnection(reason = 'reload') {
       ensureErrorLogsSchema(),
       ensureSemanticLearningSchema(),
       ensureRequestAuditSchema(),
+      ensureSessionsSchema(),
     ]);
     // La vista va después: necesita que las siete tablas existan.
     await ensureAuditTimelineView();
@@ -968,6 +970,7 @@ async function startServer() {
     await ensureErrorLogsSchema();
     await ensureSemanticLearningSchema();
     await ensureRequestAuditSchema();
+    await ensureSessionsSchema();
     await ensureAuditTimelineView();
     await refreshSemanticLearningCache(true);
     // El módulo de soporte comparte el pool del backend; `pool` se reasigna cuando

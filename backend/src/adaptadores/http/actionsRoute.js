@@ -1,5 +1,6 @@
 // ─── Actions route: /api/actions ─────────────────────────────────────────────
 import { Router } from 'express';
+import { getRoleFromRequest } from '../../dominio/acceso/roles.js';
 
 /**
  * @param {{
@@ -17,7 +18,7 @@ export function createActionsRouter({ BUSINESS_ACTION_CATALOG, getUserFromReques
   router.get('/', (req, res) => {
     try {
       const user = getUserFromRequest(req);
-      const role = req.headers['x-user-role'] || user?.role;
+      const role = getRoleFromRequest(req, user);
       if (!role || role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Acceso denegado: se requiere rol admin' });
       }

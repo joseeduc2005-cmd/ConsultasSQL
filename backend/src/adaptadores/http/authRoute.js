@@ -1,7 +1,7 @@
 // ─── Auth routes: /api/auth/* ─────────────────────────────────────────────────
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { sessions } from './sesion.js';
+import { getUserFromRequestAsync, olvidarSesion, sessions } from './sesion.js';
 
 /**
  * @param {{ pool: import('pg').Pool, logLoginEvent: Function }} deps
@@ -145,29 +145,15 @@ export function createAuthRouter({ pool, logLoginEvent }) {
         return res.status(401).json({ error: 'No autorizado' });
       }
 
-      const token = authHeader.replace('Bearer ', '').trim();
-
-      // 1. Buscar en cache en memoria
-      let user = sessions.get(token);
-
-      // 2. Si no está en memoria, buscar en BD (por si el backend se reinició)
+      // Se resuelve con el único resolutor que hay, el de sesion.js.
+      //
+      // Antes esta ruta traía su propia copia de la consulta, y esa copia no miraba la
+      // caducidad: por aquí entraba una sesión de seis meses aunque el resto del
+      // sistema ya la rechazara. Dos sitios comprobando lo mismo y uno mal es como se
+      // abre un agujero sin que nadie lo note.
+      const user = await getUserFromRequestAsync(req);
       if (!user) {
-        const dbResult = await pool.query(
-          `SELECT u.id, u.username, u.role
-           FROM sessions s
-           JOIN users u ON s.user_id = u.id
-           WHERE s.token = $1 AND s.activo = true
-           LIMIT 1`,
-          [token]
-        );
-
-        if (dbResult.rowCount === 0) {
-          return res.status(401).json({ error: 'Sesión no válida o expirada' });
-        }
-
-        const row = dbResult.rows[0];
-        user = { id: row.id, username: row.username, name: row.username, role: row.role };
-        sessions.set(token, user); // Restaurar en cache
+        return res.status(401).json({ error: 'Sesión no válida o expirada' });
       }
 
       return res.status(200).json({ success: true, user });
@@ -189,7 +175,7 @@ export function createAuthRouter({ pool, logLoginEvent }) {
       const user = sessions.get(token);
 
       // 1. Eliminar de cache en memoria
-      sessions.delete(token);
+      olvidarSesion(token);
 
       // 2. Marcar sesión como inactiva en BD
       try {

@@ -234,10 +234,23 @@ export function inferManualPlaceholderCast(sqlText = '', variableName = '', offs
     return 'text';
   }
 
+  // Con que se compara el marcador: lo que esta pegado a su izquierda, no lo que haya
+  // por la zona.
+  //
+  // Esto miraba una ventana de ciento veinte caracteres y buscaba cualquier «algo_id =»
+  // dentro. O sea que una consulta con un JOIN normal —«ON s.id = c.socio_id WHERE
+  // s.cedula = :cedula»— convertia la cedula en uuid, y PostgreSQL respondia «el
+  // operador no existe: character varying = uuid». Cualquier articulo con un JOIN y un
+  // parametro de texto estaba roto, que es justo la forma de la mayoria.
+  //
+  // Peor: la segunda alternativa casaba con cualquier «= :loquesea», asi que en la
+  // practica todo marcador comparado con igual acababa en uuid.
+  const comparadoCon = leftWindow.match(/([\w".]+)\s*(?:=|!=|<>)\s*$/);
+  const columna = String(comparadoCon?.[1] || '').toLowerCase();
+
   const idSemantic = /(^id$|_id$|uuid|guid)/.test(varName);
-  const idComparison = /([\w".]+id|uuid|guid)\s*(=|!=|<>|in\s*\(|any\s*\()/i.test(around)
-    || /\b(=|!=|<>)\s*\{\{\s*[^}]+\s*\}\}|\b(=|!=|<>)\s*:[a-zA-Z_][a-zA-Z0-9_]*/i.test(around);
-  if (idSemantic || idComparison) {
+  const idPorColumna = /(^|\.)id$|_id$|uuid|guid/.test(columna);
+  if (idSemantic || idPorColumna) {
     return 'uuid';
   }
 

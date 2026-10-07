@@ -185,6 +185,16 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
   const [masDetalles, setMasDetalles] = useState(false);
   const vacio = { numero: '', titulo: '', descripcion: '', sistema: '', modulo: '', prioridad: '', autor: '', url_sir: '', base_datos: '' };
   const [datos, setDatos] = useState(vacio);
+
+  // Los pasos, igual que al subir una solución: una cosa después de otra, y a veces
+  // con una consulta en medio. Un ticket resuelto y un aporte acaban siendo lo mismo
+  // —alguien cuenta qué pasó y cómo lo comprobó—, así que se registran igual.
+  //
+  // Solo consultas: el sistema no ejecuta escrituras, y el backend rechaza el ticket
+  // entero si algún paso trae un UPDATE o un DELETE.
+  const [pasos, setPasos] = useState<{ descripcion: string; script: string | null }[]>([]);
+  const cambiarPaso = (i: number, cambios: Partial<{ descripcion: string; script: string | null }>) =>
+    setPasos((previos) => previos.map((p, j) => (j === i ? { ...p, ...cambios } : p)));
   // Las bases registradas en el motor: sirven de contexto de investigación del caso.
   // Solo las bases habilitadas para tickets: las consultas de los diagnosticos estan
   // escritas contra los esquemas de Corresponsales, y apuntar a otra da un error, no
@@ -201,12 +211,14 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
       api.crearTicket({
         ...datos,
         url_sir: datos.url_sir || enlaceExterno(datos.numero),
+        pasos: pasos.filter((p) => p.descripcion.trim() || p.script?.trim()),
       }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ['tickets'] });
       qc.invalidateQueries({ queryKey: claves.resumen });
       avisar('exito', 'Ticket creado', t.numero);
       setDatos(vacio);
+      setPasos([]);
       onCerrar();
       router.push(`/admin/tickets/${t.numero}`);
     },
@@ -256,6 +268,80 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
             placeholder="Mensaje original de quien reporta, datos del caso, lo que se ve en pantalla…"
           />
         </Campo>
+
+        {/*
+          Los pasos van antes de la clasificación: lo que se hizo importa más que de
+          qué sistema era. Empiezan vacíos —un ticket se puede registrar sin ellos, que
+          es lo normal cuando el caso acaba de entrar— y se van añadiendo al resolverlo.
+        */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-medium">Pasos de lo que se hizo</p>
+            <span className="text-[12px] text-muted-foreground">opcional</span>
+          </div>
+
+          {pasos.map((paso, i) => (
+            <div key={i} className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-start gap-2">
+                <span className="mt-2 grid size-5 shrink-0 place-items-center rounded-full bg-surface-muted text-[11px] font-medium tabular">
+                  {i + 1}
+                </span>
+                <Textarea
+                  value={paso.descripcion}
+                  onChange={(e) => cambiarPaso(i, { descripcion: e.target.value })}
+                  placeholder="Qué se revisó o se hizo en este paso"
+                  rows={2}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPasos((previos) => previos.filter((_, j) => j !== i))}
+                  className="mt-1.5 shrink-0 text-[12px] text-muted-foreground hover:text-danger"
+                >
+                  Quitar
+                </button>
+              </div>
+
+              {paso.script === null ? (
+                <button
+                  type="button"
+                  onClick={() => cambiarPaso(i, { script: '' })}
+                  className="ml-7 text-[12px] font-medium text-primary hover:underline"
+                >
+                  Añadir la consulta que lo comprueba
+                </button>
+              ) : (
+                <div className="ml-7 space-y-1.5">
+                  <Textarea
+                    value={paso.script}
+                    onChange={(e) => cambiarPaso(i, { script: e.target.value })}
+                    placeholder="SELECT …"
+                    rows={3}
+                    spellCheck={false}
+                    className="font-mono text-[12.5px]"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-muted-foreground">Esta consulta solo lee</span>
+                    <button
+                      type="button"
+                      onClick={() => cambiarPaso(i, { script: null })}
+                      className="ml-auto text-[12px] text-muted-foreground hover:text-danger"
+                    >
+                      Quitar consulta
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <Button
+            variante="fantasma"
+            onClick={() => setPasos((previos) => [...previos, { descripcion: '', script: null }])}
+          >
+            <Plus className="size-4" />
+            {pasos.length === 0 ? 'Añadir un paso' : 'Añadir otro paso'}
+          </Button>
+        </div>
 
         <button
           type="button"

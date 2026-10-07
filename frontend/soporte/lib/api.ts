@@ -82,7 +82,17 @@ export const api = {
 
   tickets: (f: { q?: string; estado?: string; sistema?: string } = {}) => solicitar<TicketListado[]>(`/tickets${consulta(f)}`),
   ticket: (numero: string) => solicitar<TicketDetalle>(`/tickets/${encodeURIComponent(numero)}`),
-  crearTicket: (datos: Partial<Ticket> & { numero: string; titulo: string }) =>
+  // `pasos` va aparte del Ticket porque no es un campo suyo: son filas de
+  // soporte.ticket_pasos que el backend crea junto con el ticket, en la misma forma
+  // que los de un aporte. Solo consultas; una escritura hace que rechace el ticket
+  // entero, antes de guardar nada.
+  crearTicket: (
+    datos: Partial<Ticket> & {
+      numero: string;
+      titulo: string;
+      pasos?: { descripcion: string; script: string | null }[];
+    },
+  ) =>
     solicitar<Ticket>('/tickets', { method: 'POST', body: json(datos) }),
   actualizarTicket: (numero: string, cambios: Partial<Ticket>) =>
     solicitar<Ticket>(`/tickets/${encodeURIComponent(numero)}`, { method: 'PATCH', body: json(cambios) }),

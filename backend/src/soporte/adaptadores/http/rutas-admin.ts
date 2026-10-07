@@ -7,6 +7,7 @@
  *
  * Pendiente a propósito: /interpretar, porque depende del modelo de lenguaje.
  */
+import { asegurarSoloConsulta } from '../../../dominio/scripts/validacion.js';
 import { contarAportesPendientes } from '../../aportes.ts';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from '../../aportes.ts';
@@ -244,6 +245,37 @@ export function crearSoporteRouter(
     '/tickets',
     h(async (req, res) => {
       const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+
+      // Los pasos, en la misma forma que un aporte: cada uno con lo que se hizo y, si
+      // hace falta, la consulta que lo comprueba.
+      //
+      // Antes un ticket se creaba vacio y los pasos se anadian despues, uno a uno, en
+      // otra pantalla. Al final un ticket resuelto y un aporte son lo mismo —alguien
+      // cuenta que paso y como lo comprobo—, asi que se registran igual.
+      //
+      // Se leen y se validan ANTES de escribir nada. Al reves, un paso con una
+      // escritura dejaba el ticket ya creado y la peticion fallando: quedaba un caso
+      // huerfano que nadie pidio.
+      const pasos = (Array.isArray(cuerpo.pasos) ? cuerpo.pasos : [])
+        .map((bruto) => {
+          const paso = (bruto ?? {}) as Record<string, unknown>;
+          return {
+            descripcion: texto(paso.descripcion) ?? texto(paso.titulo),
+            sql: texto(paso.script) ?? texto(paso.sql),
+          };
+        })
+        .filter((paso) => paso.descripcion || paso.sql);
+
+      for (const paso of pasos) {
+        if (!paso.sql) continue;
+        try {
+          asegurarSoloConsulta(paso.sql);
+        } catch (error) {
+          // 400 y no 500: lo que esta mal es lo que mandaron, no el servidor.
+          throw solicitudInvalida((error as Error).message);
+        }
+      }
+
       // El número deja de ser obligatorio: no todo lo que entra viene de otro sistema
       // con su referencia. Sin uno se numera solo, con el año y un correlativo.
       const numero = texto(cuerpo.numero) ?? (await siguienteNumero());
@@ -257,9 +289,18 @@ export function crearSoporteRouter(
         estado: (datos.estado as never) ?? 'abierto',
         creado_en: datos.creado_en ?? new Date().toISOString().slice(0, 10),
       });
-      // El ticket se crea y ya: el diagnóstico lo lanza la persona con «Revisar
-      // error». Hacerlo en el alta dejaba el botón sin sentido y disparaba
-      // consultas a Oracle sin que nadie las pidiera.
+      for (const paso of pasos) {
+        await agregarPaso(numero, {
+          titulo: paso.descripcion ?? '(sin descripcion)',
+          sql: paso.sql ?? null,
+          resultado: null,
+          evidencia: null,
+          conclusion: null,
+        });
+      }
+
+      // El diagnostico lo lanza la persona con «Revisar error». Hacerlo en el alta
+      // dejaba el boton sin sentido y disparaba consultas sin que nadie las pidiera.
       res.status(201);
       return ticket;
     }),

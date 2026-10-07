@@ -1022,16 +1022,10 @@ async function startServer() {
     console.warn('⚠ MultiDB bootstrap inicial incompleto:', bootstrapError?.message || bootstrapError);
   }
 
-  // Warm up Ollama model so first real query is fast
-  (async () => {
-    try {
-      const { askOllama } = await import('./infrastructure/ai/OllamaClient.js');
-      await askOllama('warmup', { timeoutMs: 20000 });
-      console.log('✓ Ollama model pre-loaded (warm)');
-    } catch {
-      console.warn('⚠ Ollama warmup failed - first AI query may be slow');
-    }
-  })();
+  // Aquí se precalentaba el modelo de Ollama en cada arranque. Se quitó: no hay
+  // contenedor de Ollama —se sacó del compose por decisión de no usar IA—, así que
+  // la llamada solo escribía un 404 en el log de cada arranque. Las rutas que aún
+  // consultan a Ollama siguen ahí y fallan cerradas, devolviendo null.
 
   app.listen(PORT, () => {
     // El arranque también es un movimiento del sistema: sin esto, un reinicio no

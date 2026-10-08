@@ -1,4 +1,6 @@
 import fs from 'fs';
+import { ObjectId } from 'mongodb';
+import { asegurarConsultaDeMongo } from '../../dominio/mongo/consulta.js';
 import path from 'path';
 import { Pool } from 'pg';
 import {
@@ -142,6 +144,42 @@ function normalizeLearning(learning = {}) {
     tableAliases,
     columnKeywords,
   };
+}
+
+
+/**
+ * De los marcadores canónicos a los tipos del driver.
+ *
+ * El lector del dominio devuelve `{ $oid }`, `{ $date }` y `{ $regularExpression }` en
+ * vez de objetos del driver, que es lo que permite probarlo sin levantar un Mongo. La
+ * conversión a ObjectId, Date y RegExp es cosa de esta capa, que es la que habla con el
+ * motor.
+ */
+function conTiposDeMongo(valor) {
+  if (Array.isArray(valor)) return valor.map(conTiposDeMongo);
+  if (!valor || typeof valor !== 'object') return valor;
+
+  const claves = Object.keys(valor);
+  if (claves.length === 1) {
+    if (claves[0] === '$oid' && typeof valor.$oid === 'string') {
+      // Un identificador mal formado no se convierte a la fuerza: vale más que el motor
+      // no encuentre nada a que esto reviente con un error del driver.
+      return ObjectId.isValid(valor.$oid) ? new ObjectId(valor.$oid) : valor.$oid;
+    }
+    if (claves[0] === '$date') {
+      const d = new Date(valor.$date);
+      return Number.isNaN(d.getTime()) ? valor.$date : d;
+    }
+    if (claves[0] === '$regularExpression') {
+      const { pattern, options } = valor.$regularExpression ?? {};
+      try { return new RegExp(String(pattern ?? ''), String(options ?? '')); } catch { return valor; }
+    }
+    if (claves[0] === '$numberDecimal') return Number(valor.$numberDecimal);
+  }
+
+  const salida = {};
+  for (const [k, v] of Object.entries(valor)) salida[k] = conTiposDeMongo(v);
+  return salida;
 }
 
 export class MultiDbRegistry {
@@ -736,16 +774,26 @@ export class MultiDbRegistry {
 
     if (client.type === 'mongodb') {
       // sql is a JSON string (or object) describing the MongoDB operation
+      // La consulta, tal como la escribe la gente.
+      //
+      // Esto hacía `JSON.parse`, y lo que se copia de Compass o de mongosh no es JSON:
+      // las claves van sin comillas, las cadenas con comilla simple y los valores
+      // envueltos —ObjectId('…'), ISODate('…'), NumberInt('4')—. Reventaba con
+      // «Unexpected token 'O'», o sea que para usar Mongo había que traducir la consulta
+      // a mano antes de pegarla, que es justo el trabajo que ahorra la herramienta.
+      //
+      // `asegurarConsultaDeMongo` acepta las dos formas y se niega si lo que llega
+      // escribe, que es la misma regla que para SQL en otra sintaxis.
       let mongoOp;
       try {
-        mongoOp = typeof compiledQuery.sql === 'string' ? JSON.parse(compiledQuery.sql) : compiledQuery.sql;
-      } catch {
+        mongoOp = conTiposDeMongo(asegurarConsultaDeMongo(compiledQuery.sql));
+      } catch (error) {
         throw new Error(
-          'MongoDB: el campo SQL debe ser un JSON válido.\n' +
-          'Ejemplos:\n' +
-          '  {"collection":"orders","find":{"status":"active"},"limit":100}\n' +
-          '  {"collection":"orders","aggregate":[{"$group":{"_id":"$status","total":{"$sum":1}}}]}\n' +
-          '  {"collection":"orders","updateMany":{"filter":{"status":"old"},"update":{"$set":{"status":"archived"}}}}'
+          `${error.message}\n`
+          + 'Ejemplos:\n'
+          + "  { collection: 'orders', find: { status: 'active' }, limit: 100 }\n"
+          + "  { collection: 'orders', find: { _id: ObjectId('6824b0c404c5ed34e4070f02') } }\n"
+          + "  { collection: 'orders', aggregate: [ { $unwind: '$details' }, { $group: { _id: '$details.estado', n: { $sum: 1 } } } ] }"
         );
       }
 
@@ -780,51 +828,14 @@ export class MultiDbRegistry {
         return values.map((v) => ({ value: v }));
       }
 
-      // ── WRITE ─────────────────────────────────────────────────────────────
-      if (ops.insertOne !== undefined) {
-        const r = await col.insertOne(ops.insertOne);
-        return withRowCount([{ insertedId: String(r.insertedId), acknowledged: r.acknowledged }], r.acknowledged ? 1 : 0);
-      }
-      if (ops.insertMany !== undefined) {
-        const r = await col.insertMany(ops.insertMany);
-        return withRowCount([{ insertedCount: r.insertedCount, acknowledged: r.acknowledged }], Number(r.insertedCount || 0));
-      }
-      if (ops.updateOne !== undefined) {
-        const { filter, update, upsert } = ops.updateOne;
-        const r = await col.updateOne(filter || {}, update, { upsert: Boolean(upsert) });
-        return withRowCount(
-          [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }],
-          Number(r.modifiedCount || 0) + Number(r.upsertedCount || 0),
-        );
-      }
-      if (ops.updateMany !== undefined) {
-        const { filter, update, upsert } = ops.updateMany;
-        const r = await col.updateMany(filter || {}, update, { upsert: Boolean(upsert) });
-        return withRowCount(
-          [{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount, upsertedCount: r.upsertedCount }],
-          Number(r.modifiedCount || 0) + Number(r.upsertedCount || 0),
-        );
-      }
-      if (ops.replaceOne !== undefined) {
-        const { filter, replacement, upsert } = ops.replaceOne;
-        const r = await col.replaceOne(filter || {}, replacement, { upsert: Boolean(upsert) });
-        return withRowCount([{ matchedCount: r.matchedCount, modifiedCount: r.modifiedCount }], Number(r.modifiedCount || 0));
-      }
-      if (ops.deleteOne !== undefined) {
-        const filter = ops.deleteOne.filter ?? ops.deleteOne;
-        const r = await col.deleteOne(filter);
-        return withRowCount([{ deletedCount: r.deletedCount }], Number(r.deletedCount || 0));
-      }
-      if (ops.deleteMany !== undefined) {
-        const filter = ops.deleteMany.filter ?? ops.deleteMany;
-        const r = await col.deleteMany(filter);
-        return withRowCount([{ deletedCount: r.deletedCount }], Number(r.deletedCount || 0));
-      }
+      // Aquí vivían insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne
+      // y deleteMany. Ya no se puede llegar: `asegurarConsultaDeMongo` rechaza cualquiera
+      // de ellas antes de ejecutar nada, igual que el guardián de SQL rechaza un UPDATE.
+      // Dejarlas escritas sería dejar la puerta cerrada con la llave puesta al lado.
 
       throw new Error(
-        `MongoDB: operación no reconocida. Operaciones soportadas: ` +
-        `find, findOne, aggregate, countDocuments, distinct, ` +
-        `insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne, deleteMany.`
+        'MongoDB: operación no reconocida. El sistema solo consulta: '
+        + 'find, findOne, aggregate, countDocuments, distinct.'
       );
     }
 

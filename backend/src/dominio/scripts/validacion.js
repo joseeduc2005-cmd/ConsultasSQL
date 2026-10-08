@@ -12,6 +12,7 @@
  */
 import { isComplexSqlScript, parsePlSqlScript } from '../sql/plsql.js';
 import { getBusinessActionMetadata, getRequiredParamsForActions } from '../acciones/catalogo.js';
+import { asegurarConsultaDeMongo } from '../mongo/consulta.js';
 import { normalizeSchemaIdentifier, splitManualSqlSteps, stripLeadingSqlComments, stripSqlStringsAndComments } from '../sql/guardas.js';
 
 export const ALLOWED_WHERE_OPERATORS = new Set(['=', '!=', '>', '<', '>=', '<=', 'LIKE']);
@@ -49,6 +50,8 @@ export function detectSqlOperation(sqlText = '') {
   if (cleaned.startsWith('select')) return 'select';
   // WITH ... AS (...) SELECT → CTE → select
   if (/^with\s/.test(cleaned)) return 'select';
+  // (SELECT ...) UNION (SELECT ...) — valido, y sin esto quedaba como 'unknown'.
+  if (/^\(+\s*select\b/.test(cleaned)) return 'select';
   if (cleaned.startsWith('update')) return 'update';
   if (cleaned.startsWith('delete')) return 'delete';
   if (cleaned.startsWith('insert')) return 'insert';
@@ -265,23 +268,77 @@ export const OPERACIONES_QUE_ESCRIBEN = new Set([
 ]);
 
 /**
- * Se niega si la sentencia escribe. Una sola puerta, y antes de cualquier rama.
+ * Lo que una consulta no puede llevar aunque empiece por SELECT.
  *
- * Esto existe porque el bloqueo se escapaba por dos sitios: los scripts que
- * isComplexSqlScript considera complejos —un INSERT con parentesis, un MERGE— salian
- * por una rama que no llegaba a comprobar nada, y TRUNCATE no se reconocia porque
- * detectSqlOperation lo llama 'ddl'. Tener la comprobacion en un solo sitio y
- * llamarla primero es lo que cierra las dos.
+ * Las tres escriben o bloquean, y las tres se leen como 'select':
+ *
+ *   - un CTE cuyo cuerpo es un INSERT, UPDATE, DELETE o MERGE — en PostgreSQL eso
+ *     escribe de verdad, y `WITH x AS (DELETE ...) SELECT * FROM x` borraba sin que la
+ *     puerta se enterara;
+ *   - `SELECT ... INTO copia`, que crea una tabla;
+ *   - `FOR UPDATE` y sus variantes, que no escriben pero toman candados sobre las filas
+ *     y en produccion dejan a otros esperando.
+ *
+ * Se mira sobre el texto sin literales ni comentarios: si no, un `WHERE accion =
+ * 'delete'` quedaria prohibido, que es la clase de falso positivo que obliga a la gente
+ * a buscarle la vuelta a la herramienta.
+ */
+const EFECTOS_EN_UNA_CONSULTA = [
+  [/\(\s*(insert|update|delete|merge)\b/i, 'un CTE que escribe'],
+  [/\binto\b/i, 'un SELECT ... INTO, que crea una tabla'],
+  [/\bfor\s+(update|share|no\s+key\s+update|key\s+share)\b/i, 'un FOR UPDATE, que bloquea las filas'],
+];
+
+/**
+ * Se niega si lo que llega no es, entera, una consulta.
+ *
+ * Esto tenia una lista de lo prohibido y dejaba pasar el resto, y `detectSqlOperation`
+ * devuelve 'unknown' para lo que no empieza por una palabra que conozca. O sea que todo
+ * lo que no reconocia entraba — y lo que no reconoce es justo lo que mas escribe: un
+ * bloque `BEGIN ... UPDATE ... END` de Oracle, un `DO $$ ... $$` de PostgreSQL, un
+ * `REPLACE INTO` de MySQL, un `COPY ... FROM`, un `SET session_replication_role`. La
+ * base de la cooperativa es Oracle, donde el bloque PL/SQL es la forma normal de
+ * escribir, asi que el agujero estaba abierto justo donde mas se usa.
+ *
+ * Ahora es al reves: solo pasa lo que se reconoce como consulta. Lo que la puerta no
+ * sabe leer no entra, que es como tiene que fallar una puerta.
+ *
+ * Y se miran todas las sentencias, no la primera: «SELECT 1; DROP TABLE socios» pasaba
+ * entera. Partirlas aqui dentro y no en cada sitio que llama es lo que evita que el
+ * proximo que use esta funcion se olvide de hacerlo.
  */
 export function asegurarSoloConsulta(sqlText) {
-  const limpio = stripLeadingSqlComments(String(sqlText || '').replace(/;\s*$/, '').trim());
-  if (!limpio) return;
-  const operacion = detectSqlOperation(limpio);
-  if (OPERACIONES_QUE_ESCRIBEN.has(operacion)) {
-    throw new Error(
-      `El sistema ya no ejecuta ${operacion.toUpperCase()}: un articulo solo consulta. `
-      + 'Escriba un SELECT con los campos que haya que pedir.'
-    );
+  const bruto = String(sqlText || '').trim();
+  if (!bruto) return;
+  // Mongo no es SQL y tiene su propia puerta; aqui llegaria como un JSON suelto.
+  if (bruto.startsWith('{')) return;
+
+  for (const sentencia of splitManualSqlSteps(bruto)) {
+    const limpio = stripLeadingSqlComments(sentencia.replace(/;\s*$/, '').trim());
+    if (!limpio) continue;
+
+    const operacion = detectSqlOperation(limpio);
+    if (operacion !== 'select') {
+      // Un nombre que se entienda cuando lo hay; cuando no, decir que no se reconoce es
+      // mas util que inventarse una categoria.
+      const que = operacion === 'unknown'
+        ? 'Esto no se reconoce como una consulta'
+        : `El sistema no ejecuta ${operacion.toUpperCase()}`;
+      throw new Error(
+        `${que}: un articulo solo consulta, contra cualquier base. `
+        + 'Escriba un SELECT con los campos que haya que pedir.'
+      );
+    }
+
+    const sinLiterales = stripSqlStringsAndComments(limpio);
+    for (const [patron, descripcion] of EFECTOS_EN_UNA_CONSULTA) {
+      if (patron.test(sinLiterales)) {
+        throw new Error(
+          `Esa consulta lleva ${descripcion}, y eso no es consultar. `
+          + 'Escriba un SELECT con los campos que haya que pedir.'
+        );
+      }
+    }
   }
 }
 
@@ -494,13 +551,21 @@ export function validateBusinessScriptDefinition(script, esquema) {
     String(script.modo || '').trim().toLowerCase() === 'script'
     && String(script.origen || '').trim().toLowerCase() === 'manual-sql'
   ) {
-    // MongoDB format: collection + pipeline/filter (no sql field required)
+    // MongoDB: colección + pipeline/filter, sin campo sql.
+    //
+    // Esto hacía `return` sin mirar nada, con el motivo de que no hay SQL que validar.
+    // Era verdad y no bastaba: lo que había que mirar era la operación, y sin eso un
+    // artículo con `deleteMany` se guardaba tan tranquilo. La regla es que el sistema no
+    // escribe en ninguna base, y Mongo es una base.
     const hasMongoPayload =
       String(script.collection || '').trim().length > 0 &&
       (String(script.pipeline || '').trim().length > 0 ||
        String(script.filter   || '').trim().length > 0 ||
        String(script.operation || '').trim().length > 0);
-    if (hasMongoPayload) return; // Valid MongoDB article — no SQL validation needed
+    if (hasMongoPayload) {
+      asegurarConsultaDeMongo(script);
+      return;
+    }
 
     const sqlText = String(script.sql || '').trim();
     if (!sqlText) throw new Error('SQL manual vacío');

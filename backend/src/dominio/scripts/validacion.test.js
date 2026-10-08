@@ -12,15 +12,16 @@ import { describe, it } from 'node:test';
 
 import {
   ALLOWED_WHERE_OPERATORS,
-  DYNAMIC_SCRIPT_ALLOWED_TYPES,
+  asegurarSoloConsulta,
   assertDynamicScriptAllowed,
-  validateRelationalMutationScriptDefinition,
   assertManualSqlAllowed,
   detectSqlOperation,
+  DYNAMIC_SCRIPT_ALLOWED_TYPES,
   isPlainObject,
   normalizeDynamicScriptType,
   parseQualifiedFieldRef,
   validateBusinessScriptDefinition,
+  validateRelationalMutationScriptDefinition,
 } from './validacion.js';
 
 const lanza = (fn, porque) => assert.throws(fn, Error, porque);
@@ -190,5 +191,91 @@ describe('el sistema ya no escribe', () => {
   it('y un SQL manual con parámetros con nombre pasa', () => {
     // Es la forma de un artículo dinámico escrito a mano.
     pasa(() => assertManualSqlAllowed('SELECT nombre, saldo FROM socios WHERE cedula = :cedula'));
+  });
+});
+
+describe('la puerta: solo pasa lo que es una consulta', () => {
+  // Esta puerta se ha cerrado tres veces, y las tres se descubrio probando a mano. Lo
+  // que fallaba no era la lista de lo prohibido: era que lo que no reconocia pasaba.
+  const rechaza = (sql) => {
+    assert.throws(() => asegurarSoloConsulta(sql), undefined, `deberia rechazar: ${sql}`);
+  };
+  const deja = (sql) => {
+    assert.doesNotThrow(() => asegurarSoloConsulta(sql), `deberia dejar pasar: ${sql}`);
+  };
+
+  it('rechaza las escrituras que se anuncian', () => {
+    rechaza("UPDATE socios SET estado = 'activo'");
+    rechaza('DELETE FROM socios');
+    rechaza("INSERT INTO socios (cedula) VALUES ('x')");
+    rechaza('MERGE INTO socios s USING t ON (s.id=t.id) WHEN MATCHED THEN UPDATE SET s.e = t.e');
+    rechaza('TRUNCATE transacciones');
+    rechaza('DROP TABLE socios');
+    rechaza('GRANT ALL ON socios TO public');
+    rechaza('CALL corresponsales.p_borra_todo()');
+    rechaza('EXEC sp_borra_todo');
+  });
+
+  it('rechaza los bloques procedurales, que es como escribe Oracle', () => {
+    // La base de la cooperativa es Oracle y alli el bloque es la forma normal de
+    // escribir. Ninguno empieza por una palabra que detectSqlOperation conozca, asi que
+    // todos entraban.
+    rechaza("BEGIN UPDATE corresponsales.usuario SET estado='A'; COMMIT; END;");
+    rechaza('DECLARE n NUMBER; BEGIN DELETE FROM usuario; COMMIT; END;');
+    rechaza("BEGIN EXECUTE IMMEDIATE 'DROP TABLE socios'; END;");
+    rechaza("DO $$ BEGIN UPDATE socios SET estado='x'; END $$");
+  });
+
+  it('rechaza lo que escribe en otros motores', () => {
+    rechaza("REPLACE INTO socios (id, cedula) VALUES (1,'x')");
+    rechaza("COPY socios FROM '/tmp/x.csv' CSV");
+    rechaza('SET session_replication_role = replica');
+    rechaza('LOCK TABLE socios IN EXCLUSIVE MODE');
+    rechaza('VACUUM FULL socios');
+  });
+
+  it('rechaza lo que escribe aunque empiece por SELECT', () => {
+    // Las tres se leen como 'select' y las tres tocan la base.
+    rechaza('WITH ido AS (DELETE FROM socios WHERE id = 1 RETURNING *) SELECT * FROM ido');
+    rechaza("WITH u AS (UPDATE socios SET estado='x' RETURNING *) SELECT count(*) FROM u");
+    rechaza('WITH i AS (INSERT INTO socios VALUES (1) RETURNING *) SELECT * FROM i');
+    rechaza('SELECT * INTO copia FROM socios');
+    rechaza('SELECT * FROM socios WHERE id = 1 FOR UPDATE');
+  });
+
+  it('mira todas las sentencias, no solo la primera', () => {
+    // «SELECT 1; DROP TABLE socios» pasaba entera porque solo se miraba la primera.
+    rechaza('SELECT 1; DROP TABLE socios');
+    rechaza("SELECT 1; UPDATE socios SET estado='x'");
+    rechaza('(SELECT 1); DELETE FROM socios');
+  });
+
+  it('deja pasar las consultas complejas, que son la mayoria', () => {
+    deja('SELECT * FROM socios');
+    deja('WITH t AS (SELECT * FROM socios) SELECT * FROM t');
+    deja('SELECT cedula, row_number() OVER (ORDER BY id) FROM socios');
+    deja('SELECT cedula FROM socios UNION SELECT identificacion FROM corresponsales');
+    deja('SELECT s.cedula, (SELECT count(*) FROM cuentas c WHERE c.socio_id = s.id) FROM socios s');
+    deja('SELECT s.cedula, x.* FROM socios s, LATERAL (SELECT max(saldo) FROM cuentas WHERE socio_id = s.id) x');
+    deja('SELECT sucursal, estado, count(*) FROM socios GROUP BY GROUPING SETS ((sucursal),(estado))');
+    deja('WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 5) SELECT * FROM n');
+    deja('(SELECT 1) UNION (SELECT 2)');
+    deja('SELECT 1; SELECT 2;');
+  });
+
+  it('no confunde una palabra escrita con una orden', () => {
+    // El riesgo de apretar la puerta es frenar lecturas buenas, y entonces la gente le
+    // busca la vuelta a la herramienta. Se mira el texto sin literales ni comentarios.
+    deja("SELECT * FROM logs WHERE accion = 'delete'");
+    deja('SELECT updated_at, deleted_at FROM socios');
+    deja('WITH delete_candidates AS (SELECT 1 AS x) SELECT * FROM delete_candidates');
+    deja('-- ojo: no hacer UPDATE aqui\nSELECT 1');
+    deja("SELECT 'a;b' AS x");
+  });
+
+  it('lo vacio no es una escritura', () => {
+    deja('');
+    deja('   ');
+    deja('-- nada');
   });
 });

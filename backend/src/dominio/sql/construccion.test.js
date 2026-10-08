@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  applyOptionalSqlFilterTransform,
+  buildManualSqlQuery,
   countPositionalSqlPlaceholders,
   getValueByPath,
   inferManualPlaceholderCast,
@@ -72,6 +74,98 @@ describe('el tipo que se le pone a un marcador', () => {
 
   it('texto cuando se compara con ILIKE', () => {
     assert.equal(tipoDe('SELECT 1 FROM s WHERE s.nombres ILIKE :texto', 'texto'), 'text');
+  });
+});
+
+describe('se ejecuta lo que se escribio', () => {
+  // Toda consulta con un parametro pasaba por una reescritura automatica que convertia
+  // «campo = :x» en «(campo = :x OR :x IS NULL)». O sea que la consulta que corria no era
+  // la que habia escrito nadie: con el dato vacio el filtro desaparecia y salia la tabla
+  // entera. Y para que ese «$1 IS NULL» no se quedara sin tipo habia que adivinarlo por
+  // el nombre de la columna, que es lo que fallaba contra cualquier base ajena.
+  const armar = (sql, datos) => buildManualSqlQuery(sql, datos).text.replace(/\s+/g, ' ');
+
+  it('un parametro se cambia por su marcador y nada mas', () => {
+    assert.equal(
+      armar('SELECT 1 FROM socios s WHERE s.cedula = :cedula', { cedula: '011' }),
+      'SELECT 1 FROM socios s WHERE s.cedula = $1',
+    );
+  });
+
+  it('el mismo parametro dos veces comparte marcador', () => {
+    const r = buildManualSqlQuery(
+      'SELECT 1 FROM s WHERE a = :x OR b = :x', { x: '9' },
+    );
+    assert.equal(r.text.replace(/\s+/g, ' '), 'SELECT 1 FROM s WHERE a = $1 OR b = $1');
+    assert.deepEqual(r.values, ['9']);
+  });
+
+  it('no se castea por el nombre de la columna', () => {
+    // Cualquier «algo_id» se casteaba a uuid. En la base de conocimiento los
+    // identificadores son uuid y colaba; contra una base donde «socio_id» es un entero
+    // fallaba con «el operador no existe: integer = uuid». El tipo lo deduce el motor de
+    // la columna con la que se compara, que es quien lo sabe.
+    assert.equal(
+      armar('SELECT 1 FROM cuentas c WHERE c.socio_id = :socio_id', { socio_id: '4' }),
+      'SELECT 1 FROM cuentas c WHERE c.socio_id = $1',
+    );
+  });
+
+  it('un ILIKE conserva el patron que escribio la persona', () => {
+    const r = buildManualSqlQuery('SELECT 1 FROM s WHERE nombres ILIKE :texto', { texto: '%ana%' });
+    assert.equal(r.text.replace(/\s+/g, ' '), 'SELECT 1 FROM s WHERE nombres ILIKE $1');
+    assert.deepEqual(r.values, ['%ana%']);
+  });
+
+  it('un parametro dentro de un parentesis llega entero', () => {
+    // Este era el peor: el regex de la reescritura retrocedia ante «:cedula)» y casaba
+    // «:cedul», asi que el parametro se quedaba sin valor y sobraba una letra fuera del
+    // parentesis. Rompia cualquier consulta con el parametro en un CTE, una subconsulta
+    // o un IN (...), que es la forma de casi todas.
+    const r = buildManualSqlQuery(
+      'WITH suyo AS (SELECT id FROM socios WHERE cedula = :cedula) SELECT * FROM suyo',
+      { cedula: '0110000411' },
+    );
+    assert.equal(
+      r.text.replace(/\s+/g, ' '),
+      'WITH suyo AS (SELECT id FROM socios WHERE cedula = $1) SELECT * FROM suyo',
+    );
+    assert.deepEqual(r.values, ['0110000411']);
+  });
+
+  it('y dentro de un IN tambien', () => {
+    const r = buildManualSqlQuery(
+      'SELECT 1 FROM t WHERE id IN (SELECT id FROM u WHERE x = :valor)', { valor: '9' },
+    );
+    assert.equal(r.text.replace(/\s+/g, ' '), 'SELECT 1 FROM t WHERE id IN (SELECT id FROM u WHERE x = $1)');
+    assert.deepEqual(r.values, ['9']);
+  });
+
+  it('una consulta sin parametros se ejecuta tal cual', () => {
+    const sql = 'SELECT mac, count(*) FROM puntos_atencion GROUP BY mac HAVING count(*) > 1';
+    const r = buildManualSqlQuery(sql, {});
+    assert.equal(r.text, sql);
+    assert.deepEqual(r.values, []);
+  });
+});
+
+describe('el filtro opcional, cuando se pide', () => {
+  it('deja el nombre del parametro entero aunque siga un parentesis', () => {
+    assert.equal(
+      applyOptionalSqlFilterTransform('WHERE (cedula = :cedula)'),
+      'WHERE ((cedula = :cedula OR :cedula IS NULL))',
+    );
+    assert.equal(
+      applyOptionalSqlFilterTransform('WHERE id IN (SELECT id FROM t WHERE x = :valor)'),
+      'WHERE id IN (SELECT id FROM t WHERE (x = :valor OR :valor IS NULL))',
+    );
+  });
+
+  it('la comparacion va primero, para que el motor deduzca el tipo', () => {
+    // Antes se generaba «($1 IS NULL OR campo = $1)» y PostgreSQL no podia deducir el
+    // tipo: lo resuelve por la primera aparicion, y en «$1 IS NULL» no hay nada de donde.
+    const salida = applyOptionalSqlFilterTransform('WHERE cedula = :cedula');
+    assert.ok(salida.indexOf('cedula = :cedula') < salida.indexOf(':cedula IS NULL'));
   });
 });
 

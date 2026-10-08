@@ -311,8 +311,19 @@ export function applyOptionalSqlFilterTransform(sqlText = '') {
   // valor devuelve la fila, sin valor devuelve todas.
 
   // campo = :variable  ->  (campo = :variable OR :variable IS NULL)
+  //
+  // El «(?![\w])» del final no es decorativo: sin el, ante «:cedula)» el motor retrocede,
+  // casa «:cedul», ve que lo siguiente no es lo prohibido y da el match por bueno. El
+  // parametro pasaba a llamarse «cedul» —sin valor, o sea NULL— y la letra sobrante se
+  // quedaba fuera del parentesis:
+  //
+  //   WHERE (cedula = :cedula)  ->  WHERE ((cedula = :cedul OR :cedul IS NULL)a)
+  //
+  // Eso rompia cualquier consulta con el parametro dentro de un CTE, de una subconsulta
+  // o de un IN (...). Exigiendo que detras del nombre no venga otro caracter de nombre,
+  // el retroceso deja de servir y el nombre se casa entero o no se casa.
   sql = sql.replace(
-    /([\w".]+)\s*=\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?!\s*\))/gi,
+    /([\w".]+)\s*=\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?![\w])/gi,
     (match, leftExpr, placeholderExpr, curlyName, namedName) => {
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
@@ -322,7 +333,7 @@ export function applyOptionalSqlFilterTransform(sqlText = '') {
 
   // campo ILIKE :variable  ->  (campo ILIKE '%' || :variable || '%' OR :variable IS NULL)
   sql = sql.replace(
-    /([\w".]+)\s+ILIKE\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?!\s*\|\|)/gi,
+    /([\w".]+)\s+ILIKE\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?![\w])(?!\s*\|\|)/gi,
     (match, leftExpr, placeholderExpr, curlyName, namedName) => {
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
@@ -344,7 +355,20 @@ export function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {
     trusted: Boolean(options?.trusted ?? true),  // artículos son trusted por defecto
   });
 
-  const cleaned = applyOptionalSqlFilterTransform(String(sqlText || '').trim().replace(/;\s*$/, '').trim());
+  // Lo que se escribio es lo que se ejecuta.
+  //
+  // Esto pasaba siempre por `applyOptionalSqlFilterTransform`, que convertia cada
+  // «campo = :x» en «(campo = :x OR :x IS NULL)» y cada ILIKE en un «'%' || x || '%'».
+  // O sea que la consulta que corria no era la que habia escrito nadie: si el dato venia
+  // vacio el filtro desaparecia y salia la tabla entera, y quien escribia su propio
+  // patron de busqueda acababa con otro.
+  //
+  // Sigue disponible para quien lo pida —`filtrosOpcionales`—, que es lo que hace falta
+  // en un formulario con campos que se pueden dejar en blanco. Pero deja de ser lo que
+  // ocurre sin pedirlo.
+  const crudo = String(sqlText || '').trim().replace(/;\s*$/, '').trim();
+  const filtrosOpcionales = Boolean(options?.filtrosOpcionales);
+  const cleaned = filtrosOpcionales ? applyOptionalSqlFilterTransform(crudo) : crudo;
   const normalizedParams = normalizeManualSqlParamsInput(rawParams);
   const {
     placeholderOrder,
@@ -456,7 +480,14 @@ export function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {
     // ::cast syntax is PostgreSQL-only — skip for MySQL, Oracle, etc.
     const isPostgresDialect = !options?.dbType || String(options.dbType).toLowerCase() === 'postgres';
     const castType = isPostgresDialect
-      ? inferManualPlaceholderCast(String(source || ''), variableName, Number(offset || 0), match)
+      // El cast solo hace falta cuando se genera «$1 IS NULL», porque ahi no hay columna
+      // de la que deducir el tipo. Sin reescritura, el motor lo deduce de la comparacion
+      // —que es quien lo sabe— y adivinarlo por el nombre de la columna solo puede
+      // equivocarse: cualquier «algo_id» se casteaba a uuid, y contra una base donde un
+      // «socio_id» es un entero eso fallaba con «el operador no existe: integer = uuid».
+      ? (filtrosOpcionales
+        ? inferManualPlaceholderCast(String(source || ''), variableName, Number(offset || 0), match)
+        : null)
       : null;
     return applyCastToSqlPlaceholder(sqlPlaceholder, castType);
   });

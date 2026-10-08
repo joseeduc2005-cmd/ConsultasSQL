@@ -218,11 +218,235 @@ for (const cuenta of cuentas) {
   }
 }
 
+// ── La forma de los casos reales ───────────────────────────────────
+//
+// Lo de arriba basta para enseñar que el sistema devuelve un dato. No basta para
+// enseñar lo que el equipo hace de verdad, que es investigar. Los casos que ya
+// investigó hablan de cosas concretas: un usuario de corresponsal cuya MAC no cuadra
+// con la del POS, un reporte que se cae pasadas las 300 transacciones, una recaudación
+// cobrada que no generó comprobante, un acta que no se puede corregir porque su pago ya
+// está cerrado, la política de clave y PIN, y una sucursal desactualizada que descuadra
+// la contabilización.
+//
+// Estas tablas dan esa forma. Los datos siguen siendo inventados; lo que se copia es la
+// estructura del problema, que es lo que hace que una demostración se parezca al trabajo.
+await db.query(`
+  DROP TABLE IF EXISTS pagos_corresponsal, actas, recaudaciones,
+                       usuarios_corresponsal, politica_seguridad, clientes_fisja CASCADE;
+
+  CREATE TABLE usuarios_corresponsal (
+    id              SERIAL PRIMARY KEY,
+    corresponsal_id INT NOT NULL REFERENCES corresponsales(id),
+    cedula          VARCHAR(10) NOT NULL,
+    usuario         VARCHAR(40) UNIQUE NOT NULL,
+    estado          VARCHAR(20) NOT NULL DEFAULT 'activo',
+    mac_registrada  VARCHAR(17),
+    intentos_fallidos INT NOT NULL DEFAULT 0,
+    ultimo_acceso   TIMESTAMP
+  );
+
+  CREATE TABLE politica_seguridad (
+    id            SERIAL PRIMARY KEY,
+    credencial    VARCHAR(20) UNIQUE NOT NULL,
+    longitud_min  INT NOT NULL,
+    longitud_max  INT NOT NULL,
+    solo_numeros  BOOLEAN NOT NULL DEFAULT false,
+    exige_mayuscula BOOLEAN NOT NULL DEFAULT false,
+    exige_minuscula BOOLEAN NOT NULL DEFAULT false,
+    exige_digito  BOOLEAN NOT NULL DEFAULT false,
+    exige_simbolo BOOLEAN NOT NULL DEFAULT false,
+    no_repetir_ultimas INT NOT NULL DEFAULT 0,
+    prohibe_consecutivos BOOLEAN NOT NULL DEFAULT false,
+    prohibe_cedula BOOLEAN NOT NULL DEFAULT false,
+    vigente       BOOLEAN NOT NULL DEFAULT true
+  );
+
+  CREATE TABLE recaudaciones (
+    id           SERIAL PRIMARY KEY,
+    punto_id     INT NOT NULL REFERENCES puntos_atencion(id),
+    institucion  VARCHAR(60) NOT NULL,
+    referencia   VARCHAR(30) NOT NULL,
+    monto        NUMERIC(12,2) NOT NULL,
+    estado       VARCHAR(20) NOT NULL,
+    comprobante  VARCHAR(30),
+    fecha        TIMESTAMP NOT NULL
+  );
+
+  CREATE TABLE actas (
+    id              SERIAL PRIMARY KEY,
+    numero          INT UNIQUE NOT NULL,
+    corresponsal_id INT NOT NULL REFERENCES corresponsales(id),
+    periodo         VARCHAR(7) NOT NULL,
+    valor           NUMERIC(12,2) NOT NULL,
+    estado          VARCHAR(20) NOT NULL
+  );
+
+  CREATE TABLE pagos_corresponsal (
+    id          SERIAL PRIMARY KEY,
+    numero_acta INT NOT NULL REFERENCES actas(numero),
+    identificacion VARCHAR(13) NOT NULL,
+    estado      CHAR(1) NOT NULL,
+    valor       NUMERIC(12,2) NOT NULL,
+    fecha       DATE NOT NULL
+  );
+
+  CREATE TABLE clientes_fisja (
+    id          SERIAL PRIMARY KEY,
+    cedula      VARCHAR(10) UNIQUE NOT NULL,
+    nombre      VARCHAR(120) NOT NULL,
+    sucursal    VARCHAR(40) NOT NULL,
+    actualizado DATE NOT NULL
+  );
+
+  CREATE INDEX idx_usr_corr_cedula ON usuarios_corresponsal (cedula);
+  CREATE INDEX idx_recaud_ref ON recaudaciones (referencia);
+  CREATE INDEX idx_trx_punto_fecha ON transacciones (punto_id, fecha DESC);
+`);
+
+// Un quinto corresponsal, con su POS y una MAC propia. Hace falta para el caso del
+// usuario cuya MAC registrada no corresponde a ningún equipo: si todos los POS
+// compartieran MAC no se distinguiría un problema del otro.
+const { rows: [corrAna] } = await db.query(
+  `INSERT INTO corresponsales (identificacion, nombre_comercial, sucursal, estado)
+   VALUES ('0104567890001', 'Minimarket Doña Ana', 'Sígsig', 'activo') RETURNING id`,
+);
+const { rows: [posAna] } = await db.query(
+  `INSERT INTO puntos_atencion (corresponsal_id, codigo_pos, mac, estado)
+   VALUES ($1, 'POS-1005', '00:1B:44:11:3A:D4', 'activo') RETURNING id`,
+  [corrAna.id],
+);
+puntos.push(posAna);
+
+// Los usuarios del portal de corresponsal. Dos están bien, y cada uno de los otros dos
+// está roto de una forma distinta —la misma distinción que costó dos días aclarar en el
+// caso real: una MAC duplicada no es lo mismo que una MAC que no existe.
+const USUARIOS = [
+  // corresponsal, socio, usuario, estado, MAC registrada
+  [1, 2, 'byron.quizhpe', 'activo', '00:1B:44:11:3A:B7'],   // comparte MAC con un POS inactivo
+  [3, 9, 'jessica.narvaez', 'activo', '00:1B:44:11:3A:C2'], // correcto
+  [4, 10, 'luis.cabrera', 'activo', '00:1B:44:11:3A:C3'],   // correcto
+  [5, 5, 'ana.morocho', 'activo', '00:1B:44:11:3A:E1'],     // MAC que no es de ningún POS
+];
+for (const [iCorr, iSocio, usuario, estado, mac] of USUARIOS) {
+  await db.query(
+    `INSERT INTO usuarios_corresponsal
+       (corresponsal_id, cedula, usuario, estado, mac_registrada, intentos_fallidos, ultimo_acceso)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      iCorr, socios[iSocio - 1].cedula, usuario, estado, mac,
+      usuario === 'ana.morocho' ? 7 : 0,
+      usuario === 'ana.morocho' ? null : new Date(Date.now() - 864e5).toISOString(),
+    ],
+  );
+}
+
+// La política de clave y PIN. En el caso real la pregunta era exactamente esta —qué
+// formato se exige— y la respuesta estaba en una tabla, no en la cabeza de nadie.
+await db.query(`
+  INSERT INTO politica_seguridad
+    (credencial, longitud_min, longitud_max, solo_numeros, exige_mayuscula, exige_minuscula,
+     exige_digito, exige_simbolo, no_repetir_ultimas, prohibe_consecutivos, prohibe_cedula, vigente)
+  VALUES
+    ('contrasena',  8, 15, false, true,  true,  true,  true,  3, false, false, true),
+    ('pin',         4,  4, true,  false, false, true,  false, 1, true,  true,  true)
+`);
+
+// Recaudaciones. Una cobrada sin comprobante: el caso del comprobante que no se puede
+// reimprimir, que es distinto de una recaudación anulada —y la diferencia importa,
+// porque en una hay plata cobrada y en la otra no.
+const INSTITUCIONES = [
+  'MUNICIPIO GAD MEJIA - agua potable',
+  'MUNICIPIO GAD MEJIA - predios',
+  'EMPRESA ELÉCTRICA REGIONAL CENTRO SUR',
+  'CONSEJO PROVINCIAL DEL AZUAY',
+];
+for (let i = 0; i < 24; i += 1) {
+  const cobrada = i % 7 !== 5;
+  // La número 11 está cobrada y no generó comprobante: ese es el caso a encontrar.
+  const sinComprobante = i === 11;
+  await db.query(
+    `INSERT INTO recaudaciones (punto_id, institucion, referencia, monto, estado, comprobante, fecha)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      puntos[i % puntos.length].id,
+      INSTITUCIONES[i % INSTITUCIONES.length],
+      'REC-' + String(240000 + i * 13),
+      (((i * 4391) % 18000) / 100 + 3).toFixed(2),
+      cobrada ? 'cobrada' : 'anulada',
+      cobrada && !sinComprobante ? 'CMP-' + String(900000 + i * 29) : null,
+      new Date(Date.now() - i * 36e5 * 11).toISOString(),
+    ],
+  );
+}
+
+// Actas y pagos. El acta 53656 tiene su pago cerrado, que es lo que impide corregirla.
+// Y ese caso enseña lo que más cuesta explicar: el sistema puede decir por qué está
+// bloqueada, pero desbloquearla no es cosa suya.
+const ACTAS = [
+  [53655, 1, '2026-06', 'cerrada'],
+  [53656, 1, '2026-07', 'cerrada'],
+  [53657, 1, '2026-08', 'abierta'],
+  [53701, 3, '2026-07', 'cerrada'],
+  [53702, 4, '2026-07', 'abierta'],
+];
+for (const [numero, iCorr, periodo, estado] of ACTAS) {
+  const valor = (((numero * 311) % 42000) / 100 + 12).toFixed(2);
+  await db.query(
+    'INSERT INTO actas (numero, corresponsal_id, periodo, valor, estado) VALUES ($1,$2,$3,$4,$5)',
+    [numero, iCorr, periodo, valor, estado],
+  );
+  if (estado === 'cerrada') {
+    const { rows: [corr] } = await db.query('SELECT identificacion FROM corresponsales WHERE id = $1', [iCorr]);
+    await db.query(
+      `INSERT INTO pagos_corresponsal (numero_acta, identificacion, estado, valor, fecha)
+       VALUES ($1,$2,'C',$3,$4)`,
+      [numero, corr.identificacion, valor, periodo + '-28'],
+    );
+  }
+}
+
+// La copia desactualizada. Dos socios cambiaron de oficina y aquí sigue la anterior:
+// de ahí sale el descuadre, porque la contabilización lee de esta tabla y el reporte de
+// la otra. Es el caso que no se ve mirando una sola tabla.
+for (const [i, socio] of socios.entries()) {
+  const { rows: [s] } = await db.query(
+    'SELECT nombres, apellidos, sucursal FROM socios WHERE id = $1',
+    [socio.id],
+  );
+  const desactualizado = i === 0 || i === 5;
+  await db.query(
+    `INSERT INTO clientes_fisja (cedula, nombre, sucursal, actualizado)
+     VALUES ($1,$2,$3,$4)`,
+    [
+      socio.cedula,
+      s.nombres + ' ' + s.apellidos,
+      desactualizado ? 'Yanuncay' : s.sucursal,
+      desactualizado ? '2021-03-15' : new Date().toISOString().slice(0, 10),
+    ],
+  );
+}
+
+// Y volumen de verdad en un POS: 420 transacciones en el último mes. Sin esto el caso
+// del límite de 300 no se puede enseñar, porque no hay con qué pasarse del límite.
+const cuentaDeVolumen = cuentas[0].id;
+const valores = [];
+for (let k = 0; k < 420; k += 1) {
+  valores.push(`(${cuentaDeVolumen}, ${puntos[0].id}, '${TIPOS[k % TIPOS.length]}', `
+    + `${(((k * 2311) % 64000) / 100 + 2).toFixed(2)}, 'aprobada', NULL, `
+    + `NOW() - INTERVAL '${(k * 100) % 43200} minutes')`);
+}
+await db.query(
+  'INSERT INTO transacciones (cuenta_id, punto_id, tipo, monto, estado, descripcion, fecha) VALUES '
+  + valores.join(','),
+);
+
 // ── Lo que quedó ──────────────────────────────────────────────────────────────
 const cuenta = async (t) => (await db.query(`SELECT count(*)::int n FROM ${t}`)).rows[0].n;
 console.log('\nDatos cargados:');
-for (const t of ['socios', 'cuentas', 'corresponsales', 'puntos_atencion', 'transacciones']) {
-  console.log('  ' + t.padEnd(18) + (await cuenta(t)));
+for (const t of ['socios', 'cuentas', 'corresponsales', 'puntos_atencion', 'transacciones',
+  'usuarios_corresponsal', 'politica_seguridad', 'recaudaciones', 'actas',
+  'pagos_corresponsal', 'clientes_fisja']) {
+  console.log('  ' + t.padEnd(24) + (await cuenta(t)));
 }
 
 const { rows: ejemplo } = await db.query(

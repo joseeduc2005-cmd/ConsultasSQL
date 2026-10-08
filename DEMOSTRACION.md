@@ -27,10 +27,21 @@ node herramientas/demo-cooperativa.mjs --borrar
 
 | | |
 |---|---|
-| Base `demo_cooperativa` | 12 socios, 16 cuentas, 4 corresponsales, 96 transacciones |
-| 3 temas de ayuda dinámicos | consultan esa base |
+| Base `demo_cooperativa` | 12 socios, 16 cuentas, 5 corresponsales, 5 POS, 516 transacciones, 24 recaudaciones, 5 actas |
+| 7 temas de ayuda dinámicos | consultan esa base y piden el dato que les falta |
+| 14 temas de lectura | los que ya había, escritos de los casos reales |
 | 1 aporte pendiente | de `maria.tenesaca`, esperando revisión |
-| 1 ticket con 3 pasos | `DEMO-0001` |
+| 5 tickets | dos resueltos con su causa raíz, dos en investigación y uno abierto sin pasos |
+
+Para comprobar que todo funciona antes de exponer —busca, pide el dato, ejecuta y verifica
+los diez casos, sin tocar nada:
+
+```bash
+node herramientas/prueba-demo.mjs
+```
+
+**Los casos uno por uno, con qué escribir y qué tiene que salir, están en
+[CASOS-DEMO.md](CASOS-DEMO.md).** Este fichero es el recorrido; ese es el guión de mano.
 
 ### Cédulas que puede escribir
 

@@ -245,7 +245,7 @@ export function inferManualPlaceholderCast(sqlText = '', variableName = '', offs
   //
   // Peor: la segunda alternativa casaba con cualquier «= :loquesea», asi que en la
   // practica todo marcador comparado con igual acababa en uuid.
-  const comparadoCon = leftWindow.match(/([\w".]+)\s*(?:=|!=|<>)\s*$/);
+  const comparadoCon = leftWindow.match(/([\w".]+)\s*(?:>=|<=|<>|!=|=|>|<)\s*$/);
   const columna = String(comparadoCon?.[1] || '').toLowerCase();
 
   const idSemantic = /(^id$|_id$|uuid|guid)/.test(varName);
@@ -254,11 +254,28 @@ export function inferManualPlaceholderCast(sqlText = '', variableName = '', offs
     return 'uuid';
   }
 
+  // Las fechas, antes que los numeros: un rango de fechas lleva relacionales, y por eso
+  // acababa casteado a entero.
+  //
+  // Bastaba un «>=», un «<=» o un BETWEEN delante del marcador para que esto devolviera
+  // 'int', mirase lo que mirase a la izquierda. O sea que «t.fecha >= :desde» se
+  // convertia en «$1::int» y PostgreSQL respondia «el operador no existe: timestamp >=
+  // integer»: cualquier articulo con un rango de fechas estaba roto. Y un rango de
+  // fechas es lo primero que pide un reporte.
+  //
+  // Sin cast, PostgreSQL resuelve el tipo del parametro por la columna con la que se
+  // compara, que es exactamente lo que hace falta aqui.
+  const hablaDeFecha = /(fecha|date|desde|hasta|inicio|fin|creado|created|actualizado|updated|timestamp|periodo)/;
+  if (hablaDeFecha.test(varName) || hablaDeFecha.test(columna)) {
+    return null;
+  }
+
+  // Y el entero, cuando lo numerico esta en el nombre del parametro, en la columna de la
+  // izquierda o en un agregado —no en el operador.
   const numericSemantic = /(count|total|cantidad|numero|num|qty|sum|avg|max|min|edad|anio|year|month|day)/.test(varName);
-  const numericComparison = /\b(count\s*\(|sum\s*\(|avg\s*\()/.test(around)
-    || /(>=|<=|>|<)\s*(\{\{|:)/.test(around)
-    || /\bbetween\b/.test(around);
-  if (numericSemantic || numericComparison) {
+  const columnaNumerica = /(monto|valor|saldo|total|cantidad|numero|num|count|intentos|longitud|limite|minimo|maximo|edad)/.test(columna);
+  const agregado = /\b(count\s*\(|sum\s*\(|avg\s*\()/.test(around);
+  if (numericSemantic || columnaNumerica || agregado) {
     return 'int';
   }
 

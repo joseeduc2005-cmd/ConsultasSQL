@@ -13,6 +13,7 @@ import { describe, it } from 'node:test';
 import {
   countPositionalSqlPlaceholders,
   getValueByPath,
+  inferManualPlaceholderCast,
   isMissingParamValue,
   isWriteConfirmed,
   normalizeLimitValue,
@@ -27,6 +28,50 @@ describe('contar marcadores de una sentencia', () => {
   it('una sentencia sin marcadores no tiene ninguno', () => {
     assert.equal(countPositionalSqlPlaceholders('SELECT 1'), 0);
     assert.equal(countPositionalSqlPlaceholders(''), 0);
+  });
+});
+
+describe('el tipo que se le pone a un marcador', () => {
+  // Estas pruebas existen porque esta funcion rompio la demostracion dos veces por el
+  // mismo motivo: adivinaba el tipo mirando lo que hubiera por la zona en vez de con que
+  // se compara el marcador. El sintoma siempre fue el mismo, «el operador no existe», y
+  // siempre se descubrio probando a mano.
+  const tipoDe = (sql, variable) => {
+    const marcador = `:${variable}`;
+    return inferManualPlaceholderCast(sql, variable, sql.indexOf(marcador), marcador);
+  };
+
+  it('un rango de fechas no lleva tipo: lo resuelve la base', () => {
+    // Bastaba un «>=» delante para que esto dijera 'int', y entonces PostgreSQL
+    // respondia «el operador no existe: timestamp >= integer». Cualquier articulo con un
+    // rango de fechas estaba roto, que es lo primero que pide un reporte.
+    assert.equal(tipoDe('SELECT 1 FROM t WHERE t.fecha >= :desde', 'desde'), null);
+    assert.equal(tipoDe('SELECT 1 FROM t WHERE t.fecha <= :hasta', 'hasta'), null);
+    assert.equal(tipoDe('SELECT 1 FROM t WHERE t.fecha BETWEEN :desde AND :hasta', 'desde'), null);
+    assert.equal(tipoDe('SELECT 1 FROM a WHERE a.periodo = :periodo', 'periodo'), null);
+  });
+
+  it('una cedula detras de un JOIN tampoco: no es un identificador', () => {
+    // Esto miraba ciento veinte caracteres alrededor y, si veia cualquier «algo_id =»,
+    // devolvia 'uuid'. O sea que una consulta con un JOIN normal rompia con «el operador
+    // no existe: character varying = uuid» — y la mayoria de los articulos llevan JOIN.
+    const sql = 'SELECT 1 FROM cuentas c JOIN socios s ON s.id = c.socio_id WHERE s.cedula = :cedula';
+    assert.equal(tipoDe(sql, 'cedula'), null);
+  });
+
+  it('un identificador si, por el nombre o por la columna', () => {
+    assert.equal(tipoDe('SELECT 1 FROM t WHERE t.algo = :id', 'id'), 'uuid');
+    assert.equal(tipoDe('SELECT 1 FROM c WHERE c.socio_id = :socio', 'socio'), 'uuid');
+  });
+
+  it('un entero cuando lo numerico esta en el nombre, la columna o un agregado', () => {
+    assert.equal(tipoDe('SELECT 1 FROM a WHERE a.algo = :numero_acta', 'numero_acta'), 'int');
+    assert.equal(tipoDe('SELECT 1 FROM t WHERE t.monto > :tope', 'tope'), 'int');
+    assert.equal(tipoDe('SELECT 1 FROM t GROUP BY a HAVING count(*) > :veces', 'veces'), 'int');
+  });
+
+  it('texto cuando se compara con ILIKE', () => {
+    assert.equal(tipoDe('SELECT 1 FROM s WHERE s.nombres ILIKE :texto', 'texto'), 'text');
   });
 });
 

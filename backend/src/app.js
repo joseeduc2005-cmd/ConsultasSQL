@@ -876,6 +876,45 @@ const { sesionSoporte, soloAdminSoporte } = crearGuardianesDeSoporte({
 
 app.use('/api/soporte-cliente', sesionSoporte, crearSoporteClienteRouter({
   log: (datos, mensaje) => logger.info(mensaje, datos),
+  // Ejecutar un tema desde la pantalla del usuario.
+  //
+  // El router decide si puede —tema para todos, y de los que ejecutan algo—; esto es lo
+  // que lo ejecuta de verdad. Va aqui, en la composicion, porque el modulo de soporte no
+  // conoce el motor ni la auditoria y no tiene por que conocerlos.
+  //
+  // Los dos apuntes no son opcionales: una ejecucion hecha desde aqui tiene que dejar el
+  // mismo rastro que una del panel, o la auditoria tendria un agujero con la forma exacta
+  // de «lo que hacen los usuarios».
+  ejecutarTema: async (articleId, datos, quien) => {
+    const empezo = Date.now();
+    const salida = await executeArticleById(String(articleId), datos, () => {});
+    const ms = Date.now() - empezo;
+    const filas = Array.isArray(salida?.resultado) ? salida.resultado : [];
+
+    logQueryHistory({
+      username: quien.username, role: 'user',
+      queryText: `execute article ${articleId}`,
+      generatedSql: String(salida?.executedQuery || 'tema de ayuda'),
+      queryParams: salida?.queryParams, placeholderOrder: salida?.placeholderOrder,
+      executionMs: ms, rowCount: filas.length, wasCached: false,
+      status: salida?.success ? 'ok' : 'error',
+    }).catch((e) => logger.warn('logQueryHistory error (tema cliente)', { error: e?.message }));
+
+    logArticleExecution({
+      articleId, articleTitulo: salida?.articleTitulo || '',
+      ejecutadoPor: quien.username, ejecutadoRol: 'user',
+      parametrosUsados: datos, filasResultado: filas.length,
+      duracionMs: ms, estado: salida?.success ? 'ok' : 'error',
+      mensajeError: salida?.success ? null : salida?.message,
+    }).catch(() => {});
+
+    return {
+      ok: Boolean(salida?.success),
+      mensaje: salida?.message,
+      resumen: salida?.resumenHumano ?? null,
+      filas,
+    };
+  },
 }));
 
 app.use('/api/soporte', soloAdminSoporte, crearSoporteRouter({

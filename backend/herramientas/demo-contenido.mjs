@@ -61,6 +61,16 @@ if (!admin) { console.error('No hay ningún usuario admin.'); await pool.end(); 
 //
 // Cada uno pide lo que le falta y consulta. Nada escribe: el sistema no lo permite, y
 // eso es parte de lo que hay que enseñar — se puede dejar que cualquiera los use.
+/** Cómo se llama cada dato en pantalla, con sus tildes. */
+const ETIQUETAS = {
+  cedula: 'Cédula',
+  codigo_pos: 'Código del POS',
+  desde: 'Desde',
+  hasta: 'Hasta',
+  referencia: 'Referencia de la recaudación',
+  numero_acta: 'Número del acta',
+};
+
 const ARTICULOS = [
   {
     titulo: `${MARCA} Consultar un socio por su cédula`,
@@ -208,17 +218,30 @@ HAVING count(*) > 1`,
 
 for (const a of ARTICULOS) {
   const id = randomUUID();
+  // Las etiquetas van escritas, no deducidas. El nombre de un marcador no lleva tildes
+  // —`:cedula`— y en la pantalla salía «Cedula», que delante de gente de fuera del equipo
+  // se lee como un descuido. Sin esto el sistema las deduce igual y funciona; con esto se
+  // leen bien.
+  const campos = [...new Set([...a.sql.matchAll(/(?<!:):([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))]
+    .map((nombre) => ({
+      nombre,
+      etiqueta: ETIQUETAS[nombre] ?? nombre.replace(/_/g, ' '),
+      tipo: /fecha|desde|hasta/.test(nombre) ? 'date' : 'text',
+      requerido: true,
+    }));
+
   await pool.query(
     `INSERT INTO knowledge_base
        (id, titulo, categoria, descripcion, contenido, contenido_md, tipo_solucion,
-        script_json, creado_por, creado_por_username, visible_para)
-     VALUES ($1,$2,$3,$4,$5,$5,'dinamico',$6,$7,$8,'todos')`,
+        script_json, campos_formulario, creado_por, creado_por_username, visible_para)
+     VALUES ($1,$2,$3,$4,$5,$5,'dinamico',$6,$7,$8,$9,'todos')`,
     [
       id, a.titulo, a.categoria, a.descripcion, a.contenido,
       JSON.stringify({
         modo: 'script', origen: 'manual-sql', sql: a.sql,
         target_database: BASE_DEMO, databaseId: BASE_DEMO,
       }),
+      campos.length > 0 ? JSON.stringify(campos) : null,
       admin.id, admin.username,
     ],
   );
@@ -230,16 +253,25 @@ for (const a of ARTICULOS) {
 // Es la otra mitad del sistema: alguien que resolvió algo lo sube, y soporte decide si
 // se convierte en tema de ayuda. Sin uno pendiente, esa pantalla se ve vacía y no se
 // entiende para qué está.
+// Los pasos piden la cédula, no la llevan dentro.
+//
+// Un aporte se publica para que sirva al siguiente, y con la cédula quemada responde
+// un caso y no la clase de casos: quien lo abra dentro de tres meses tiene que
+// reescribir el SQL para usarlo, que es justo lo que se quería evitar. El `socio_id = 3`
+// era peor: un número que solo significa algo en esta base y en este momento.
+//
+// En un ticket el valor literal sí es lo correcto —es el acta de lo que se ejecutó aquel
+// día— y por eso los de los tickets se quedan como están.
 const pasos = [
   { descripcion: 'El socio llamó diciendo que no podía retirar en el corresponsal de Paute.', script: null },
   {
     descripcion: 'Revisé si el socio existía y en qué estado estaba.',
-    script: "SELECT cedula, nombres, apellidos, estado FROM socios WHERE cedula = '0110000274'",
+    script: 'SELECT cedula, nombres, apellidos, estado FROM socios WHERE cedula = :cedula',
     efecto: 'consulta',
   },
   {
-    descripcion: 'El socio estaba activo, así que miré la cuenta: estaba bloqueada. Eso era.',
-    script: 'SELECT numero, tipo, saldo, estado FROM cuentas WHERE socio_id = 3',
+    descripcion: 'El socio estaba activo, así que miré sus cuentas: estaban bloqueadas. Eso era.',
+    script: 'SELECT c.numero, c.tipo, c.saldo, c.estado FROM cuentas c JOIN socios s ON s.id = c.socio_id WHERE s.cedula = :cedula',
     efecto: 'consulta',
   },
 ];

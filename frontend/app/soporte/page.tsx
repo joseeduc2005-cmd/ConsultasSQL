@@ -9,11 +9,13 @@ import {
   Clock,
   Copy,
   Database,
+  Download,
   History,
   Lightbulb,
   Mic,
   MicOff,
   MessageSquarePlus,
+  Play,
   Plus,
   Search,
   Send,
@@ -29,7 +31,14 @@ import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
 import { Markdown, resumenPlano } from './markdown';
 import { useDictado, type Dictado } from './dictado';
-import { clienteApi, type Aporte, type PasoAporte, type PrecedentePublico } from './api';
+import {
+  clienteApi,
+  type Aporte,
+  type CampoPedido,
+  type PasoAporte,
+  type PrecedentePublico,
+  type ResultadoTema,
+} from './api';
 
 /** Qué se está mirando en el panel de la derecha. */
 type Vista =
@@ -519,10 +528,9 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
 
       {/*
         La sentencia del tema, cuando lo tiene.
-        Que el tema esté marcado para todos ya es la autorización: alguien decidió
-        que su contenido se puede mostrar, y ocultar justo la parte que explica qué
-        se hace dejaba esa decisión sin efecto. Se muestra para leerla — copiarla y
-        llevarla a soporte — no para correrla: aquí no hay con qué.
+        Que el tema esté marcado para todos ya es la autorización: alguien decidió que su
+        contenido se puede mostrar —y que se puede correr— al publicarlo así. Se muestra
+        para leerla, y debajo va el formulario para ejecutarla.
       */}
       {data.sentencia && (
         <section className="mt-6 border-t border-(--line) pt-5">
@@ -548,12 +556,179 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
           <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[12.5px] leading-relaxed text-(--ink-900)">
             <code>{data.sentencia.texto}</code>
           </pre>
-          <p className="mt-2 text-[12.5px] text-(--ink-500)">
-            Solo para consultarla. Quien la ejecuta es el equipo de soporte.
-          </p>
+          {data.ejecutable ? (
+            <Ejecutar id={data.id} titulo={data.titulo} pide={data.pide ?? []} />
+          ) : (
+            <p className="mt-2 text-[12.5px] text-(--ink-500)">
+              Este tema es de lectura: la sentencia está para consultarla, no corre nada.
+            </p>
+          )}
         </section>
       )}
     </article>
+  );
+}
+
+/**
+ * Un valor de la tabla, como se lee.
+ *
+ * Las fechas llegan en ISO —«2021-04-04T05:00:00.000Z»— y así no las lee nadie. Se
+ * muestran en formato de aquí, y con la hora solo cuando la hay: una fecha de ingreso con
+ * «0:00» detrás hace pensar que el dato trae una hora que en realidad no significa nada.
+ */
+function comoSeVe(valor: unknown): string {
+  if (valor === null || valor === undefined) return '—';
+  if (typeof valor === 'boolean') return valor ? 'sí' : 'no';
+  const texto = String(valor);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(texto)) {
+    const d = new Date(texto);
+    if (!Number.isNaN(d.getTime())) {
+      const fecha = d.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const conHora = d.getHours() !== 0 || d.getMinutes() !== 0;
+      return conHora
+        ? `${fecha} ${d.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}`
+        : fecha;
+    }
+  }
+  return texto;
+}
+
+/**
+ * Pedir los datos que faltan, ejecutar y enseñar el resultado.
+ *
+ * Esto antes no existía y la pantalla decía «quien la ejecuta es el equipo de soporte».
+ * Tenía sentido cuando un tema podía llevar un UPDATE; ya no puede, así que lo único que
+ * conseguía era obligar a que alguien hiciera de intermediario para correr un SELECT ya
+ * aprobado.
+ *
+ * Los campos salen del tema, no se adivinan aquí: el backend los deduce de los marcadores
+ * de la sentencia, y así un tema nuevo trae su formulario sin tocar esta pantalla.
+ */
+function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: CampoPedido[] }) {
+  const [datos, setDatos] = useState<Record<string, string>>({});
+  const [resultado, setResultado] = useState<ResultadoTema | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const correr = useMutation({
+    mutationFn: () => clienteApi.ejecutarTema(id, datos),
+    onSuccess: (r) => { setResultado(r); setError(null); },
+    onError: (e: Error) => { setResultado(null); setError(e.message || 'No se pudo ejecutar.'); },
+  });
+
+  const faltan = pide.filter((c) => c.requerido && !String(datos[c.nombre] ?? '').trim());
+
+  // El CSV se arma aquí con lo que ya está en pantalla: no hace falta volver a pedirlo ni
+  // una ruta nueva. Las comillas se duplican y el campo va entrecomillado siempre, que es
+  // lo que evita que un nombre con una coma parta la fila en dos.
+  const descargar = () => {
+    if (!resultado?.filas.length) return;
+    const celda = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const texto = [
+      resultado.columnas.map(celda).join(','),
+      ...resultado.filas.map((f) => resultado.columnas.map((c) => celda(f[c])).join(',')),
+    ].join('\r\n');
+    // El BOM es lo que hace que Excel abra las tildes bien en vez de en mojibake.
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + texto], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titulo.replace(/[^\w\s-]/g, '').trim().slice(0, 60) || 'resultado'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-2)/40 p-4">
+      {pide.length > 0 ? (
+        <>
+          <p className="text-[12.5px] font-medium text-(--ink-700)">
+            {pide.length === 1 ? 'Para consultarlo hace falta este dato:' : 'Para consultarlo hacen falta estos datos:'}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {pide.map((campo) => (
+              <label key={campo.nombre} className="block">
+                <span className="text-[12px] text-(--ink-500)">{campo.etiqueta}</span>
+                <input
+                  type={campo.tipo === 'date' ? 'date' : 'text'}
+                  value={datos[campo.nombre] ?? ''}
+                  onChange={(e) => setDatos((d) => ({ ...d, [campo.nombre]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && faltan.length === 0) correr.mutate(); }}
+                  className="mt-1 w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13.5px] text-(--ink-900) outline-none focus:border-(--accent)"
+                />
+              </label>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-[12.5px] text-(--ink-700)">Este tema no necesita ningún dato.</p>
+      )}
+
+      <button
+        type="button"
+        onClick={() => correr.mutate()}
+        disabled={faltan.length > 0 || correr.isPending}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-(--accent) px-4 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-40"
+      >
+        <Play className="size-3.5" />
+        {correr.isPending ? 'Consultando…' : 'Consultar'}
+      </button>
+
+      {error && (
+        <p className="mt-3 rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[12.5px] text-(--ink-900)">
+          {error}
+        </p>
+      )}
+
+      {resultado && (
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[12.5px] text-(--ink-700)">
+              {resultado.filas.length === 0
+                ? 'No hay nada con esos datos.'
+                : `${resultado.filas.length} ${resultado.filas.length === 1 ? 'resultado' : 'resultados'}`}
+            </p>
+            {resultado.filas.length > 0 && (
+              <button
+                type="button"
+                onClick={descargar}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[11.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+              >
+                <Download className="size-3" />
+                Descargar CSV
+              </button>
+            )}
+          </div>
+
+          {resultado.resumen && (
+            <p className="mt-2 text-[12.5px] text-(--ink-500)">{resultado.resumen}</p>
+          )}
+
+          {resultado.filas.length > 0 && (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-(--line)">
+              <table className="w-full text-left text-[12.5px]">
+                <thead className="bg-(--surface-2) text-(--ink-500)">
+                  <tr>
+                    {resultado.columnas.map((c) => (
+                      <th key={c} className="px-3 py-2 font-medium whitespace-nowrap">{c.replace(/_/g, ' ')}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultado.filas.map((fila, i) => (
+                    <tr key={i} className="border-t border-(--line)">
+                      {resultado.columnas.map((c) => (
+                        <td key={c} className="px-3 py-2 text-(--ink-900) whitespace-nowrap">
+                          {comoSeVe(fila[c])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

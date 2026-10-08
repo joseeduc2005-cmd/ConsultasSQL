@@ -18,11 +18,21 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { aportesDe, crearAporte, type AporteNuevo } from '../../aportes.ts';
 import { basesConectadas } from '../../motor-puente.ts';
-import { comoSeLee } from '../../dominio/temas/sentencia.ts';
+import { camposDelTema, comoSeLee } from '../../dominio/temas/sentencia.ts';
 import { solicitudInvalida, textoOpcional, textoRequerido } from './errores.ts';
 import { filas } from '../../knowledge/db.ts';
 import { guardarTicket, obtenerTicket, type Ticket } from '../../knowledge/tickets.ts';
 import { buscarPrecedentes, registrarAcierto, registrarBusqueda } from '../../precedentes.ts';
+
+/**
+ * Los tipos de tema que ejecutan algo.
+ *
+ * `dinamico` es el nombre de ahora; los otros tres son como se llamaban antes y siguen
+ * existiendo en artículos guardados. Se repite aquí en vez de importarse del dominio del
+ * motor porque este módulo no depende de él, y una lista de cuatro palabras no justifica
+ * atar los dos lados.
+ */
+const EJECUTABLES = new Set(['dinamico', 'ejecutable', 'database', 'script']);
 
 type Manejador = (req: Request, res: Response) => Promise<unknown>;
 
@@ -75,8 +85,22 @@ function comoLoVeQuienReporta(t: Ticket) {
   };
 }
 
+/** Lo que hace falta de fuera para poder correr un tema: lo pone la composición. */
+export type EjecutorDeTema = (
+  id: string,
+  datos: Record<string, unknown>,
+  quien: { id: string; username: string },
+) => Promise<{ ok: boolean; mensaje?: string; resumen?: string | null; filas?: Record<string, unknown>[] }>;
+
 export function crearSoporteClienteRouter(
-  { log }: { log?: (datos: object, mensaje: string) => void } = {},
+  {
+    log,
+    ejecutarTema,
+  }: {
+    log?: (datos: object, mensaje: string) => void;
+    /** Sin esto, los temas se leen y no se corren: la ruta responde que no está disponible. */
+    ejecutarTema?: EjecutorDeTema;
+  } = {},
 ): Router {
   const router = Router();
   const registrar = log ?? (() => undefined);
@@ -185,10 +209,9 @@ export function crearSoporteClienteRouter(
   router.get(
     '/temas/:id',
     h(async (req, res) => {
-      // El script se devuelve para poder leerlo, no para ejecutarlo. Si el artículo
-      // está marcado para todos, alguien ya decidió que su contenido —la sentencia
-      // incluida— se puede mostrar; ocultarlo igual dejaba la autorización sin efecto
-      // visible. Ejecutar sigue siendo del panel: aquí no hay endpoint que lo haga.
+      // Si el artículo está marcado para todos, alguien ya decidió que su contenido —la
+      // sentencia incluida— se puede mostrar; ocultarlo igual dejaba esa autorización
+      // sin efecto visible. Y por la misma razón se puede ejecutar: ver más abajo.
       //
       // Va el objeto entero y no solo `sql` porque no todos son SQL: los de Mongo
       // llevan `operation`, `collection` y un `pipeline` o un `filter`, y quedarse
@@ -200,9 +223,11 @@ export function crearSoporteClienteRouter(
         categoria: string | null;
         script: Record<string, unknown> | null;
         base: string | null;
+        tipo: string | null;
+        campos: unknown;
       }>(
         `SELECT id::text, titulo, coalesce(contenido_md, contenido) AS contenido, categoria,
-                script_json AS script,
+                script_json AS script, tipo_solucion AS tipo, campos_formulario AS campos,
                 coalesce(script_json->>'databaseId', script_json->>'target_database') AS base
          FROM knowledge_base
          WHERE id::text = $1 AND coalesce(visible_para, 'todos') = 'todos'`,
@@ -212,8 +237,80 @@ export function crearSoporteClienteRouter(
         res.status(404);
         return { error: 'No se encontró ese tema.' };
       }
-      const { script, ...resto } = articulo;
-      return { ...resto, sentencia: comoSeLee(script) };
+      const { script, tipo, campos, ...resto } = articulo;
+      // `pide` son los datos que hay que rellenar antes de ejecutar: los que alguien
+      // escribió al crear el tema, y si no los hay, los deducidos de los marcadores de la
+      // sentencia. Van con el tema para que la pantalla no tenga que volver a leer el SQL
+      // ni adivinar el formulario.
+      return {
+        ...resto,
+        sentencia: comoSeLee(script),
+        ejecutable: EJECUTABLES.has(String(tipo ?? '')),
+        pide: camposDelTema(campos, script),
+      };
+    }),
+  );
+
+  /**
+   * Ejecutar un tema y ver el resultado.
+   *
+   * Esto antes no existía, y la pantalla decía «quien la ejecuta es el equipo de
+   * soporte». Tenía sentido cuando un artículo podía llevar un UPDATE. Ya no puede:
+   * ninguno pasa el guardián con una escritura, contra ninguna base, venga de donde
+   * venga. Y entonces la razón para impedirlo se cae — obligaba a que alguien de
+   * soporte hiciera de intermediario para correr un SELECT que ya estaba aprobado.
+   *
+   * Lo que sí se comprueba, y en este orden:
+   *
+   *   1. que el tema esté marcado para todos — uno de admin sigue siendo de admin, y
+   *      por eso la condición va en el WHERE y no en un `if` posterior;
+   *   2. que sea de los que ejecutan algo — uno de lectura no tiene nada que correr.
+   *
+   * Lo demás ya estaba: solo lectura lo garantiza el mismo guardián de siempre, y el
+   * límite de filas, el del motor. Queda registrado quién ejecutó qué.
+   */
+  router.post(
+    '/temas/:id/ejecutar',
+    h(async (req, res) => {
+      const usuario = quien(req);
+
+      const [tema] = await filas<{ id: string; titulo: string; tipo: string | null }>(
+        `SELECT id::text, titulo, tipo_solucion AS tipo
+         FROM knowledge_base
+         WHERE id::text = $1 AND coalesce(visible_para, 'todos') = 'todos'`,
+        [req.params.id],
+      );
+      // Mismo 404 exista o no: distinguirlos dejaría averiguar qué temas restringidos hay.
+      if (!tema) {
+        res.status(404);
+        return { error: 'No se encontró ese tema.' };
+      }
+      if (!EJECUTABLES.has(String(tema.tipo ?? ''))) {
+        throw solicitudInvalida('Ese tema es de lectura: no tiene nada que ejecutar.');
+      }
+      if (!ejecutarTema) {
+        res.status(503);
+        return { error: 'Ejecutar temas no está disponible en este momento.' };
+      }
+
+      const cuerpo = (req.body ?? {}) as { datos?: Record<string, unknown> };
+      const datos = cuerpo.datos && typeof cuerpo.datos === 'object' ? cuerpo.datos : {};
+
+      const salida = await ejecutarTema(tema.id, datos, usuario);
+      if (!salida.ok) {
+        throw solicitudInvalida(salida.mensaje || 'No se pudo ejecutar el tema.');
+      }
+
+      const resultado = Array.isArray(salida.filas) ? salida.filas : [];
+      registrar({ tema: tema.id, usuario: usuario.username, filas: resultado.length }, 'tema ejecutado');
+      return {
+        titulo: tema.titulo,
+        resumen: salida.resumen ?? null,
+        // Las columnas salen de la primera fila y no del SQL: lo que el motor devuelva es
+        // lo que hay que mostrar, y así un alias o una columna calculada aparecen solas.
+        columnas: resultado.length > 0 ? Object.keys(resultado[0]) : [],
+        filas: resultado,
+      };
     }),
   );
 

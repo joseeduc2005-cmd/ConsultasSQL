@@ -83,7 +83,11 @@ Y luego **Ver las cuentas y el saldo**, con la misma cédula: las dos cuentas sa
 **bloqueadas**.
 
 **Lo que hay que decir:** el que atiende no necesita saber SQL ni pedirle nada a
-sistemas. Escribe la cédula y tiene la respuesta.
+sistemas. Escribe la cédula y tiene la respuesta — y puede bajarse el resultado en CSV.
+
+Esto no es solo para el panel: un usuario normal, sin rol de administrador, ejecuta desde
+su propia pantalla los temas publicados para todos. Vale la pena enseñarlo entrando como
+`user`, porque es lo que decide si el sistema sirve a toda la cooperativa o solo a soporte.
 
 **Y lo importante:** el sistema **no puede modificar nada**. Solo consulta. Por eso se
 puede dejar en manos de cualquiera sin miedo — no hay forma de que alguien borre o

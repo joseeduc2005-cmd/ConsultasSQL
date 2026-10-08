@@ -468,6 +468,49 @@ tres meses.
 
 ---
 
+# Lo mismo, pero entrando como un usuario cualquiera
+
+Esto conviene enseñarlo, porque es lo que decide si el sistema sirve a toda la cooperativa
+o solo al equipo de soporte.
+
+**Salga de la sesión y entre como `user` / `password123`** (o con la cuenta de cualquiera
+sin rol de administrador). Verá el **Portal de Soporte**, que es otra pantalla: sin panel,
+sin tickets ajenos, sin biblioteca.
+
+Abra **Socios → Consultar un socio por su cédula**. Debajo de la sentencia hay un recuadro:
+
+> Para consultarlo hace falta este dato: **Cédula**  → `0110000411` → **Consultar**
+
+Sale la fila, y al lado **Descargar CSV**, que abre en Excel con las tildes bien.
+
+Pruebe también el de **Reportes**, que pide tres datos y dos son fechas: ahí se ve que el
+formulario sale solo del SQL —nadie lo dibujó— y que las fechas traen su calendario.
+
+**Qué decir:** quien atiende ya no tiene que pedirle a sistemas que le corra una consulta.
+La corre él, y solo las que un administrador publicó para todos.
+
+**Y la pregunta que va a salir —«entonces cualquiera puede sacar datos»— tiene respuesta
+concreta:**
+
+| | |
+|---|---|
+| Un tema marcado **solo para administradores** | el usuario no lo ve, y si adivina el enlace recibe el mismo «no se encontró» que si no existiera |
+| Un tema de **lectura** | no ejecuta nada, porque no hay nada que ejecutar |
+| **Escribir** | ningún tema, de nadie, puede llevar UPDATE, DELETE, INSERT ni DROP contra ninguna base |
+| **Mandar otra consulta** desde el navegador | no sirve de nada: se ejecuta la sentencia del tema, no lo que llegue en la petición |
+| **Quién consultó qué** | queda registrado igual que si lo hubiera hecho soporte: usuario, tema, con qué datos, cuántas filas |
+
+Lo que decide quién ve qué es **la visibilidad del tema**, que la pone quien lo publica. Es
+una sola decisión y está en un sitio.
+
+Se puede comprobar entero, sin tocar nada:
+
+```bash
+cd backend && node herramientas/prueba-ejecucion-usuario.mjs
+```
+
+---
+
 # Lo demás que hay que enseñar
 
 ## El aporte que espera revisión
@@ -514,9 +557,11 @@ de un tema, y también las lecturas: quién consultó el dato de qué socio.
 # Antes de exponer
 
 - [ ] `cd backend && node herramientas/prueba-demo.mjs` acaba en **PUNTA A PUNTA**
+- [ ] `cd backend && node herramientas/prueba-ejecucion-usuario.mjs` acaba en **SOLO LO SUYO**
 - [ ] El frontend responde en http://localhost:3000
 - [ ] Entrar como administrador y ver el panel con los indicadores poblados
 - [ ] Probar los casos **1, 4 y 7** una vez: son los que más se entienden
+- [ ] Entrar una vez como `user` y ejecutar un tema: es la parte que más preguntan
 - [ ] Tener este fichero abierto en una pestaña para los valores
 
 **Mongo, MySQL y Oracle de pruebas no están arriba** (Docker está apagado), y el Oracle de

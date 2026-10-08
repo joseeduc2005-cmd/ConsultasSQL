@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { withAuth } from '../components/ProtectedRoute';
 import { useTheme } from '../components/ThemeProvider';
 import CabeceraPanel from '../components/CabeceraPanel';
-import BarraLateralPanel from '../components/BarraLateralPanel';
+import BarraLateralPanel, { agruparCategorias } from '../components/BarraLateralPanel';
 import ContentPanel from '../components/ContentPanel';
 import CommentsSection from '../components/CommentsSection';
 import WorkflowBuilder from '@/components/WorkflowBuilder/WorkflowBuilder';
@@ -100,21 +100,9 @@ function AdminPage() {
     setAssistantQuery(null);
   }, []);
 
-  const buildCategoriesFromArticles = (source: KnowledgeArticle[]) => {
-    const categoryMap = new Map<string, Set<string>>();
-
-    source.forEach((article) => {
-      const cat = article.categoria || 'Sin categoria';
-      const sub = article.subcategoria || 'General';
-      if (!categoryMap.has(cat)) categoryMap.set(cat, new Set());
-      categoryMap.get(cat)?.add(sub);
-    });
-
-    return Array.from(categoryMap.entries()).map(([categoria, subcats]) => ({
-      categoria,
-      subcategorias: Array.from(subcats),
-    }));
-  };
+  // Era una copia de `agruparCategorias`, con su propio «General» escrito a mano. Dos
+  // copias de la misma regla es como se separan: ahora hay una.
+  const buildCategoriesFromArticles = agruparCategorias;
 
   useEffect(() => {
     const userJson = localStorage.getItem('user');

@@ -11,6 +11,7 @@ interface Category {
 }
 
 import { KnowledgeArticle } from '../types';
+import { SIN_SUBCATEGORIA, subcategoriaDe } from './BarraLateralPanel';
 
 function normalizeLabel(value: string) {
   return value.trim().toLowerCase();
@@ -35,7 +36,12 @@ function looksLikeDuplicateLabel(subcategory: string, title: string) {
 
 function isGenericSubcategoryLabel(subcategory: string) {
   const normalized = normalizeForComparison(subcategory);
-  return normalized === 'otros temas' || normalized === 'otro tema';
+  // `SIN_SUBCATEGORIA` entra aquí porque es un relleno, no algo que alguien escribiera:
+  // pintar un encabezado «General» encima de los artículos inventa una división que no
+  // existe en los datos.
+  return normalized === 'otros temas'
+    || normalized === 'otro tema'
+    || normalized === normalizeForComparison(SIN_SUBCATEGORIA);
 }
 
 interface SidebarProps {
@@ -108,12 +114,18 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
     );
   }
 
+  // El reparto compara con el mismo nombre que usó el agrupado.
+  //
+  // Aquí se comparaba `a.subcategoria` en crudo contra la etiqueta ya sustituida, y para
+  // un artículo sin subcategoría eso era `null === 'General'`: la categoría salía en la
+  // lista y al desplegarla no había nada. Como ningún artículo tiene subcategoría, no se
+  // veía ni uno.
   const articleMap = categories.map((category) => ({
     ...category,
     subcategorias: category.subcategorias.map((subcategoria) => ({
       subcategoria,
       articles: (articles || []).filter(
-        (a) => a.categoria === category.categoria && a.subcategoria === subcategoria
+        (a) => a.categoria === category.categoria && subcategoriaDe(a) === subcategoria
       ),
     })),
   }));

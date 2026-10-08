@@ -12,11 +12,27 @@ interface Categoria {
   subcategorias: string[];
 }
 
+/**
+ * Cómo se llama la subcategoría de un artículo que no tiene ninguna.
+ *
+ * Está aquí y no repetido en cada sitio porque el árbol se arma en dos pasos —agrupar y
+ * repartir— y los dos tenían su propia versión: el primero sustituía el vacío por
+ * «General» y el segundo comparaba con el valor crudo. Para un artículo sin subcategoría
+ * eso era `null === 'General'`, falso siempre, así que la categoría salía en la lista y
+ * al desplegarla no había nada debajo. Como ninguno de los artículos tiene subcategoría,
+ * no se veía ni uno.
+ */
+export const SIN_SUBCATEGORIA = 'General';
+
+export function subcategoriaDe(articulo: KnowledgeArticle): string {
+  return articulo.subcategoria?.trim() || SIN_SUBCATEGORIA;
+}
+
 export function agruparCategorias(articulos: KnowledgeArticle[]): Categoria[] {
   const mapa = new Map<string, Set<string>>();
   articulos.forEach((a) => {
     const cat = a.categoria || 'Sin categoria';
-    const sub = a.subcategoria || 'General';
+    const sub = subcategoriaDe(a);
     if (!mapa.has(cat)) mapa.set(cat, new Set());
     mapa.get(cat)?.add(sub);
   });

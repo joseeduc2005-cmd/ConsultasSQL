@@ -95,7 +95,11 @@ export default function PanelDeEntrada({
             .slice(0, 5),
         );
       }
-      if (Array.isArray(sinRespuesta)) setFallidas(sinRespuesta.slice(0, 5));
+      // Solo las que no devolvieron nada. Las que devolvieron algo y nadie abrio son
+      // una sospecha —puede que el titulo no use esas palabras, o puede que a esa
+      // persona le bastara el resumen— y una sospecha no cabe en un resumen: se mira en
+      // la pantalla de aportes, donde esta el contexto para decidir.
+      if (Array.isArray(sinRespuesta)) setFallidas(sinRespuesta.filter((f) => f.resultados === 0).slice(0, 5));
     })();
     return () => { vigente = false; };
   }, []);
@@ -174,19 +178,17 @@ export default function PanelDeEntrada({
           un tema que sí existe. Las dos cosas se arreglan escribiendo, y hasta ahora el
           dato vivía enterrado en una pantalla que casi nadie abre.
         */}
-        <Bloque icono={<Search className="size-4" />} titulo="Buscaron y se fueron sin nada">
+        <Bloque icono={<Search className="size-4" />} titulo="Nadie ha escrito esto">
           {fallidas.length === 0 ? (
             <Vacio>
-              Nadie se ha ido con las manos vacías en los últimos treinta días.
+              Nada se quedó sin respuesta en los últimos treinta días.
             </Vacio>
           ) : (
             <ul className="divide-y divide-(--line)">
               {fallidas.map((f) => (
                 <li key={f.texto} className="flex items-baseline gap-3 py-2.5">
                   <span className="min-w-0 flex-1 text-[14px] text-(--ink-900)">«{f.texto}»</span>
-                  <span className="shrink-0 text-[13px] text-(--ink-500)">
-                    {f.veces}× · {f.resultados === 0 ? 'sin resultados' : 'nadie los abrió'}
-                  </span>
+                  <span className="shrink-0 text-[13px] text-(--ink-500)">{f.veces}×</span>
                 </li>
               ))}
             </ul>

@@ -2,7 +2,8 @@
 
 import { Search, Sparkle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/soporte/lib/api';
 import { Button } from '@/soporte/components/ui/button';
 import { Card } from '@/soporte/components/ui/card';
@@ -21,13 +22,29 @@ import type { Precedente } from '@/soporte/lib/types';
  * el caso parecido. Para investigar un caso concreto contra la base está el ticket.
  */
 export default function SolucionarPage() {
-  const [texto, setTexto] = useState('');
+  // Se puede llegar aqui con la busqueda ya escrita en la direccion, desde la lista de
+  // lo que la gente busco y no encontro: se pulsa una de esas frases para ver que
+  // devuelve de verdad, que es el primer paso para decidir si falta un tema o falta una
+  // palabra en el titulo de uno que ya existe. Sin leer el parametro, el enlace dejaba
+  // el cuadro vacio y habia que copiar la frase a mano.
+  const params = useSearchParams();
+  const inicial = params.get('q') ?? '';
+  const [texto, setTexto] = useState(inicial);
   const [resultado, setResultado] = useState<{ consulta: string; precedentes: Precedente[] } | null>(null);
 
   const buscar = useMutation({
-    mutationFn: () => api.solucionar(texto),
+    mutationFn: (consulta: string) => api.solucionar(consulta),
     onSuccess: setResultado,
   });
+
+  // Y se busca sola: quien llega por ese enlace viene justamente a ver el resultado.
+  const yaBuscado = useRef('');
+  useEffect(() => {
+    if (inicial.trim().length >= 8 && yaBuscado.current !== inicial) {
+      yaBuscado.current = inicial;
+      buscar.mutate(inicial);
+    }
+  }, [inicial, buscar]);
 
   const puedeBuscar = texto.trim().length >= 8;
 
@@ -46,7 +63,7 @@ export default function SolucionarPage() {
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && puedeBuscar) buscar.mutate();
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && puedeBuscar) buscar.mutate(texto);
           }}
           rows={5}
           autoFocus
@@ -54,7 +71,7 @@ export default function SolucionarPage() {
           className="w-full resize-none rounded-lg border bg-surface px-3.5 py-3 text-[14px] leading-relaxed outline-none focus:border-primary/50"
         />
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button onClick={() => buscar.mutate()} cargando={buscar.isPending} disabled={!puedeBuscar}>
+          <Button onClick={() => buscar.mutate(texto)} cargando={buscar.isPending} disabled={!puedeBuscar}>
             {!buscar.isPending && <Search />}
             Buscar solución
           </Button>

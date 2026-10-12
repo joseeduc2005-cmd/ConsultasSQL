@@ -115,7 +115,7 @@ Los dos primeros comparten MAC. Eso es el caso 1.
 
 **Escriba en buscar:**
 
-> el tendero entra y ve los datos de otro negocio
+> entra al pos y le salen datos de otro negocio
 
 Sale de primero **Buscar POS que comparten la misma MAC**. Nadie escribió «tendero» ni
 «otro negocio» en ese título.

@@ -622,10 +622,13 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
   // lo que evita que un nombre con una coma parta la fila en dos.
   const descargar = () => {
     if (!resultado?.filas.length) return;
+    // Lo que se descarga es lo que se vio: la tabla muestra «28/07/2026» y el CSV
+    // llevaba «2026-07-28T05:00:00.000Z». Quien abre el fichero espera reconocer lo que
+    // tenía delante, no otra forma del mismo dato.
     const celda = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const texto = [
       resultado.columnas.map(celda).join(','),
-      ...resultado.filas.map((f) => resultado.columnas.map((c) => celda(f[c])).join(',')),
+      ...resultado.filas.map((f) => resultado.columnas.map((c) => celda(comoSeVe(f[c]))).join(',')),
     ].join('\r\n');
     // El BOM es lo que hace que Excel abra las tildes bien en vez de en mojibake.
     const url = URL.createObjectURL(new Blob(['\uFEFF' + texto], { type: 'text/csv;charset=utf-8;' }));

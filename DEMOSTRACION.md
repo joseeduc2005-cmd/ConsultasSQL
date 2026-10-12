@@ -62,7 +62,7 @@ a por qué algo no funciona**.
 
 Entre como un usuario normal y escriba, con sus palabras:
 
-> el tendero entra y ve los datos de otro negocio
+> entra al pos y le salen datos de otro negocio
 
 El sistema devuelve el tema de las MAC repetidas **en primer lugar**, sin que nadie
 haya escrito esas palabras en el título.

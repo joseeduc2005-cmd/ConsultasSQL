@@ -142,7 +142,7 @@ export function Resolucion({ ticket }: { ticket: TicketDetalle }) {
           <p className="text-[12px] text-muted-foreground">
             Publicar lo deja como artículo en el árbol de categorías. A partir de ahí, cuando entre un ticket
             parecido, aparece entre los casos ya resueltos.
-            {estado && !estado.correccionesEjecutables && ' El SQL se guarda, pero sin botón de ejecutar mientras la escritura esté apagada.'}
+            {' El SQL se guarda y queda listo para consultarse; escribir no lo hace el sistema, ni aquí ni en ningún otro sitio.'}
           </p>
         )}
       </div>

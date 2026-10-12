@@ -33,7 +33,7 @@ export function Dialog({ abierto, onCerrar, titulo, descripcion, children, pie, 
         <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
           <div>
             <h2 className="text-[15px] font-semibold">{titulo}</h2>
-            {descripcion && <p className="mt-0.5 text-[13px] text-muted-foreground">{descripcion}</p>}
+            {descripcion && <p className="mt-0.5 text-[14px] text-muted-foreground">{descripcion}</p>}
           </div>
           <button type="button" onClick={onCerrar} className="rounded-md p-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground" aria-label="Cerrar">
             <X className="size-4" />

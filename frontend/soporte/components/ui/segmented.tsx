@@ -26,7 +26,7 @@ export function Segmented<T extends string>({ opciones, valor, onChange, classNa
             aria-selected={activo}
             onClick={() => onChange(o.valor)}
             className={cn(
-              'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-all',
+              'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[14px] font-medium transition-all',
               activo ? 'bg-surface text-foreground shadow-card' : 'text-muted-foreground hover:text-foreground',
             )}
           >

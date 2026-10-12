@@ -14,11 +14,12 @@ import { sembrarSiVacio } from './knowledge/semillas.ts';
 import { configurarMotor, type RegistroMotor } from './motor-puente.ts';
 import { iniciarVigilancia } from './monitors/programador.ts';
 import { fuente } from './oracle/index.ts';
-import { precalentarEstadoOracle } from './rutas.ts';
+import { precalentarEstadoOracle } from './adaptadores/http/rutas-admin.ts';
 import { sembrarVocabulario, vocabularioSembrado } from './vocabulario.ts';
+import type { Auditoria } from './puertos/auditoria.ts';
 
-export { crearSoporteClienteRouter } from './rutas-cliente.ts';
-export { crearSoporteRouter } from './rutas.ts';
+export { crearSoporteClienteRouter } from './adaptadores/http/rutas-cliente.ts';
+export { crearSoporteRouter } from './adaptadores/http/rutas-admin.ts';
 export { config as configSoporte } from './config.ts';
 
 export interface OpcionesSoporte {
@@ -32,6 +33,12 @@ export interface OpcionesSoporte {
    * se llegó de verdad; sin él sigue funcionando, solo que esas listas van vacías.
    */
   registro?: RegistroMotor;
+  /**
+   * Dónde deja rastro lo que el módulo hace por su cuenta. Las rutas ya las audita el
+   * middleware del backend; esto es para la vigilancia, que corre sola cada minuto y
+   * por tanto no pasa por ninguna petición.
+   */
+  auditoria?: Auditoria;
 }
 
 /**
@@ -41,7 +48,7 @@ export interface OpcionesSoporte {
  * No lanza: un fallo aquí deja el módulo de soporte inutilizable pero no impide que
  * el resto del backend arranque.
  */
-export async function iniciarSoporte({ obtenerPool, log, motor, registro }: OpcionesSoporte): Promise<boolean> {
+export async function iniciarSoporte({ obtenerPool, log, motor, registro, auditoria }: OpcionesSoporte): Promise<boolean> {
   const registrar = log ?? ((m: string) => console.log(m));
   configurarPool(obtenerPool);
   if (registro) configurarMotor(registro);
@@ -84,10 +91,12 @@ export async function iniciarSoporte({ obtenerPool, log, motor, registro }: Opci
   // El sondeo de Oracle se adelanta al arranque para que la interfaz no espere.
   precalentarEstadoOracle();
 
-  if (config.vigilancia.habilitada) {
-    iniciarVigilancia(fuente, (m) => registrar(`  ${m}`));
-    registrar('✓ [soporte] Vigilancia activada');
-  }
+  // La vigilancia se retiró junto con su pantalla: sondeaba la base cada minuto y
+  // escribía en soporte.alertas, y ya no hay dónde mirar esas alertas. El programador
+  // y los monitores siguen en el código; lo que se quitó es que arranquen solos.
+  //
+  // Las tablas soporte.alertas y soporte.vigilancia_ejecuciones se quedan con lo que
+  // tengan: son el registro de lo que pasó, y eso es auditoría.
   return true;
 }
 

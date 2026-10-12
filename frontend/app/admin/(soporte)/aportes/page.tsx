@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle2, Clock, Database, Lightbulb, SearchX, XCircle } from 'lucide-react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/soporte/lib/api';
@@ -36,7 +37,7 @@ export default function AportesPage() {
           <Lightbulb className="size-5 text-(--accent)" />
           Aportes de los usuarios
         </h1>
-        <p className="mt-1 text-[13.5px] text-muted-foreground">
+        <p className="mt-1 text-[14px] text-muted-foreground">
           Soluciones que mandó quien tuvo el problema. Nada de esto está publicado: al aceptarlo se
           crea el tema de ayuda y pasa a la base de conocimiento.
         </p>
@@ -48,7 +49,7 @@ export default function AportesPage() {
             key={e}
             type="button"
             onClick={() => setFiltro(e)}
-            className={`h-8 rounded-lg px-3 text-[12.5px] font-medium capitalize transition-colors ${
+            className={`h-8 rounded-lg px-3 text-[13px] font-medium capitalize transition-colors ${
               filtro === e
                 ? 'bg-(--accent) text-white'
                 : 'border border-(--line) bg-(--surface-2) text-(--ink-700) hover:text-(--ink-900)'
@@ -59,10 +60,10 @@ export default function AportesPage() {
         ))}
       </div>
 
-      {isLoading && <p className="text-[13.5px] text-muted-foreground">Cargando…</p>}
+      {isLoading && <p className="text-[14px] text-muted-foreground">Cargando…</p>}
 
       {!isLoading && !aportes?.length && (
-        <Card className="px-4 py-8 text-center text-[13.5px] text-muted-foreground">
+        <Card className="px-4 py-8 text-center text-[14px] text-muted-foreground">
           {filtro === 'pendiente' ? 'No hay nada por revisar.' : 'No hay aportes con ese estado.'}
         </Card>
       )}
@@ -81,48 +82,93 @@ export default function AportesPage() {
 /**
  * Lo que la gente buscó y no encontró.
  *
- * Es lo que le falta a la base de conocimiento, dicho con las palabras de quien lo
- * necesitaba. Nadie pulsa un botón de «no me sirvió», así que se deduce: una búsqueda
- * cuenta como fallida si no devolvió nada, si lo que devolvió iba marcado como lejano,
- * o si nadie llegó a abrir ninguno de los resultados.
+ * Nadie pulsa un botón de «no me sirvió», así que se deduce de lo que hizo: qué escribió y
+ * si llegó a abrir algo. Pero de ahí salen dos señales de fuerza muy distinta, y juntarlas
+ * en una lista —como estaban— entierra la única que sirve debajo de trece que no.
  *
- * Dos lecturas distintas, y la columna de resultados las separa:
- *   - Sin resultados y repetida muchas veces: falta ese tema, hay que escribirlo.
- *   - Con resultados pero nadie los abre: el tema existe y no lo encuentran — lo que
- *     falta es esa palabra en su título.
+ *   Sin resultados: nadie escribió ese tema. Inequívoco, y se arregla escribiéndolo.
+ *
+ *   Con resultados y nadie los abrió: puede ser que no sirvieran, que el título no use
+ *   las palabras de quien buscaba, o que a esa persona le bastara el resumen. La pantalla
+ *   no sabe cuál, y decir «falta una palabra en el título» era decidir por quien mira.
  */
 function BusquedasSinRespuesta() {
   const { data } = useQuery({ queryKey: ['busquedas-fallidas'], queryFn: () => api.busquedasFallidas(30) });
   if (!data?.length) return null;
 
+  const sinNada = data.filter((b) => b.resultados === 0);
+  // Tres veces o más. Con una o dos no hay patrón, y una sospecha repetida dos veces
+  // llena la pantalla de ruido que parece trabajo pendiente.
+  const sinAbrir = data.filter((b) => b.resultados > 0 && b.veces >= 3);
+
+  const verQueDevuelve = (texto: string) => `/admin/solucionar?q=${encodeURIComponent(texto)}`;
+
   return (
     <section className="mt-8 border-t border-(--line) pt-6">
       <h2 className="flex items-center gap-2 text-[15px] font-semibold">
         <SearchX className="size-4 text-(--ink-500)" />
-        Buscaron esto y se fueron sin nada
+        Lo que la gente buscó y no encontró
       </h2>
-      <p className="mt-1 text-[13px] text-muted-foreground">
-        Últimos 30 días. Si algo se repite y no devuelve resultados, es un tema que falta por
-        escribir; si devuelve resultados y nadie los abre, es una palabra que falta en el título de
-        un tema que ya existe.
-      </p>
+      <p className="mt-1 text-[14px] text-muted-foreground">Últimos treinta días.</p>
 
-      <div className="mt-3 space-y-1.5">
-        {data.map((b) => (
-          <div
-            key={b.texto}
-            className="flex items-start gap-3 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 py-2.5"
-          >
-            <span className="mt-0.5 shrink-0 rounded-full bg-(--accent)/10 px-2 py-0.5 text-[11.5px] font-semibold text-(--accent)">
-              {b.veces}×
-            </span>
-            <span className="min-w-0 flex-1 text-[13.5px]">{b.texto}</span>
-            <span className="shrink-0 text-[11.5px] text-muted-foreground">
-              {b.resultados === 0 ? 'sin resultados' : `${b.resultados} resultado(s), ninguno abierto`}
-            </span>
+      {/* Lo accionable, primero y con peso. */}
+      <div className="mt-5">
+        <h3 className="text-[13.5px] font-semibold text-(--ink-900)">
+          Nadie ha escrito esto
+          {sinNada.length > 0 && <span className="ml-2 font-normal text-muted-foreground">{sinNada.length}</span>}
+        </h3>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          La búsqueda no devolvió nada. Es un tema que falta, dicho con las palabras de quien
+          lo necesitaba.
+        </p>
+
+        {sinNada.length === 0 ? (
+          <p className="mt-2.5 text-[14px] text-muted-foreground">
+            Nada se quedó sin respuesta estos días.
+          </p>
+        ) : (
+          <div className="mt-2.5 space-y-1.5">
+            {sinNada.map((b) => (
+              <Link
+                key={b.texto}
+                href={verQueDevuelve(b.texto)}
+                className="flex items-start gap-3 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 py-2.5 transition-colors hover:border-(--line-fuerte)"
+              >
+                <span className="mt-0.5 shrink-0 rounded-full bg-(--aviso)/15 px-2 py-0.5 text-[12.5px] font-semibold text-(--aviso)">
+                  {b.veces}×
+                </span>
+                <span className="min-w-0 flex-1 text-[14px]">{b.texto}</span>
+              </Link>
+            ))}
           </div>
-        ))}
+        )}
       </div>
+
+      {/* Y la sospecha, detrás y dicha como lo que es. */}
+      {sinAbrir.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-[13.5px] font-semibold text-(--ink-900)">Encontraron algo y no lo abrieron</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Puede que los resultados no sirvieran, que el título no use sus palabras, o que
+            les bastara con leer el resumen. Mirar qué devuelve es lo único que lo aclara.
+          </p>
+          <div className="mt-2.5 space-y-1.5">
+            {sinAbrir.map((b) => (
+              <Link
+                key={b.texto}
+                href={verQueDevuelve(b.texto)}
+                className="flex items-start gap-3 rounded-lg px-3.5 py-2 transition-colors hover:bg-(--surface-2)"
+              >
+                <span className="mt-0.5 shrink-0 text-[12.5px] text-muted-foreground">{b.veces}×</span>
+                <span className="min-w-0 flex-1 text-[14px] text-(--ink-700)">{b.texto}</span>
+                <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                  {b.resultados} resultado{b.resultados === 1 ? '' : 's'}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -166,7 +212,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
         <Icono className={`mt-0.5 size-4 shrink-0 ${color}`} />
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-medium">{aporte.titulo}</span>
-          <span className="mt-0.5 block text-[12px] text-muted-foreground">
+          <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
             {texto} · lo mandó {aporte.autor}
             {aporte.caso ? ` · caso ${aporte.caso}` : ''}
             {aporte.pasos_json?.length ? ` · ${aporte.pasos_json.length} pasos` : ''}
@@ -179,7 +225,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
         <div className="space-y-4 border-t border-(--line) px-4 py-4">
           {aporte.problema && (
             <Seccion titulo="El problema">
-              <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{aporte.problema}</p>
+              <p className="text-[14px] leading-relaxed whitespace-pre-line">{aporte.problema}</p>
             </Seccion>
           )}
 
@@ -194,30 +240,25 @@ function Ficha({ aporte }: { aporte: Aporte }) {
             {aporte.pasos_json?.length ? (
               <div className="space-y-2.5">
                 {aporte.base && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[12px] text-(--ink-700)">
                     <Database className="size-3" />
                     {aporte.base}
                   </span>
                 )}
                 {aporte.pasos_json.map((paso, i) => (
                   <div key={i} className="flex gap-2.5">
-                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[11px] font-semibold text-(--accent)">
+                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[12px] font-semibold text-(--accent)">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{paso.descripcion}</p>
+                      <p className="text-[14px] leading-relaxed whitespace-pre-line">{paso.descripcion}</p>
                       {paso.script && (
                         <>
-                          <span
-                            className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                              paso.efecto === 'cambio'
-                                ? 'bg-amber-500/15 text-amber-600'
-                                : 'bg-(--surface-2) text-(--ink-700)'
-                            }`}
-                          >
-                            {paso.efecto === 'cambio' ? 'Cambia datos' : 'Solo consulta'}
+                          {/* Sin estado de aviso: ya no hay scripts que cambien datos. */}
+                          <span className="mt-1.5 inline-block rounded-full bg-(--surface-2) px-2 py-0.5 text-[12px] font-medium text-(--ink-700)">
+                            Solo consulta
                           </span>
-                          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2.5 text-[12.5px] leading-relaxed">
+                          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2.5 text-[13px] leading-relaxed">
                             <code>{paso.script}</code>
                           </pre>
                         </>
@@ -225,17 +266,17 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                     </div>
                   </div>
                 ))}
-                <p className="text-[12px] text-amber-600">
+                <p className="text-[12.5px] text-amber-600">
                   Revise los scripts antes de publicar. No se ejecutan desde aquí.
                 </p>
               </div>
             ) : (
-              <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{aporte.pasos}</p>
+              <p className="text-[14px] leading-relaxed whitespace-pre-line">{aporte.pasos}</p>
             )}
           </Seccion>
 
           {!pendiente && aporte.nota && (
-            <p className="rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[12.5px]">
+            <p className="rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px]">
               <span className="text-muted-foreground">Nota de {aporte.revisado_por}:</span> {aporte.nota}
             </p>
           )}
@@ -247,14 +288,14 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                   <input
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
-                    className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px] outline-none focus:border-(--accent)"
+                    className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[14px] outline-none focus:border-(--accent)"
                   />
                 </Etiqueta>
                 <Etiqueta texto="Categoría">
                   <input
                     value={categoria}
                     onChange={(e) => setCategoria(e.target.value)}
-                    className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px] outline-none focus:border-(--accent)"
+                    className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[14px] outline-none focus:border-(--accent)"
                   />
                 </Etiqueta>
               </div>
@@ -263,7 +304,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                 <select
                   value={visible}
                   onChange={(e) => setVisible(e.target.value as 'todos' | 'admin')}
-                  className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px] outline-none focus:border-(--accent) sm:w-64"
+                  className="w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[14px] outline-none focus:border-(--accent) sm:w-64"
                 >
                   <option value="todos">Todos — sale como tema de ayuda</option>
                   <option value="admin">Solo el equipo de soporte</option>
@@ -275,7 +316,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                   type="button"
                   onClick={() => aceptar.mutate()}
                   disabled={aceptar.isPending || titulo.trim().length < 5}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-(--accent) px-3.5 text-[13px] font-semibold text-white disabled:opacity-40"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-(--accent) px-3.5 text-[14px] font-semibold text-white disabled:opacity-40"
                 >
                   <CheckCircle2 className="size-4" />
                   {aceptar.isPending ? 'Publicando…' : 'Aceptar y publicar'}
@@ -285,13 +326,13 @@ function Ficha({ aporte }: { aporte: Aporte }) {
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
                   placeholder="Motivo, si lo va a rechazar"
-                  className="h-9 min-w-[200px] flex-1 rounded-lg border border-(--line) bg-(--surface-2) px-3 text-[13px] outline-none focus:border-(--accent)"
+                  className="h-9 min-w-[200px] flex-1 rounded-lg border border-(--line) bg-(--surface-2) px-3 text-[14px] outline-none focus:border-(--accent)"
                 />
                 <button
                   type="button"
                   onClick={() => rechazar.mutate()}
                   disabled={rechazar.isPending || motivo.trim().length < 5}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-rose-600 disabled:opacity-40"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[14px] font-semibold text-rose-600 disabled:opacity-40"
                   title="Hace falta un motivo: el autor lo va a ver"
                 >
                   <XCircle className="size-4" />
@@ -300,7 +341,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
               </div>
 
               {(aceptar.isError || rechazar.isError) && (
-                <p className="text-[12.5px] text-rose-600">
+                <p className="text-[13px] text-rose-600">
                   {((aceptar.error ?? rechazar.error) as Error)?.message}
                 </p>
               )}
@@ -315,7 +356,7 @@ function Ficha({ aporte }: { aporte: Aporte }) {
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</p>
+      <p className="mb-1.5 text-[12.5px] font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</p>
       {children}
     </div>
   );
@@ -324,7 +365,7 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
 function Etiqueta({ texto, children }: { texto: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] text-muted-foreground">{texto}</span>
+      <span className="mb-1 block text-[12.5px] text-muted-foreground">{texto}</span>
       {children}
     </label>
   );

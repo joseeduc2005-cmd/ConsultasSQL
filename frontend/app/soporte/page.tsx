@@ -9,11 +9,13 @@ import {
   Clock,
   Copy,
   Database,
+  Download,
   History,
   Lightbulb,
   Mic,
   MicOff,
   MessageSquarePlus,
+  Play,
   Plus,
   Search,
   Send,
@@ -27,9 +29,18 @@ import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
+import BuscadorBarra from '../components/BuscadorBarra';
+import Marca from '../components/Marca';
 import { Markdown, resumenPlano } from './markdown';
 import { useDictado, type Dictado } from './dictado';
-import { clienteApi, type Aporte, type PasoAporte, type PrecedentePublico } from './api';
+import {
+  clienteApi,
+  type Aporte,
+  type CampoPedido,
+  type PasoAporte,
+  type PrecedentePublico,
+  type ResultadoTema,
+} from './api';
 
 /** Qué se está mirando en el panel de la derecha. */
 type Vista =
@@ -120,21 +131,49 @@ function SoportePage() {
 
 function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) => void }) {
   const { data: temas } = useQuery({ queryKey: ['temas'], queryFn: clienteApi.temas });
+  // Filtrar por una palabra que ya se sabe no es lo mismo que contar el problema entero
+  // en la caja grande: esa busca por significado y devuelve candidatos. Las dos hacen
+  // falta, y esta no estaba.
+  const [filtro, setFiltro] = useState('');
   const { data: aportes } = useQuery({ queryKey: ['mis-aportes'], queryFn: clienteApi.misAportes });
   const enRevision = (aportes ?? []).filter((a) => a.estado === 'pendiente').length;
 
+  // Se busca sin tildes y sin mayúsculas: quien escribe deprisa no pone tildes, y que la
+  // herramienta no encuentre «cedula» porque el título dice «cédula» es de las cosas que
+  // hacen desconfiar de un buscador.
+  const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const aguja = plano(filtro.trim());
+  const filtrados = !temas
+    ? null
+    : !aguja
+      ? temas
+      : temas
+        .map((c) => ({
+          ...c,
+          articulos: c.articulos.filter(
+            (a) => plano(a.titulo).includes(aguja) || plano(a.descripcion ?? '').includes(aguja),
+          ),
+        }))
+        // Una categoría que se queda sin artículos no se enseña vacía, salvo que sea su
+        // propio nombre lo que se buscó.
+        .filter((c) => c.articulos.length > 0 || plano(c.categoria).includes(aguja));
+
   return (
     <aside className="glass-panel-strong min-h-0 space-y-4 overflow-y-auto scroll-fino rounded-2xl p-3">
+      {/* Arriba del todo, igual que en el panel: que el mismo campo esté en un sitio
+          distinto según quién entre obliga a buscarlo. */}
+      <BuscadorBarra valor={filtro} onCambio={setFiltro} etiqueta="Filtrar los temas" />
+
       {/*
         Dos botones y no uno con pestañas: son dos intenciones distintas —vengo a que
         me ayuden, vengo a contar cómo lo arreglé— y quien entra a la segunda ya sabe
-        lo que busca. Van juntos y arriba del todo, antes del árbol de temas.
+        lo que busca.
       */}
       <div className="space-y-0.5">
         <button
           type="button"
           onClick={() => onElegir({ tipo: 'buscar' })}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] font-semibold transition-colors ${
             vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
           }`}
         >
@@ -145,7 +184,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
         <button
           type="button"
           onClick={() => onElegir({ tipo: 'aportar' })}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] font-semibold transition-colors ${
             vista.tipo === 'aportar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
           }`}
         >
@@ -154,7 +193,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
           {enRevision > 0 && (
             <span
               title={`${enRevision} esperando revisión`}
-              className={`ml-auto rounded-full px-1.5 text-[10.5px] font-semibold ${
+              className={`ml-auto rounded-full px-1.5 text-[12px] font-semibold ${
                 vista.tipo === 'aportar' ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-600'
               }`}
             >
@@ -165,18 +204,25 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
       </div>
 
       <Grupo titulo="Temas de ayuda">
-        {temas?.length ? (
-          temas.map((t) => (
+        {filtrados === null ? (
+          <p className="px-3 py-1 text-[13px] text-(--ink-500)">Sin temas todavía.</p>
+        ) : filtrados.length === 0 ? (
+          <p className="px-3 py-1 text-[13px] text-(--ink-500)">
+            Nada con «{filtro}». Pruebe con otra palabra, o cuente el problema entero arriba.
+          </p>
+        ) : (
+          filtrados.map((t) => (
             <Categoria
               key={t.categoria}
               nombre={t.categoria}
               articulos={t.articulos}
+              // Con un filtro escrito las categorías salen abiertas: tener que desplegarlas
+              // una a una después de buscar deshace lo que la búsqueda acaba de hacer.
+              abiertaPorDefecto={filtro.trim().length > 0}
               activo={vista.tipo === 'articulo' ? vista.id : null}
               onElegir={(id) => onElegir({ tipo: 'articulo', id })}
             />
           ))
-        ) : (
-          <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Sin temas todavía.</p>
         )}
       </Grupo>
     </aside>
@@ -186,7 +232,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
 function Grupo({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div>
-      <p className="px-3 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
+      <p className="px-3 pt-1 pb-1.5 text-[12px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
         {titulo}
       </p>
       <div className="space-y-0.5">{children}</div>
@@ -199,36 +245,43 @@ function Categoria({
   articulos,
   activo,
   onElegir,
+  abiertaPorDefecto = false,
 }: {
   nombre: string;
   articulos: { id: string; titulo: string }[];
   activo: string | null;
   onElegir: (id: string) => void;
+  /** Con un filtro escrito, las ramas salen abiertas. */
+  abiertaPorDefecto?: boolean;
 }) {
   // Abierta si el artículo que se está viendo es suyo: al entrar por un enlace, la
   // rama correspondiente aparece desplegada en vez de haber que buscarla.
   const [abierta, setAbierta] = useState(() => articulos.some((a) => a.id === activo));
+
+  // Y abierta también mientras haya un filtro: tener que desplegar una a una las ramas
+  // después de buscar deshace justo lo que la búsqueda acaba de hacer.
+  const desplegada = abierta || abiertaPorDefecto;
 
   return (
     <div>
       <button
         type="button"
         onClick={() => setAbierta((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
-        aria-expanded={abierta}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[14px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
+        aria-expanded={desplegada}
       >
-        <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${abierta ? '' : '-rotate-90'}`} />
+        <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${desplegada ? '' : '-rotate-90'}`} />
         <span className="min-w-0 flex-1 truncate">{nombre}</span>
-        <span className="text-[11px] text-(--ink-500)">{articulos.length}</span>
+        <span className="text-[12px] text-(--ink-500)">{articulos.length}</span>
       </button>
-      {abierta && (
+      {desplegada && (
         <div className="ml-4 space-y-0.5 border-l border-(--line) pl-2">
           {articulos.map((a) => (
             <button
               key={a.id}
               type="button"
               onClick={() => onElegir(a.id)}
-              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
+              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                 activo === a.id ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-(--surface-2)'
               }`}
             >
@@ -255,7 +308,7 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
     return (
       <span
         title="Este navegador no permite dictar"
-        className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-500) opacity-60"
+        className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[14px] font-semibold text-(--ink-500) opacity-60"
       >
         <MicOff className="size-4" />
         Dictar (no disponible)
@@ -282,7 +335,7 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
             : 'Dictar el problema'
       }
       aria-pressed={dictado.grabando}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[14px] font-semibold transition-colors disabled:opacity-60 ${
         dictado.grabando
           ? 'border-rose-500/40 bg-rose-500/10 text-rose-600'
           : 'border-(--line) bg-(--surface-2) text-(--ink-900) hover:border-(--accent)'
@@ -350,7 +403,7 @@ function Buscar({
             {buscar.isPending ? 'Buscando…' : 'Buscar solución'}
           </button>
           <BotonDictado dictado={dictado} />
-          <span className="text-[12.5px] text-(--ink-500)">
+          <span className="text-[13px] text-(--ink-500)">
             {dictado.error
               ? dictado.error
               : dictado.preparando
@@ -373,7 +426,7 @@ function Buscar({
                 mejor que hay es un parecido flojo, anunciarlo como «esto es lo suyo»
                 hace perder más tiempo que no devolver nada.
               */}
-              <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">
+              <h2 className="text-[14px] font-semibold tracking-wide text-(--ink-500) uppercase">
                 {resultados[0].confianza === 'baja' ? 'Quizá tenga que ver, revíselo' : 'Esto se parece a lo suyo'}
               </h2>
               {resultados.map((p) => (
@@ -410,13 +463,13 @@ function Buscar({
             <p className="text-[14px] font-medium text-(--ink-900)">
               {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo resolvió por su cuenta?'}
             </p>
-            <p className="mt-0.5 text-[13px] text-(--ink-700)">
+            <p className="mt-0.5 text-[14px] text-(--ink-700)">
               Si da con la solución, cuéntela aquí y queda como tema de ayuda para el que venga detrás.
             </p>
             <button
               type="button"
               onClick={() => onAbrir({ tipo: 'aportar', titulo: primeraLinea(texto) })}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[14px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
             >
               <Lightbulb className="size-4" />
               Aportar mi solución
@@ -460,10 +513,10 @@ function Resultado({ precedente: p, onAbrir }: { precedente: PrecedentePublico; 
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-(--ink-900)">{p.titulo}</span>
           {!abierto && cuerpo && (
-            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[13px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
           )}
           {navegable && (
-            <span className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-(--accent)">
+            <span className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-medium text-(--accent)">
               Ver el tema completo
               <ChevronRight className="size-3.5" />
             </span>
@@ -475,7 +528,7 @@ function Resultado({ precedente: p, onAbrir }: { precedente: PrecedentePublico; 
           {cuerpo ? (
             <Markdown contenido={cuerpo} />
           ) : (
-            <p className="text-[13.5px] text-(--ink-700)">Este caso no dejó una explicación escrita.</p>
+            <p className="text-[14px] text-(--ink-700)">Este caso no dejó una explicación escrita.</p>
           )}
         </div>
       )}
@@ -498,14 +551,14 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
         <button
           type="button"
           onClick={onVolver}
-          className="mb-3 inline-flex items-center gap-1 text-[12.5px] font-medium text-(--ink-500) transition-colors hover:text-(--ink-900)"
+          className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-(--ink-500) transition-colors hover:text-(--ink-900)"
         >
           <ChevronLeft className="size-3.5" />
           Volver a los resultados
         </button>
       )}
       {data.categoria && (
-        <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
+        <p className="text-[12.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
       )}
       <h1 className="mt-1 text-xl font-semibold tracking-tight text-(--ink-900)">{data.titulo}</h1>
 
@@ -513,25 +566,24 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
         {data.contenido ? (
           <Markdown contenido={data.contenido} />
         ) : (
-          <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
+          <p className="text-[14px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
         )}
       </div>
 
       {/*
         La sentencia del tema, cuando lo tiene.
-        Que el tema esté marcado para todos ya es la autorización: alguien decidió
-        que su contenido se puede mostrar, y ocultar justo la parte que explica qué
-        se hace dejaba esa decisión sin efecto. Se muestra para leerla — copiarla y
-        llevarla a soporte — no para correrla: aquí no hay con qué.
+        Que el tema esté marcado para todos ya es la autorización: alguien decidió que su
+        contenido se puede mostrar —y que se puede correr— al publicarlo así. Se muestra
+        para leerla, y debajo va el formulario para ejecutarla.
       */}
       {data.sentencia && (
         <section className="mt-6 border-t border-(--line) pt-5">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">
+            <p className="text-[12.5px] font-semibold tracking-wide text-(--ink-500) uppercase">
               {data.sentencia.lenguaje === 'sql' ? 'Sentencia' : 'Instrucción'}
             </p>
             {data.base && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
+              <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[12px] text-(--ink-700)">
                 <Database className="size-3" />
                 {data.base}
               </span>
@@ -539,21 +591,229 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
             <button
               type="button"
               onClick={() => navigator.clipboard?.writeText(data.sentencia!.texto)}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[11.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[12.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
             >
               <Copy className="size-3" />
               Copiar
             </button>
           </div>
-          <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[12.5px] leading-relaxed text-(--ink-900)">
+          <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[13px] leading-relaxed text-(--ink-900)">
             <code>{data.sentencia.texto}</code>
           </pre>
-          <p className="mt-2 text-[12.5px] text-(--ink-500)">
-            Solo para consultarla. Quien la ejecuta es el equipo de soporte.
-          </p>
+          {data.ejecutable ? (
+            <Ejecutar id={data.id} titulo={data.titulo} pide={data.pide ?? []} />
+          ) : (
+            <p className="mt-2 text-[13px] text-(--ink-500)">
+              Este tema es de lectura: la sentencia está para consultarla, no corre nada.
+            </p>
+          )}
         </section>
       )}
     </article>
+  );
+}
+
+/**
+ * Los estados que conviene que salten a la vista, y de qué color.
+ *
+ * El estado es el dato por el que se hizo la consulta: alguien escribe una cédula justo
+ * para saber si está bloqueada. Salía del mismo gris que el teléfono y la fecha, así que
+ * había que buscarlo con el dedo.
+ *
+ * Son pocos y escritos a mano a propósito: colorear por heurística acaba pintando de rojo
+ * cualquier palabra que empiece por «no», y entonces el color deja de significar nada.
+ */
+const ESTADOS: Record<string, 'malo' | 'bueno' | 'medio'> = {
+  bloqueado: 'malo', bloqueada: 'malo', inactivo: 'malo', inactiva: 'malo',
+  rechazada: 'malo', rechazado: 'malo', anulada: 'malo', anulado: 'malo',
+  cerrado: 'malo', cerrada: 'malo', vencido: 'malo', vencida: 'malo',
+  activo: 'bueno', activa: 'bueno', aprobada: 'bueno', aprobado: 'bueno',
+  cobrada: 'bueno', cobrado: 'bueno', resuelto: 'bueno', resuelta: 'bueno',
+  pendiente: 'medio', abierto: 'medio', abierta: 'medio', investigacion: 'medio',
+  'no se genero': 'malo',
+};
+
+const TONO_ESTADO = {
+  malo: 'text-(--peligro)',
+  bueno: 'text-(--exito)',
+  medio: 'text-(--aviso)',
+} as const;
+
+/** Una celda de la tabla: el valor como se lee, y el estado con su color. */
+function Celda({ columna, valor }: { columna: string; valor: unknown }) {
+  const texto = comoSeVe(valor);
+  // Solo en las columnas que hablan de estado. Un socio que se apellide «Activo» no
+  // tiene por qué salir en verde.
+  const esColumnaDeEstado = /estado|situacion|diagnostico|comprobante/i.test(columna);
+  const tono = esColumnaDeEstado ? ESTADOS[texto.trim().toLowerCase()] : undefined;
+
+  if (!tono) return <span className="text-(--ink-900)">{texto}</span>;
+  return <span className={`font-medium ${TONO_ESTADO[tono]}`}>{texto}</span>;
+}
+
+/**
+ * Un valor de la tabla, como se lee.
+ *
+ * Las fechas llegan en ISO —«2021-04-04T05:00:00.000Z»— y así no las lee nadie. Se
+ * muestran en formato de aquí, y con la hora solo cuando la hay: una fecha de ingreso con
+ * «0:00» detrás hace pensar que el dato trae una hora que en realidad no significa nada.
+ */
+function comoSeVe(valor: unknown): string {
+  if (valor === null || valor === undefined) return '—';
+  if (typeof valor === 'boolean') return valor ? 'sí' : 'no';
+  const texto = String(valor);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(texto)) {
+    const d = new Date(texto);
+    if (!Number.isNaN(d.getTime())) {
+      const fecha = d.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const conHora = d.getHours() !== 0 || d.getMinutes() !== 0;
+      return conHora
+        ? `${fecha} ${d.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}`
+        : fecha;
+    }
+  }
+  return texto;
+}
+
+/**
+ * Pedir los datos que faltan, ejecutar y enseñar el resultado.
+ *
+ * Esto antes no existía y la pantalla decía «quien la ejecuta es el equipo de soporte».
+ * Tenía sentido cuando un tema podía llevar un UPDATE; ya no puede, así que lo único que
+ * conseguía era obligar a que alguien hiciera de intermediario para correr un SELECT ya
+ * aprobado.
+ *
+ * Los campos salen del tema, no se adivinan aquí: el backend los deduce de los marcadores
+ * de la sentencia, y así un tema nuevo trae su formulario sin tocar esta pantalla.
+ */
+function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: CampoPedido[] }) {
+  const [datos, setDatos] = useState<Record<string, string>>({});
+  const [resultado, setResultado] = useState<ResultadoTema | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const correr = useMutation({
+    mutationFn: () => clienteApi.ejecutarTema(id, datos),
+    onSuccess: (r) => { setResultado(r); setError(null); },
+    onError: (e: Error) => { setResultado(null); setError(e.message || 'No se pudo ejecutar.'); },
+  });
+
+  const faltan = pide.filter((c) => c.requerido && !String(datos[c.nombre] ?? '').trim());
+
+  // El CSV se arma aquí con lo que ya está en pantalla: no hace falta volver a pedirlo ni
+  // una ruta nueva. Las comillas se duplican y el campo va entrecomillado siempre, que es
+  // lo que evita que un nombre con una coma parta la fila en dos.
+  const descargar = () => {
+    if (!resultado?.filas.length) return;
+    // Lo que se descarga es lo que se vio: la tabla muestra «28/07/2026» y el CSV
+    // llevaba «2026-07-28T05:00:00.000Z». Quien abre el fichero espera reconocer lo que
+    // tenía delante, no otra forma del mismo dato.
+    const celda = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const texto = [
+      resultado.columnas.map(celda).join(','),
+      ...resultado.filas.map((f) => resultado.columnas.map((c) => celda(comoSeVe(f[c]))).join(',')),
+    ].join('\r\n');
+    // El BOM es lo que hace que Excel abra las tildes bien en vez de en mojibake.
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + texto], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titulo.replace(/[^\w\s-]/g, '').trim().slice(0, 60) || 'resultado'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-2)/40 p-4">
+      {pide.length > 0 ? (
+        <>
+          <p className="text-[13px] font-medium text-(--ink-700)">
+            {pide.length === 1 ? 'Para consultarlo hace falta este dato:' : 'Para consultarlo hacen falta estos datos:'}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {pide.map((campo) => (
+              <label key={campo.nombre} className="block">
+                <span className="text-[12.5px] text-(--ink-500)">{campo.etiqueta}</span>
+                <input
+                  type={campo.tipo === 'date' ? 'date' : 'text'}
+                  value={datos[campo.nombre] ?? ''}
+                  onChange={(e) => setDatos((d) => ({ ...d, [campo.nombre]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && faltan.length === 0) correr.mutate(); }}
+                  className="mt-1 w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[14px] text-(--ink-900) outline-none focus:border-(--accent)"
+                />
+              </label>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-[13px] text-(--ink-700)">Este tema no necesita ningún dato.</p>
+      )}
+
+      <button
+        type="button"
+        onClick={() => correr.mutate()}
+        disabled={faltan.length > 0 || correr.isPending}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-(--accent) px-4 py-2 text-[14px] font-medium text-white transition-opacity disabled:opacity-40"
+      >
+        <Play className="size-3.5" />
+        {correr.isPending ? 'Consultando…' : 'Consultar'}
+      </button>
+
+      {error && (
+        <p className="mt-3 rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px] text-(--ink-900)">
+          {error}
+        </p>
+      )}
+
+      {resultado && (
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[13px] text-(--ink-700)">
+              {resultado.filas.length === 0
+                ? 'No hay nada con esos datos.'
+                : `${resultado.filas.length} ${resultado.filas.length === 1 ? 'resultado' : 'resultados'}`}
+            </p>
+            {resultado.filas.length > 0 && (
+              <button
+                type="button"
+                onClick={descargar}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[12.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+              >
+                <Download className="size-3" />
+                Descargar CSV
+              </button>
+            )}
+          </div>
+
+          {resultado.resumen && (
+            <p className="mt-2 text-[13px] text-(--ink-500)">{resultado.resumen}</p>
+          )}
+
+          {resultado.filas.length > 0 && (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-(--line)">
+              <table className="w-full text-left text-[13px]">
+                <thead className="bg-(--surface-2) text-(--ink-500)">
+                  <tr>
+                    {resultado.columnas.map((c) => (
+                      <th key={c} className="px-3 py-2 font-medium whitespace-nowrap">{c.replace(/_/g, ' ')}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultado.filas.map((fila, i) => (
+                    <tr key={i} className="border-t border-(--line)">
+                      {resultado.columnas.map((c) => (
+                        <td key={c} className="px-3 py-2 whitespace-nowrap">
+                          <Celda columna={c} valor={fila[c]} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -582,8 +842,8 @@ const PASO_VACIO: PasoAporte = { descripcion: '', script: null, efecto: null };
  * Lo que uno resolvió por su cuenta, para que no se pierda.
  *
  * Va por pasos y no como un texto corrido porque así es como se arregla algo: una cosa
- * después de otra, y a veces con un script en medio. Cada paso dice si su script solo
- * mira o si cambia datos — lo declara quien lo escribe, no se adivina del SQL, porque
+ * después de otra, y a veces con un script en medio. Todo script es una consulta: el
+ * sistema ya no ejecuta escrituras, y antes aquí se preguntaba si el script miraba o
  * una consulta puede llamar a algo que escribe y un `UPDATE` puede acabar en rollback.
  *
  * No se publica al enviarlo. Queda pendiente hasta que alguien de soporte lo lea, y el
@@ -614,7 +874,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
           .map((p) => ({
             descripcion: p.descripcion.trim(),
             script: p.script?.trim() || null,
-            efecto: p.script?.trim() ? (p.efecto ?? 'consulta') : null,
+            efecto: p.script?.trim() ? ('consulta' as const) : null,
           }))
           .filter((p) => p.descripcion || p.script),
         base: conScript ? base || undefined : undefined,
@@ -644,7 +904,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
         {enviado && (
           <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-            <p className="text-[13.5px] text-(--ink-900)">
+            <p className="text-[14px] text-(--ink-900)">
               Enviado. Queda pendiente de revisión — abajo puede ver en qué va.
             </p>
           </div>
@@ -670,8 +930,8 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
           </Campo>
 
           <div>
-            <p className="text-[13px] font-medium text-(--ink-900)">Qué hizo, paso a paso</p>
-            <p className="mt-0.5 text-[12px] text-(--ink-500)">
+            <p className="text-[14px] font-medium text-(--ink-900)">Qué hizo, paso a paso</p>
+            <p className="mt-0.5 text-[12.5px] text-(--ink-500)">
               Añada un paso por cada cosa que hizo. Si en alguno usó un script, péguelo ahí mismo.
             </p>
 
@@ -691,7 +951,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
             <button
               type="button"
               onClick={() => setPasos((previos) => [...previos, { ...PASO_VACIO }])}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-dashed border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-700) transition-colors hover:border-(--accent) hover:text-(--ink-900)"
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-dashed border-(--line) px-3.5 text-[14px] font-semibold text-(--ink-700) transition-colors hover:border-(--accent) hover:text-(--ink-900)"
             >
               <Plus className="size-4" />
               Agregar paso
@@ -720,7 +980,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
                   ))}
                 </select>
               ) : (
-                <p className="text-[12.5px] text-(--ink-500)">
+                <p className="text-[13px] text-(--ink-500)">
                   Ahora mismo el sistema no alcanza ninguna base. Mándelo igual y soporte lo completa.
                 </p>
               )}
@@ -737,20 +997,20 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
               <Send className="size-4" />
               {enviar.isPending ? 'Enviando…' : 'Enviar para revisión'}
             </button>
-            <span className="text-[12.5px] text-(--ink-500)">
+            <span className="text-[13px] text-(--ink-500)">
               {listo ? 'No se publica hasta que soporte lo apruebe.' : 'Falta el título o describir los pasos.'}
             </span>
           </div>
 
           {enviar.isError && (
-            <p className="text-[12.5px] text-rose-600">No se pudo enviar: {(enviar.error as Error).message}</p>
+            <p className="text-[13px] text-rose-600">No se pudo enviar: {(enviar.error as Error).message}</p>
           )}
         </div>
       </section>
 
       {mios && mios.length > 0 && (
         <section className="border-t border-(--line) pt-6">
-          <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">Lo que ha enviado</h2>
+          <h2 className="text-[14px] font-semibold tracking-wide text-(--ink-500) uppercase">Lo que ha enviado</h2>
           <div className="mt-3 space-y-2">
             {mios.map((a) => (
               <MiAporte key={a.id} aporte={a} />
@@ -780,10 +1040,10 @@ function Paso({
   return (
     <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3.5">
       <div className="flex items-center gap-2">
-        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[11.5px] font-semibold text-(--accent)">
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[12.5px] font-semibold text-(--accent)">
           {numero}
         </span>
-        <span className="text-[12px] text-(--ink-500)">Paso {numero}</span>
+        <span className="text-[12.5px] text-(--ink-500)">Paso {numero}</span>
         {sePuedeQuitar && (
           <button
             type="button"
@@ -801,14 +1061,14 @@ function Paso({
         onChange={(e) => onCambiar({ descripcion: e.target.value })}
         rows={2}
         placeholder="Qué hizo en este paso"
-        className="mt-2 w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 text-[13.5px] leading-relaxed outline-none focus:border-(--accent)"
+        className="mt-2 w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-(--accent)"
       />
 
       {!tieneScript ? (
         <button
           type="button"
           onClick={() => onCambiar({ script: '', efecto: 'consulta' })}
-          className="mt-2 text-[12.5px] font-medium text-(--accent) hover:underline"
+          className="mt-2 text-[13px] font-medium text-(--accent) hover:underline"
         >
           + Añadir un script a este paso
         </button>
@@ -819,22 +1079,22 @@ function Paso({
             onChange={(e) => onCambiar({ script: e.target.value })}
             rows={3}
             spellCheck={false}
-            placeholder="SELECT … / UPDATE …"
-            className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
+            placeholder="SELECT …"
+            className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[13px] leading-relaxed outline-none focus:border-(--accent)"
           />
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[12px] text-(--ink-500)">Este script</span>
-            <Opcion activo={paso.efecto !== 'cambio'} onClick={() => onCambiar({ efecto: 'consulta' })}>
-              solo consulta
-            </Opcion>
-            <Opcion activo={paso.efecto === 'cambio'} onClick={() => onCambiar({ efecto: 'cambio' })} peligro>
-              cambia datos
-            </Opcion>
+            {/*
+              Aqui se elegia si el script «solo consulta» o «cambia datos». Se quito:
+              el sistema ya no ejecuta escrituras, asi que ofrecerlo seria ofrecer algo
+              que luego se rechaza. Todo script de un aporte es una consulta, y se dice
+              sin preguntarlo.
+            */}
+            <span className="mr-1 text-[12.5px] text-(--ink-500)">Este script solo consulta</span>
             <button
               type="button"
               onClick={() => onCambiar({ script: null, efecto: null })}
-              className="ml-auto text-[12px] text-(--ink-500) hover:text-rose-600"
+              className="ml-auto text-[12.5px] text-(--ink-500) hover:text-rose-600"
             >
               Quitar script
             </button>
@@ -862,7 +1122,7 @@ function Opcion({
       type="button"
       onClick={onClick}
       aria-pressed={activo}
-      className={`rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors ${
+      className={`rounded-full border px-2.5 py-0.5 text-[12.5px] font-medium transition-colors ${
         activo ? encendido : 'border-(--line) text-(--ink-500) hover:text-(--ink-700)'
       }`}
     >
@@ -874,8 +1134,8 @@ function Opcion({
 function Campo({ etiqueta, ayuda, children }: { etiqueta: string; ayuda?: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-(--ink-900)">{etiqueta}</span>
-      {ayuda && <span className="mt-0.5 block text-[12px] text-(--ink-500)">{ayuda}</span>}
+      <span className="text-[14px] font-medium text-(--ink-900)">{etiqueta}</span>
+      {ayuda && <span className="mt-0.5 block text-[12.5px] text-(--ink-500)">{ayuda}</span>}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -896,13 +1156,13 @@ function MiAporte({ aporte }: { aporte: Aporte }) {
       <div className="flex items-start gap-2.5">
         <Icono className={`mt-0.5 size-4 shrink-0 ${color}`} />
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-medium text-(--ink-900)">{aporte.titulo}</p>
-          <p className="mt-0.5 text-[12px] text-(--ink-500)">
+          <p className="text-[14px] font-medium text-(--ink-900)">{aporte.titulo}</p>
+          <p className="mt-0.5 text-[12.5px] text-(--ink-500)">
             {texto}
             {pasos > 0 ? ` · ${pasos} paso${pasos === 1 ? '' : 's'}` : ''}
             {aporte.revisado_por ? ` · revisó ${aporte.revisado_por}` : ''}
           </p>
-          {aporte.nota && <p className="mt-1.5 text-[12.5px] text-(--ink-700)">{aporte.nota}</p>}
+          {aporte.nota && <p className="mt-1.5 text-[13px] text-(--ink-700)">{aporte.nota}</p>}
         </div>
       </div>
     </div>
@@ -938,12 +1198,10 @@ function Cabecera() {
     // usuario queda encerrado dentro, así que sin elevar la cabecera entera el panel de
     // comentarios —que va después en el DOM— le pasaba por encima al desplegarlo.
     <div className="glass-panel-strong relative z-30 flex items-center gap-4 rounded-2xl border px-4 py-3 sm:px-5">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#2363eb] to-[#1aa0c8] text-[15px] font-bold text-white shadow-sm">
-        S
-      </div>
+      <Marca className="size-10" />
       <div className="min-w-0">
         <p className="truncate text-[16px] leading-tight font-semibold tracking-tight text-(--ink-900)">Soporte</p>
-        <p className="truncate text-[12px] leading-tight text-(--ink-700)">
+        <p className="truncate text-[12.5px] leading-tight text-(--ink-700)">
           Busque su problema, o cuente cómo lo resolvió.
         </p>
       </div>

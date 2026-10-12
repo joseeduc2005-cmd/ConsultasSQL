@@ -16,7 +16,7 @@ const b = JSON.parse(readFileSync('config/multidb.databases.json', 'utf8')).data
 const pool = new pg.Pool({ host: b.host, port: b.port, database: b.database, user: b.user, password: b.password });
 const { configurarPool } = await import('../src/soporte/knowledge/db.ts');
 configurarPool(() => pool);
-const { crearSoporteClienteRouter } = await import('../src/soporte/rutas-cliente.ts');
+const { crearSoporteClienteRouter } = await import('../src/soporte/adaptadores/http/rutas-cliente.ts');
 
 // Dos personas distintas; la sesión decide quién es, como en el backend real.
 let actual = { id: '1', username: 'ana.prueba' };

@@ -1,0 +1,4 @@
+# Las copias de la base de conocimiento se quedan en la máquina, no en el repositorio.
+*
+!.gitignore
+!LEEME.md

@@ -25,7 +25,7 @@ export function Markdown({ contenido }: { contenido: string }) {
             <h4 className="mt-5 mb-1.5 text-[14.5px] font-semibold text-(--ink-900) first:mt-0">{children}</h4>
           ),
           h3: ({ children }) => (
-            <h5 className="mt-4 mb-1 text-[13.5px] font-semibold text-(--ink-900) first:mt-0">{children}</h5>
+            <h5 className="mt-4 mb-1 text-[14px] font-semibold text-(--ink-900) first:mt-0">{children}</h5>
           ),
           p: ({ children }) => <p className="mb-2.5 last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="mb-2.5 ml-5 list-disc space-y-1">{children}</ul>,
@@ -39,9 +39,9 @@ export function Markdown({ contenido }: { contenido: string }) {
           // Dentro de un bloque no lleva fondo propio: lo pone el `pre`.
           code: ({ className, children }) =>
             className?.startsWith('language-') ? (
-              <code className="font-mono text-[12.5px] whitespace-pre">{children}</code>
+              <code className="font-mono text-[13px] whitespace-pre">{children}</code>
             ) : (
-              <code className="rounded bg-(--surface-2) px-1.5 py-0.5 font-mono text-[12.5px] text-(--ink-900)">
+              <code className="rounded bg-(--surface-2) px-1.5 py-0.5 font-mono text-[13px] text-(--ink-900)">
                 {children}
               </code>
             ),
@@ -56,7 +56,7 @@ export function Markdown({ contenido }: { contenido: string }) {
           hr: () => <hr className="my-4 border-(--line)" />,
           table: ({ children }) => (
             <div className="mb-3 overflow-x-auto rounded-lg border border-(--line)">
-              <table className="w-full text-left text-[13px]">{children}</table>
+              <table className="w-full text-left text-[14px]">{children}</table>
             </div>
           ),
           th: ({ children }) => (

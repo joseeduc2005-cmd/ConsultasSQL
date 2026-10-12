@@ -16,6 +16,7 @@
  * Ante un caso nuevo devuelve «sin hallazgos» y sigue haciendo falta una persona.
  */
 import { config } from './config.ts';
+import { loQuePide } from './dominio/temas/sentencia.ts';
 import { CORRECCIONES, type Correccion } from './correcciones.ts';
 import { explorarDesdeEntrada, type PropuestaExploracion, type ResultadoExploracion } from './exploracion.ts';
 import { extraerIdentificadores } from './interpreter/extraer.ts';
@@ -539,14 +540,12 @@ function contenidoDeExploracion(p: PropuestaExploracion, numeroTicket: string | 
  * que es lo correcto para un script de un solo uso.
  */
 function camposDeMarcadores(sql: string) {
-  const vistos = new Set<string>();
-  const campos: { tipo: string; nombre: string; etiqueta: string; requerido: boolean; placeholder: string }[] = [];
-  for (const m of sql.matchAll(/:([a-z_][a-z0-9_]*)/gi)) {
-    const nombre = m[1].toLowerCase();
-    if (vistos.has(nombre)) continue;
-    vistos.add(nombre);
-    campos.push({ tipo: 'text', nombre, etiqueta: nombre.replace(/_/g, ' '), requerido: true, placeholder: '' });
-  }
+  // Lo deduce `loQuePide`, que es donde vive esta regla ahora. Aquí había una copia con
+  // un fallo propio: contaba los «::int» como marcadores, así que un script con
+  // «count(*)::int» salía pidiendo un dato llamado «int».
+  const campos = loQuePide({ sql }).map((c) => ({
+    tipo: c.tipo, nombre: c.nombre, etiqueta: c.etiqueta, requerido: c.requerido, placeholder: '',
+  }));
   return campos.length > 0 ? campos : null;
 }
 

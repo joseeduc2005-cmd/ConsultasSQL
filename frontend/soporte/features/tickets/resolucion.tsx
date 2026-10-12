@@ -85,7 +85,7 @@ export function Resolucion({ ticket }: { ticket: TicketDetalle }) {
                 (publicado ? (
                   <Link
                     href={`/admin?articulo=${encodeURIComponent(publicado.id)}`}
-                    className="text-[13px] font-medium text-primary hover:underline"
+                    className="text-[14px] font-medium text-primary hover:underline"
                   >
                     Ver en categorías
                   </Link>
@@ -116,16 +116,16 @@ export function Resolucion({ ticket }: { ticket: TicketDetalle }) {
               ayuda="Qué se hizo para arreglarlo, con los pasos si fueron varios."
             />
             <div>
-              <p className="mb-1 text-[12px] font-medium text-muted-foreground">SQL, si hubo (opcional)</p>
+              <p className="mb-1 text-[12.5px] font-medium text-muted-foreground">SQL, si hubo (opcional)</p>
               <textarea
                 value={sql}
                 onChange={(e) => setSql(e.target.value)}
                 rows={4}
                 spellCheck={false}
                 placeholder={'UPDATE CORRESPONSALES.USUARIO\nSET USR_ESTADO = 1\nWHERE USR_CODIGO = :usr_codigo;'}
-                className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[12.5px] outline-none focus:border-primary/50"
+                className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[13px] outline-none focus:border-primary/50"
               />
-              <p className="mt-1 text-[11.5px] text-muted-foreground">
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
                 Los <span className="font-mono">:marcadores</span> se vuelven campos del formulario del artículo, así
                 sirve para el próximo caso.
               </p>
@@ -139,10 +139,10 @@ export function Resolucion({ ticket }: { ticket: TicketDetalle }) {
         )}
 
         {!editando && hayResolucion && !publicado && (
-          <p className="text-[12px] text-muted-foreground">
+          <p className="text-[12.5px] text-muted-foreground">
             Publicar lo deja como artículo en el árbol de categorías. A partir de ahí, cuando entre un ticket
             parecido, aparece entre los casos ya resueltos.
-            {estado && !estado.correccionesEjecutables && ' El SQL se guarda, pero sin botón de ejecutar mientras la escritura esté apagada.'}
+            {' El SQL se guarda y queda listo para consultarse; escribir no lo hace el sistema, ni aquí ni en ningún otro sitio.'}
           </p>
         )}
       </div>
@@ -163,14 +163,14 @@ function Campo({
 }) {
   return (
     <div>
-      <p className="mb-1 text-[12px] font-medium text-muted-foreground">{etiqueta}</p>
+      <p className="mb-1 text-[12.5px] font-medium text-muted-foreground">{etiqueta}</p>
       <textarea
         value={valor}
         onChange={(e) => onChange(e.target.value)}
         rows={4}
-        className="w-full rounded-lg border bg-surface px-3 py-2 text-[13px] leading-relaxed outline-none focus:border-primary/50"
+        className="w-full rounded-lg border bg-surface px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-primary/50"
       />
-      <p className="mt-1 text-[11.5px] text-muted-foreground">{ayuda}</p>
+      <p className="mt-1 text-[12.5px] text-muted-foreground">{ayuda}</p>
     </div>
   );
 }
@@ -179,10 +179,10 @@ function Vista({ titulo, texto, vacio }: { titulo: string; texto?: string | null
   return (
     <div>
       <div className="mb-1 flex items-center gap-2">
-        <p className="text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</p>
+        <p className="text-[12.5px] font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</p>
         {!texto?.trim() && <Badge tono="neutral">Pendiente</Badge>}
       </div>
-      <p className={`text-[13.5px] leading-relaxed whitespace-pre-line ${texto?.trim() ? '' : 'text-muted-foreground italic'}`}>
+      <p className={`text-[14px] leading-relaxed whitespace-pre-line ${texto?.trim() ? '' : 'text-muted-foreground italic'}`}>
         {texto?.trim() || vacio}
       </p>
     </div>

@@ -17,9 +17,9 @@ import { CORRECCIONES, accionDe, resolverPlantilla } from './correcciones.ts';
 import { explorarUsuario } from './exploracion.ts';
 import { extraerIdentificadores } from './interpreter/extraer.ts';
 import { clasificarConReglas } from './interpreter/reglas.ts';
-import { asegurarSoloLectura } from './oracle/guardia.ts';
-import type { Fila, FuenteDatos, Parametros } from './oracle/fuente.ts';
-import type { NombreConsulta } from './oracle/catalogo.ts';
+import { asegurarSoloLectura } from './dominio/oracle/guardia.ts';
+import type { Fila, FuenteDatos, Parametros } from './puertos/fuente-datos.ts';
+import type { NombreConsulta } from './dominio/oracle/catalogo.ts';
 
 // ─── Guardián de solo lectura ────────────────────────────────────────────────
 
@@ -388,13 +388,46 @@ describe('buscar precedentes', () => {
     assert.ok(q!.includes('bloqueo'), 'deberia conservar la palabra que distingue');
   });
 
-  it('acepta ocultar los artículos que no son para todos', async () => {
-    // El filtro tiene que existir ANTES de que haya pantalla de cliente: varios
-    // artículos llevan SQL y nombres de tablas, y no son para cualquiera.
-    const { buscarPrecedentes } = await import('./precedentes.ts');
-    const firma = buscarPrecedentes.toString();
-    assert.ok(firma.includes('soloPublicos'), 'debería soportar soloPublicos');
-    assert.ok(firma.includes('visible_para'), 'debería filtrar por visible_para');
+  it('pide ocultar los temas que no son para todos', async () => {
+    // El filtro tiene que existir ANTES de que haya pantalla de cliente: varios temas
+    // llevan SQL y nombres de tablas, y no son para cualquiera.
+    //
+    // Antes esto se comprobaba leyendo el texto de la función y buscando la palabra
+    // «visible_para» — una prueba que pasaba por cómo estaba escrito el código y se
+    // rompía al moverlo de archivo. Ahora se comprueba el comportamiento: que la
+    // decisión llegue de verdad a quien guarda los datos.
+    const { buscarPrecedentes } = await import('./aplicacion/buscar-precedentes.ts');
+
+    let pedido: boolean | null = null;
+    const catalogo = {
+      contarTemas: async () => 3,
+      frecuenciaDe: async (t: string[]) => t.map((termino) => ({ termino, apareceEn: 1 })),
+      buscarTemas: async (_p: unknown, soloPublicos: boolean) => {
+        pedido = soloPublicos;
+        return [];
+      },
+      buscarTickets: async () => [],
+      anotarBusqueda: async () => undefined,
+      anotarAcierto: async () => undefined,
+      busquedasSinRespuesta: async () => [],
+    };
+
+    await buscarPrecedentes(catalogo, 'usuario bloqueado del corresponsal', { soloPublicos: true });
+    assert.equal(pedido, true, 'debe pedir solo los públicos');
+
+    await buscarPrecedentes(catalogo, 'usuario bloqueado del corresponsal', {});
+    assert.equal(pedido, false, 'sin pedirlo, no debe filtrar');
+  });
+
+  it('el adaptador de PostgreSQL filtra por visible_para', async () => {
+    // El comportamiento se prueba arriba con un catálogo falso; esto comprueba que la
+    // traducción a SQL no se olvidó del filtro, que es donde se aplicaría de verdad.
+    const { readFileSync } = await import('node:fs');
+    const sql = readFileSync(
+      new URL('./adaptadores/postgres/catalogo-postgres.ts', import.meta.url),
+      'utf8',
+    );
+    assert.ok(sql.includes('visible_para'), 'la consulta debe filtrar por visible_para');
   });
 
   it('ignora las palabras demasiado cortas para distinguir', async () => {

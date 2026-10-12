@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, LayoutDashboard, Lightbulb, Radar, ScanSearch, Search, Ticket } from 'lucide-react';
+import { LayoutDashboard, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -22,22 +22,38 @@ function cabeceras(): Record<string, string> {
   }
 }
 
+/**
+ * Las secciones, en dos grupos.
+ *
+ * Tickets y Aportes van juntos bajo un encabezado común porque las dos son bandejas: a
+ * las dos llega algo de otra persona y en las dos hay que decidir. Estaban sueltas en la
+ * lista, sin nada que las relacionara.
+ *
+ * Juntos, pero no mezclados en una sola lista: un ticket es un problema sin resolver y un
+ * aporte es una solución ya encontrada. En la misma tabla, «lo que está roto» y «lo que
+ * alguien arregló» se leerían igual, y lo que se hace con cada uno no se parece — un
+ * ticket se investiga, un aporte se revisa y se publica.
+ */
 const SECCIONES = [
   { ruta: '/admin/resumen', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
   // La búsqueda por conocimiento va arriba: es lo que responde siempre, con o sin
   // base conectada, y para la mayoría de los casos es la única puerta que hace falta.
   { ruta: '/admin/solucionar', etiqueta: 'Buscar solución', icono: Search },
-  // Diagnósticos y Vigilancia solo tienen sentido con una base que investigar: uno
-  // ejecuta playbooks contra ella y el otro la sondea en segundo plano. Sin conexión
-  // se muestran apagados, en vez de dejar entrar a una pantalla que no puede hacer
-  // nada. Se reactivan solos cuando la configuración tenga una base.
-  { ruta: '/admin/diagnostico', etiqueta: 'Diagnósticos', icono: ScanSearch, requiereBase: true },
-  { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket },
-  // Lo que mandan los usuarios espera aquí. Lleva contador porque es una bandeja: si
-  // no se ve que hay algo por revisar, se queda sin revisar.
-  { ruta: '/admin/aportes', etiqueta: 'Aportes', icono: Lightbulb, contador: true },
-  { ruta: '/admin/biblioteca', etiqueta: 'Biblioteca SQL', icono: BookOpen },
-  { ruta: '/admin/vigilancia', etiqueta: 'Vigilancia', icono: Radar, requiereBase: true },
+
+  // Una sola bandeja. Eran dos entradas —Tickets y Aportes— y lo que llega de otra
+  // persona llega por un sitio: los aportes salen ahora dentro de esta lista, marcados
+  // como tales y con su propio estado. La pantalla de revisarlos sigue existiendo, se
+  // llega pulsando el aporte; lo que desaparece es tener que acordarse de mirarla.
+  { ruta: '/admin/tickets', etiqueta: 'Casos y aportes', icono: Ticket, contadorBandeja: true },
+  // Se quitaron tres opciones del menú:
+  //
+  //   Diagnósticos   ejecutaba playbooks contra una base
+  //   Biblioteca SQL las consultas catalogadas; el SQL vive ahora en las categorías
+  //   Vigilancia     sondeaba la base en segundo plano
+  //
+  // La Biblioteca sigue existiendo por debajo a propósito: sus consultas son el corpus
+  // que le enseña al motor qué palabra del negocio apunta a qué tabla. Quitar la
+  // pantalla no toca eso; borrar los datos sí habría empeorado las búsquedas.
 ];
 
 export default function NavegacionSoporte({
@@ -52,21 +68,27 @@ export default function NavegacionSoporte({
   const claro = theme === 'light';
   // Se consulta a mano y no con useQuery: esta barra también se monta en /admin, que
   // no tiene QueryClientProvider, y un hook de react-query ahí revienta la página
-  // entera. `baseDiagnosticos` viene en null cuando no hay base configurada.
-  const [sinBase, setSinBase] = useState(false);
+  // entera.
+  //
+  // Antes también se preguntaba si había base configurada, para apagar Diagnósticos y
+  // Vigilancia cuando no la hubiera. Esas dos opciones ya no existen y ninguna de las
+  // que quedan necesita una base, así que esa consulta se fue con ellas.
   const [pendientes, setPendientes] = useState(0);
+  // Los tickets sin cerrar tambien cuentan: las dos son bandejas, y una de las dos
+  // llevaba numero y la otra no, lo cual hacia parecer que solo una esperaba algo.
+  const [ticketsActivos, setTicketsActivos] = useState(0);
   useEffect(() => {
     let vigente = true;
-    fetch('/api/soporte/estado', { headers: cabeceras() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((estado) => {
-        if (vigente && estado) setSinBase(!estado.baseDiagnosticos);
-      })
-      .catch(() => undefined);
     fetch('/api/soporte/aportes?estado=pendiente', { headers: cabeceras() })
       .then((r) => (r.ok ? r.json() : null))
       .then((lista) => {
         if (vigente && Array.isArray(lista)) setPendientes(lista.length);
+      })
+      .catch(() => undefined);
+    fetch('/api/soporte/resumen', { headers: cabeceras() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (vigente && r?.tickets) setTicketsActivos((r.tickets.abiertos ?? 0) + (r.tickets.investigacion ?? 0));
       })
       .catch(() => undefined);
     return () => {
@@ -77,14 +99,17 @@ export default function NavegacionSoporte({
   return (
     <nav className={colapsado ? 'flex flex-col items-center gap-1' : 'space-y-0.5'}>
       {!colapsado && (
-        <p className="px-3 pt-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
+        <p className="px-3 pt-1 pb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
           Centro de Soporte
         </p>
       )}
 
-      {SECCIONES.map(({ ruta: destino, etiqueta, icono: Icono, exacta, requiereBase, contador }) => {
+      {SECCIONES.map((seccion) => {
+        // El encabezado «Lo que llega» vivía aquí, separando Tickets de Aportes. Con
+        // las dos bandejas unidas en una sola entrada ya no separa nada.
+        const { ruta: destino, etiqueta, icono: Icono, exacta, contadorBandeja } = seccion;
         const activa = exacta ? ruta === destino : ruta.startsWith(destino);
-        const apagada = Boolean(requiereBase) && sinBase;
+        const apagada = false;
 
         if (apagada) {
           return (
@@ -131,14 +156,26 @@ export default function NavegacionSoporte({
               }`}
             />
             {!colapsado && <span className="truncate">{etiqueta}</span>}
-            {contador && pendientes > 0 && (
+            {/* Las dos bandejas llevan su numero. El de aportes en ambar porque espera una
+                decision de alguien; el de tickets en gris porque es trabajo en curso, no
+                algo detenido esperando. */}
+            {/* Un solo numero: todo lo que espera, venga de donde venga. En ambar si hay
+                algo sin revisar, porque eso es lo que esta detenido esperando a alguien;
+                en gris si solo hay casos en curso, que es trabajo andando. */}
+            {contadorBandeja && pendientes + ticketsActivos > 0 && (
               <span
-                title={`${pendientes} por revisar`}
-                className={`ml-auto rounded-full bg-amber-500/20 px-1.5 text-[10.5px] font-semibold text-amber-600 ${
-                  colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''
-                }`}
+                title={
+                  pendientes > 0
+                    ? `${pendientes} por revisar · ${ticketsActivos} casos sin cerrar`
+                    : `${ticketsActivos} casos sin cerrar`
+                }
+                className={`ml-auto rounded-full px-1.5 text-[12px] font-semibold ${
+                  pendientes > 0
+                    ? 'bg-(--aviso)/15 text-(--aviso)'
+                    : 'bg-(--surface-2) font-medium text-(--ink-600)'
+                } ${colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''}`}
               >
-                {pendientes}
+                {pendientes + ticketsActivos}
               </span>
             )}
           </Link>

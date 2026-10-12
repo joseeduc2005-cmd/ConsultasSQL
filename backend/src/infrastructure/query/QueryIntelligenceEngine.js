@@ -1,5 +1,5 @@
-import IntentScoringEngine from './IntentScoringEngine.js';
-import { SchemaVocabularyBuilder } from './SchemaVocabularyBuilder.js';
+import IntentScoringEngine from '../../dominio/consultas/IntentScoringEngine.js';
+import { SchemaVocabularyBuilder } from '../../dominio/consultas/SchemaVocabularyBuilder.js';
 
 export class QueryIntelligenceEngine {
   constructor(queryBuilder) {

@@ -1,6 +1,6 @@
 import { config } from '../config.ts';
 import { CORRECCIONES, accionDe } from '../correcciones.ts';
-import type { Fila } from '../oracle/fuente.ts';
+import type { Fila } from '../puertos/fuente-datos.ts';
 import { CAMPO_CEDULA, CAMPO_MAC, CAMPO_USUARIO } from './campos.ts';
 import {numero, texto} from './motor.ts';
 import type { Contexto, Playbook } from './tipos.ts';

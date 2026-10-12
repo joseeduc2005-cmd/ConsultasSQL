@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { withAuth } from '../components/ProtectedRoute';
 import { useTheme } from '../components/ThemeProvider';
 import CabeceraPanel from '../components/CabeceraPanel';
-import BarraLateralPanel from '../components/BarraLateralPanel';
+import BarraLateralPanel, { agruparCategorias } from '../components/BarraLateralPanel';
 import ContentPanel from '../components/ContentPanel';
+import PanelDeEntrada from '../components/PanelDeEntrada';
 import CommentsSection from '../components/CommentsSection';
 import WorkflowBuilder from '@/components/WorkflowBuilder/WorkflowBuilder';
 import { KnowledgeArticle } from '../types';
@@ -100,21 +101,9 @@ function AdminPage() {
     setAssistantQuery(null);
   }, []);
 
-  const buildCategoriesFromArticles = (source: KnowledgeArticle[]) => {
-    const categoryMap = new Map<string, Set<string>>();
-
-    source.forEach((article) => {
-      const cat = article.categoria || 'Sin categoria';
-      const sub = article.subcategoria || 'General';
-      if (!categoryMap.has(cat)) categoryMap.set(cat, new Set());
-      categoryMap.get(cat)?.add(sub);
-    });
-
-    return Array.from(categoryMap.entries()).map(([categoria, subcats]) => ({
-      categoria,
-      subcategorias: Array.from(subcats),
-    }));
-  };
+  // Era una copia de `agruparCategorias`, con su propio «General» escrito a mano. Dos
+  // copias de la misma regla es como se separan: ahora hay una.
+  const buildCategoriesFromArticles = agruparCategorias;
 
   useEffect(() => {
     const userJson = localStorage.getItem('user');
@@ -836,25 +825,27 @@ function AdminPage() {
         onLogout={handleLogout}
         primaryActionLabel="Ir a Panel SQL Automático"
         onPrimaryAction={() => router.push('/dashboard')}
-        derecha={<span className="glass-pill rounded-full px-3 py-1 text-sm text-(--ink-700)">Articulos: {articleCount}</span>}
-      >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <input value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Buscar..." className="input-glass flex-1 min-w-[220px] p-2 rounded-xl" />
-            {currentUser?.role === 'admin' ? (
-              <div className="flex flex-wrap gap-2">
-                <button onClick={openUploadModal} className="btn-accent px-4 py-2 rounded-xl text-sm font-semibold">Subir Nueva Solucion MD</button>
-                {selectedArticle && (
-                  <>
-                    <button onClick={() => openEditModal(selectedArticle)} className="glass-pill px-4 py-2 rounded-xl text-(--ink-900) transition-colors hover:bg-white/85">Editar articulo</button>
-                    <button onClick={() => handleDelete(selectedArticle.id)} className="bg-[#fff1f1]/90 text-red-700 border border-red-200 hover:bg-[#ffe3e3] px-4 py-2 rounded-xl transition-colors">Eliminar articulo</button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <button className="hidden" />
+        /* El buscador vivia en una segunda fila de ancho completo, para un campo que se
+           usa con una mano y lejos del arbol de temas, que es con lo unico que tiene que
+           ver. Se fue a la barra lateral. Y con el fuera, la segunda fila se quedaba con
+           un boton solo flotando sobre una linea: una fila entera para un boton parece
+           que falta algo, asi que la accion sube aqui y la fila desaparece. */
+        derecha={
+          <>
+            <span className="glass-pill hidden px-3 py-1 text-[13px] text-(--ink-600) md:inline">
+              {articleCount} artículos
+            </span>
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={openUploadModal}
+                className="btn-accent rounded-[10px] px-4 py-2 text-[14px] font-medium"
+              >
+                Nueva solución
+              </button>
             )}
-          </div>
-      </CabeceraPanel>
+          </>
+        }
+      />
 
       <div className="flex-1 min-h-0 w-full py-4">
         <div className="flex gap-3 h-full min-w-0">
@@ -870,15 +861,13 @@ function AdminPage() {
               selectedArticle={selectedArticle || undefined}
               collapsed={sidebarCollapsed}
               onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+              busqueda={searchQuery}
+              onBuscar={handleSearchChange}
             />
           </aside>
 
           {!selectedArticle ? (
-            <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 flex flex-col items-center justify-center gap-3">
-              <div className="text-4xl opacity-30">📄</div>
-              <p className="text-base font-medium text-(--ink-700)">Selecciona un artículo del menú</p>
-              <p className="text-xs text-(--ink-500)">Haz clic en una categoría o usa el buscador</p>
-            </section>
+            <PanelDeEntrada articulos={visibleArticles} onAbrir={handleArticleSelect} />
           ) : (
             <>
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 overflow-auto">

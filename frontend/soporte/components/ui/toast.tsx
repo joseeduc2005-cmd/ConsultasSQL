@@ -31,7 +31,7 @@ export function AvisosProvider({ children }: { children: ReactNode }) {
             {a.tipo === 'exito' ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" /> : <CircleAlert className="mt-0.5 size-4 shrink-0 text-danger" />}
             <div className="min-w-0 flex-1">
               <p className={cn('text-sm font-medium')}>{a.titulo}</p>
-              {a.detalle && <p className="mt-0.5 text-[13px] text-muted-foreground">{a.detalle}</p>}
+              {a.detalle && <p className="mt-0.5 text-[14px] text-muted-foreground">{a.detalle}</p>}
             </div>
             <button type="button" onClick={() => quitar(a.id)} className="text-muted-foreground hover:text-foreground" aria-label="Cerrar aviso">
               <X className="size-3.5" />

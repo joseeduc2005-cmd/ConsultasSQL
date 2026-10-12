@@ -1,8 +1,22 @@
 // ─── Admin page shared types and constants ────────────────────────────────────
 
-export type SolutionType = 'lectura' | 'database' | 'script';
+// «dinamico» es el tipo de ahora: el articulo pide los datos que le falten —una
+// cedula, un numero de transaccion— y consulta. Los nombres viejos (database,
+// script) se siguen aceptando al leer contenido ya creado, pero no se ofrecen.
+export type SolutionType = 'lectura' | 'dinamico' | 'database' | 'script';
 export type ScriptCreationMode = 'visual_builder' | 'json_unificado' | 'codigo_manual';
-export type WorkflowActionType = 'select' | 'update' | 'insert' | 'delete' | 'validacion';
+// Lo que se puede CREAR: sin update, insert ni delete, porque el sistema ya no
+// escribe. Un articulo pide los datos que le falten y consulta.
+export type WorkflowActionType = 'select' | 'validacion';
+
+// Lo que se puede LEER. Un articulo creado antes del cambio puede traer pasos de
+// escritura, y hay que poder abrirlo en el editor para convertirlo o borrarlo —si el
+// editor no los reconociera, se veria vacio, que es peor que verlo y que diga que ya
+// no se ejecuta. Ejecutarlos sigue siendo imposible: el backend los rechaza.
+export type WorkflowActionTypeLeible = WorkflowActionType | 'update' | 'insert' | 'delete';
+
+/** Los tipos de paso retirados, para poder avisar al abrir un articulo viejo. */
+export const WORKFLOW_ACTION_TYPES_RETIRADOS = ['update', 'insert', 'delete'] as const;
 export type WorkflowTableName = 'users' | 'sessions' | 'logs' | 'employees';
 export type WorkflowValidationCondition = 'existe' | 'no_existe' | 'igual';
 
@@ -25,7 +39,7 @@ export type WorkflowStepConfig = {
 export type WorkflowRow = {
   orden: number;
   descripcion: string;
-  tipo: WorkflowActionType | '';
+  tipo: WorkflowActionTypeLeible | '';
   tabla: WorkflowTableName | '';
   config: WorkflowStepConfig;
 };
@@ -55,8 +69,8 @@ export type WorkflowValidationResult = {
   rowErrors: Record<number, string[]>;
 };
 
-export const WORKFLOW_ACTION_TYPES: WorkflowActionType[] = ['select', 'update', 'insert', 'delete', 'validacion'];
-export const DATABASE_ACTION_TYPES: WorkflowActionType[] = ['select', 'update', 'insert', 'delete'];
+export const WORKFLOW_ACTION_TYPES: WorkflowActionType[] = ['select', 'validacion'];
+export const DATABASE_ACTION_TYPES: WorkflowActionType[] = ['select'];
 export const WORKFLOW_TABLES: WorkflowTableName[] = ['users', 'sessions', 'logs', 'employees'];
 export const VALIDATION_CONDITIONS: WorkflowValidationCondition[] = ['existe', 'no_existe', 'igual'];
 export const SCRIPT_CREATION_MODES: Array<{ value: ScriptCreationMode; label: string; level: string }> = [

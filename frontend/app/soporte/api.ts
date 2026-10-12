@@ -59,7 +59,8 @@ export interface Tema {
 export interface PasoAporte {
   descripcion: string;
   script: string | null;
-  efecto: 'consulta' | 'cambio' | null;
+  // Ya no existe 'cambio': el sistema no ejecuta escrituras.
+  efecto: 'consulta' | null;
 }
 
 export interface AporteNuevo {
@@ -86,6 +87,23 @@ export interface Aporte extends Omit<AporteNuevo, 'pasos'> {
   creado_en: string;
 }
 
+
+/** Un dato que hay que rellenar antes de poder ejecutar un tema. */
+export interface CampoPedido {
+  nombre: string;
+  etiqueta: string;
+  tipo: string;
+  requerido: boolean;
+}
+
+/** Lo que devuelve ejecutar un tema. */
+export interface ResultadoTema {
+  titulo: string;
+  resumen: string | null;
+  columnas: string[];
+  filas: Record<string, unknown>[];
+}
+
 export const clienteApi = {
   solucionar: (texto: string) =>
     pedir<{ consulta: string; precedentes: PrecedentePublico[] }>('/solucionar', {
@@ -101,13 +119,28 @@ export const clienteApi = {
       contenido: string | null;
       categoria: string | null;
       /**
-       * Viene ya formateada para leerla —SQL, la instrucción de Mongo, o JSON si es
-       * una forma que todavía no se reconoce—. Ejecutarla es cosa del panel: aquí no
-       * hay con qué.
+       * Viene ya formateada para leerla: SQL, la instrucción de Mongo, o JSON si es una
+       * forma que todavía no se reconoce.
        */
       sentencia: { lenguaje: string; texto: string } | null;
       base: string | null;
+      /** Si el tema corre algo. Uno de lectura no tiene nada que ejecutar. */
+      ejecutable: boolean;
+      /** Los datos que le faltan, deducidos de los marcadores de la sentencia. */
+      pide: CampoPedido[];
     }>(`/temas/${encodeURIComponent(id)}`),
+
+  /**
+   * Ejecuta el tema con los datos que se le dieron.
+   *
+   * Solo consulta: ningún tema pasa el guardián del backend con una escritura, así que
+   * lo peor que puede salir de aquí es una tabla.
+   */
+  ejecutarTema: (id: string, datos: Record<string, string>) =>
+    pedir<ResultadoTema>(`/temas/${encodeURIComponent(id)}/ejecutar`, {
+      method: 'POST',
+      body: JSON.stringify({ datos }),
+    }),
 
   /** No publica: queda pendiente de que soporte lo revise. */
   aportar: (datos: AporteNuevo) =>

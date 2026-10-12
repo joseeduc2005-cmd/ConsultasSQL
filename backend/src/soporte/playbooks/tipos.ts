@@ -1,6 +1,6 @@
 import type { ModoOracle } from '../config.ts';
-import type { NombreConsulta } from '../oracle/catalogo.ts';
-import type { Fila, Parametros } from '../oracle/fuente.ts';
+import type { NombreConsulta } from '../dominio/oracle/catalogo.ts';
+import type { Fila, Parametros } from '../puertos/fuente-datos.ts';
 
 export type EstadoPaso = 'ok' | 'alerta' | 'falla' | 'omitido' | 'error';
 export type Severidad = 'critica' | 'alta' | 'media' | 'info';

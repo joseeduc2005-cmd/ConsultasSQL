@@ -3,6 +3,7 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import BuscadorBarra from './BuscadorBarra';
 import NavegacionSoporte from './NavegacionSoporte';
 import Sidebar from './Sidebar';
 import type { KnowledgeArticle } from '../types';
@@ -12,11 +13,27 @@ interface Categoria {
   subcategorias: string[];
 }
 
+/**
+ * Cómo se llama la subcategoría de un artículo que no tiene ninguna.
+ *
+ * Está aquí y no repetido en cada sitio porque el árbol se arma en dos pasos —agrupar y
+ * repartir— y los dos tenían su propia versión: el primero sustituía el vacío por
+ * «General» y el segundo comparaba con el valor crudo. Para un artículo sin subcategoría
+ * eso era `null === 'General'`, falso siempre, así que la categoría salía en la lista y
+ * al desplegarla no había nada debajo. Como ninguno de los artículos tiene subcategoría,
+ * no se veía ni uno.
+ */
+export const SIN_SUBCATEGORIA = 'General';
+
+export function subcategoriaDe(articulo: KnowledgeArticle): string {
+  return articulo.subcategoria?.trim() || SIN_SUBCATEGORIA;
+}
+
 export function agruparCategorias(articulos: KnowledgeArticle[]): Categoria[] {
   const mapa = new Map<string, Set<string>>();
   articulos.forEach((a) => {
     const cat = a.categoria || 'Sin categoria';
-    const sub = a.subcategoria || 'General';
+    const sub = subcategoriaDe(a);
     if (!mapa.has(cat)) mapa.set(cat, new Set());
     mapa.get(cat)?.add(sub);
   });
@@ -50,6 +67,8 @@ export default function BarraLateralPanel({
   onToggleCollapse,
   mostrarSoporte = true,
   onNavegar,
+  busqueda,
+  onBuscar,
 }: {
   articles?: KnowledgeArticle[];
   categories?: Categoria[];
@@ -62,10 +81,15 @@ export default function BarraLateralPanel({
   onToggleCollapse?: () => void;
   mostrarSoporte?: boolean;
   onNavegar?: () => void;
+  /** El buscador vive aqui, encima del arbol: buscar y navegar son la misma tarea. */
+  busqueda?: string;
+  onBuscar?: (texto: string) => void;
 }) {
   const router = useRouter();
   const autonoma = articles === undefined;
   const [propios, setPropios] = useState<KnowledgeArticle[]>([]);
+  /** El filtro de la barra, para las paginas que no traen el suyo. */
+  const [filtroPropio, setFiltroPropio] = useState('');
   // Hasta que la petición termine no se sabe si hay categorías o no, y decir «no hay»
   // mientras se están pidiendo es afirmar algo que todavía no es cierto.
   const [cargando, setCargando] = useState(true);
@@ -94,8 +118,19 @@ export default function BarraLateralPanel({
     return () => { vigente = false; };
   }, [autonoma]);
 
-  const lista = autonoma ? propios : articles;
-  const grupos = categories ?? agruparCategorias(lista ?? []);
+  const todos = autonoma ? propios : articles;
+
+  // Cuando la pagina no filtra su propia lista, filtra la barra. Asi el campo sirve en
+  // tickets y en aportes, que es donde hace falta para llegar a un tema sin volver atras.
+  const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const aguja = onBuscar ? '' : plano(filtroPropio.trim());
+  const lista = !aguja
+    ? todos
+    : (todos ?? []).filter((a) => plano(`${a.titulo} ${a.categoria ?? ''}`).includes(aguja));
+
+  const grupos = aguja
+    ? agruparCategorias(lista ?? [])
+    : categories ?? agruparCategorias(lista ?? []);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -113,6 +148,24 @@ export default function BarraLateralPanel({
           {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
         </button>
       </div>
+
+      {/* Arriba del todo porque es lo primero que se intenta: quien ya sabe donde esta
+          baja al arbol, y quien no lo sabe, escribe.
+
+          Siempre, no solo cuando la pagina pasa un manejador. Antes solo se pintaba en
+          /admin, y en tickets o aportes —donde la barra es la misma— desaparecia: un
+          campo que esta o no esta segun la pantalla no es un campo, es una sorpresa. */}
+      <BuscadorBarra
+        valor={onBuscar ? (busqueda ?? '') : filtroPropio}
+        onCambio={onBuscar ?? setFiltroPropio}
+        colapsado={collapsed}
+      />
+
+      {/* Una linea entre el campo y «Buscar solucion». Quedaban pegados, con la misma lupa
+          y el mismo tamano, y hacen cosas distintas: este recorta la lista de temas, el
+          otro busca por significado en toda la base. Sin nada en medio no habia como
+          saber cual es cual. */}
+      {!collapsed && <div className="mx-1 mb-2 border-t border-(--line)" />}
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}

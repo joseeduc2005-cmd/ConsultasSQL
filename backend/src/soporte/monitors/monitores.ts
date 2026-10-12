@@ -1,6 +1,6 @@
 import { config } from '../config.ts';
 import type { AlertaDetectada } from '../knowledge/alertas.ts';
-import type { FuenteDatos } from '../oracle/fuente.ts';
+import type { FuenteDatos } from '../puertos/fuente-datos.ts';
 
 export interface Monitor {
   id: string;

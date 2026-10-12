@@ -12,7 +12,10 @@
     "dev": "node src/app.js",
     "build": "tsc",
     "start": "node src/app.js",
-    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "respaldo": "node herramientas/respaldo.mjs",
+    "lint": "eslint src --ext .js,.ts",
+    "lint:errores": "eslint src --ext .js,.ts --quiet",
+    "test": "node --test --experimental-strip-types \"src/dominio/**/*.test.js\" \"src/adaptadores/**/*.test.js\" src/soporte/soporte.test.ts",
     "test:soporte": "node --test src/soporte/soporte.test.ts"
   },
   "keywords": [

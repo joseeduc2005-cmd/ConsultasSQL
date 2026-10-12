@@ -601,7 +601,7 @@ function DashboardPage() {
                 ))}
               </select>
               {selectedDatabase && (
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'}`}>
+                <span className={`rounded-full border px-2 py-0.5 text-[12px] font-semibold ${isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'}`}>
                   ✓ seleccionada
                 </span>
               )}
@@ -661,7 +661,7 @@ function DashboardPage() {
                     <p className="wrap-break-word font-medium">{presentationPlan.headline}</p>
                     <p className="mt-1 wrap-break-word opacity-90">{presentationPlan.reason}</p>
                     {result?.resumenHumano ? (
-                      <p className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg border border-emerald-300/40 bg-white/60 px-2 py-1.5 text-[11px] leading-relaxed dark:bg-slate-900/50">
+                      <p className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg border border-emerald-300/40 bg-white/60 px-2 py-1.5 text-[12px] leading-relaxed dark:bg-slate-900/50">
                         {result.resumenHumano}
                       </p>
                     ) : null}
@@ -673,15 +673,15 @@ function DashboardPage() {
 
           <div className={panelClass}>
             <p className={`text-sm font-semibold ${isLightTheme ? 'text-sky-700' : 'text-cyan-200'}`}>Visualización automática</p>
-            <p className={`mt-1 wrap-break-word text-[11px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Modo: {presentationPlan.mode} · {presentationPlan.reason}</p>
+            <p className={`mt-1 wrap-break-word text-[12px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Modo: {presentationPlan.mode} · {presentationPlan.reason}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'}`}>
+              <span className={`rounded-full border px-2.5 py-0.5 text-[12px] font-semibold ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'}`}>
                 {chartTypeLabel}
               </span>
-              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] ${isLightTheme ? 'border-slate-200 bg-white text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+              <span className={`rounded-full border px-2.5 py-0.5 text-[12px] ${isLightTheme ? 'border-slate-200 bg-white text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>
                 {visualizationSummary.rowCount} filas
               </span>
-              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] ${isLightTheme ? 'border-slate-200 bg-white text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+              <span className={`rounded-full border px-2.5 py-0.5 text-[12px] ${isLightTheme ? 'border-slate-200 bg-white text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>
                 {visualizationSummary.columnCount} columnas
               </span>
             </div>
@@ -787,12 +787,12 @@ function DashboardPage() {
 
                   {visualizationSummary.columns.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-[11px] font-semibold opacity-80">Campos detectados</p>
+                      <p className="text-[12px] font-semibold opacity-80">Campos detectados</p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {visualizationSummary.columns.map((col) => (
                           <span
                             key={`viz-col-${col}`}
-                            className={`rounded-full border px-2 py-0.5 text-[10px] ${isLightTheme ? 'border-sky-200 bg-white' : 'border-slate-700 bg-slate-900'}`}
+                            className={`rounded-full border px-2 py-0.5 text-[12px] ${isLightTheme ? 'border-sky-200 bg-white' : 'border-slate-700 bg-slate-900'}`}
                           >
                             {col}
                           </span>
@@ -803,7 +803,7 @@ function DashboardPage() {
 
                   {visualizationSummary.preview.length > 0 && (
                     <div className="mt-3 space-y-1 text-xs">
-                      <p className="text-[11px] font-semibold opacity-80">Vista rápida (primera fila)</p>
+                      <p className="text-[12px] font-semibold opacity-80">Vista rápida (primera fila)</p>
                       {visualizationSummary.preview.map(([key, value]) => (
                         <div key={`viz-preview-${key}`} className="flex items-start justify-between gap-3">
                           <span className="opacity-70">{key}</span>
@@ -815,7 +815,7 @@ function DashboardPage() {
 
                   {resultInsights.length > 0 && (
                     <div className="mt-3 space-y-1.5 text-xs">
-                      <p className="text-[11px] font-semibold opacity-80">Hallazgos clave</p>
+                      <p className="text-[12px] font-semibold opacity-80">Hallazgos clave</p>
                       {resultInsights.map((insight, idx) => (
                         <p key={`insight-${idx}`} className={`rounded-md border px-2 py-1 ${isLightTheme ? 'border-sky-200 bg-white' : 'border-slate-700 bg-slate-900'}`}>
                           {insight}
@@ -838,8 +838,8 @@ function DashboardPage() {
                   </div>
                   {debugTrace.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-[11px] font-semibold opacity-90">Traza</p>
-                      <ul className="mt-1 space-y-1 text-[11px]">
+                      <p className="text-[12px] font-semibold opacity-90">Traza</p>
+                      <ul className="mt-1 space-y-1 text-[12px]">
                         {debugTrace.map((frame, index) => {
                           const fileName = String(frame?.archivo || frame?.raw || '').trim();
                           const line = Number.isFinite(Number(frame?.linea)) ? Number(frame.linea) : null;
@@ -881,7 +881,7 @@ function DashboardPage() {
                 {debugTrace.length > 0 && (
                   <div className="mt-2">
                     <p className="font-semibold">Traza</p>
-                    <ul className="mt-1 space-y-1 text-[11px]">
+                    <ul className="mt-1 space-y-1 text-[12px]">
                       {debugTrace.map((frame, index) => {
                         const fileName = String(frame?.archivo || frame?.raw || '').trim();
                         const line = Number.isFinite(Number(frame?.linea)) ? Number(frame.linea) : null;
@@ -901,7 +901,7 @@ function DashboardPage() {
                   <thead>
                     <tr className={`sticky top-0 z-10 ${isLightTheme ? 'bg-sky-50/95' : 'bg-slate-950/95'}`}>
                       {Object.keys(result.data![0]).map((col) => (
-                        <th key={col} className={`max-w-[200px] whitespace-normal wrap-break-word px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+                        <th key={col} className={`max-w-[200px] whitespace-normal wrap-break-word px-3 py-2.5 text-left text-[12px] font-semibold uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                           {col}
                         </th>
                       ))}
@@ -926,7 +926,7 @@ function DashboardPage() {
                               {boolValue === null ? (
                                 <span className="leading-relaxed">{formatCellValue(rawValue)}</span>
                               ) : (
-                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${boolValue
+                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-semibold ${boolValue
                                   ? (isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300')
                                   : (isLightTheme ? 'border-slate-300 bg-slate-100 text-slate-700' : 'border-slate-600 bg-slate-800 text-slate-300')
                                 }`}>
@@ -954,7 +954,7 @@ function DashboardPage() {
               <button
                 onClick={clearHistory}
                 disabled={clearingHistory}
-                className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition ${isLightTheme ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100' : 'border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'} disabled:opacity-60`}
+                className={`rounded-lg border px-2 py-1 text-[12px] font-semibold transition ${isLightTheme ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100' : 'border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'} disabled:opacity-60`}
               >
                 {clearingHistory ? 'Limpiando...' : 'Borrar'}
               </button>
@@ -999,11 +999,11 @@ function DashboardPage() {
                         <td className={`px-2 py-2 ${isLightTheme ? 'text-slate-700' : 'text-slate-200'}`}>{row.username}</td>
                         <td className={`px-2 py-2 ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`}>{row.execution_ms}</td>
                         <td className={`px-2 py-2 ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`}>
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusClass(row.status)}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[12px] font-semibold uppercase ${statusClass(row.status)}`}>
                             {row.status}
                           </span>
                           {row.was_cached ? (
-                            <span className={`ml-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${isLightTheme ? 'border-sky-300 bg-sky-100 text-sky-700' : 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'}`}>
+                            <span className={`ml-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold uppercase ${isLightTheme ? 'border-sky-300 bg-sky-100 text-sky-700' : 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'}`}>
                               cache
                             </span>
                           ) : null}

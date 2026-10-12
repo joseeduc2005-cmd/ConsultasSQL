@@ -1,9 +1,14 @@
 import path from 'path';
 import { askOllama } from '../ai/OllamaClient.js';
+import { ERROR_TRIGGER_RE, detectErrorAnalysisInput } from '../../dominio/consultas/errores.js';
+
+export { detectErrorAnalysisInput };
 
 const ERROR_AI_CONFIDENCE_THRESHOLD = 0.6;
 
-const ERROR_TRIGGER_RE = /\b(error|exception|failed|failure|refused|denied|timeout|timed\s+out|undefined|null|cannot|syntax\s+error|connection|authentication|unauthorized|forbidden|trace|stack|traceback|fatal|panic|crash)\b/i;
+// La regla de que cuenta como un error se mudo a dominio/consultas/errores.js: es
+// una comparacion de texto, no infraestructura. Se reexporta para no romper a
+// quien ya la importaba de aqui.
 
 const MESSAGE_COLUMNS = ['mensaje', 'message', 'msg', 'error', 'descripcion', 'description', 'detail', 'details', 'exception', 'reason'];
 const STACK_COLUMNS = ['stack', 'stacktrace', 'trace', 'traceback', 'detalle', 'details'];
@@ -467,10 +472,6 @@ async function searchHistorySource(pool, source, analysis, limit) {
     frequency: Number(countResult.rows?.[0]?.total || 0),
     source: `${source.schema}.${source.table}`,
   };
-}
-
-export function detectErrorAnalysisInput(text = '') {
-  return ERROR_TRIGGER_RE.test(String(text || ''));
 }
 
 export function analyzeErrorInput(text = '') {

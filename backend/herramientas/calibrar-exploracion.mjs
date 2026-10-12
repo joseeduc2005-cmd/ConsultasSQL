@@ -123,7 +123,7 @@ await fuente.cerrar();
 /*
  * Nota: `usuariosActivosMuestra` todavía no está en el catálogo porque sacar una
  * muestra de usuarios completa no hace falta para diagnosticar, solo para calibrar.
- * Para correr esta parte, agregue a `oracle/catalogo.ts`:
+ * Para correr esta parte, agregue a `dominio/oracle/catalogo.ts`:
  *
  *   usuariosActivosMuestra: {
  *     descripcion: 'Muestra de usuarios que operaron, para calibrar la exploración',

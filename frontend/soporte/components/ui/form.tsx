@@ -25,7 +25,7 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
 }
 
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
-  return <label className={cn('text-[13px] font-medium text-foreground', className)} {...props} />;
+  return <label className={cn('text-[14px] font-medium text-foreground', className)} {...props} />;
 }
 
 export function Campo({ etiqueta, ayuda, error, children, htmlFor }: { etiqueta: string; ayuda?: ReactNode; error?: string; children: ReactNode; htmlFor?: string }) {

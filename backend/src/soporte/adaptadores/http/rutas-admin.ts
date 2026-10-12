@@ -1,0 +1,554 @@
+/**
+ * Rutas HTTP del módulo de soporte, montadas bajo /api/soporte.
+ *
+ * Reemplaza a los plugins de Fastify de ticket v2.0 (routes/sistema, tickets,
+ * consultas, diagnosticos, vigilancia) por un único router de Express, que es
+ * lo que usa el backend de ConsultasSQL.
+ *
+ * Pendiente a propósito: /interpretar, porque depende del modelo de lenguaje.
+ */
+import { asegurarSoloConsulta } from '../../../dominio/scripts/validacion.js';
+import { contarAportesPendientes } from '../../aportes.ts';
+import { Router, type NextFunction, type Request, type Response } from 'express';
+import { aceptarAporte, listarAportes, obtenerAporte, rechazarAporte, type RevisionAporte } from '../../aportes.ts';
+import { config } from '../../config.ts';
+import { ErrorHttp, noEncontrado, solicitudInvalida, textoOpcional, textoRequerido } from './errores.ts';
+import { categoriasConsultas, listarConsultas, obtenerConsulta } from '../../knowledge/consultas.ts';
+import { filas } from '../../knowledge/db.ts';
+import {
+  ESTADOS_TICKET,
+  actualizarTicket,
+  agregarPaso,
+  buscarSimilares,
+  guardarTicket,
+  listarTickets,
+  obtenerTicket,
+} from '../../knowledge/tickets.ts';
+import { basesParaTickets, fuente } from '../../oracle/index.ts';
+import type { EstadoFuente } from '../../puertos/fuente-datos.ts';
+import { buscarPrecedentes, busquedasFallidas } from '../../precedentes.ts';
+import { diagnosticarTicket, publicarSolucionDeTicket } from '../../solucion.ts';
+import { construirVocabulario, sembrarVocabulario } from '../../vocabulario.ts';
+import type { ResultadoDiagnostico } from '../../playbooks/tipos.ts';
+
+type Manejador = (req: Request, res: Response) => Promise<unknown>;
+
+/**
+ * Express 4 no captura promesas rechazadas: sin este envoltorio, cualquier `throw`
+ * dentro de un handler async se convierte en una petición colgada.
+ * Lo que devuelve el handler se envía como JSON; si ya respondió, no se toca.
+ */
+const h =
+  (manejador: Manejador) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    manejador(req, res)
+      .then((valor) => {
+        if (!res.headersSent && valor !== undefined) res.json(valor);
+      })
+      .catch(next);
+  };
+
+const texto = (v: unknown): string | null => textoOpcional(v);
+
+const CAMPOS_TICKET = [
+  'titulo', 'descripcion', 'autor', 'sistema', 'modulo', 'categoria', 'prioridad', 'estado',
+  'resultado', 'url_sir', 'causa_raiz', 'solucion', 'observaciones', 'creado_en', 'resuelto_en',
+  'base_datos',
+] as const;
+
+
+const ETIQUETA_ESTADO = { ok: 'OK', alerta: 'ALERTA', falla: 'FALLA', omitido: 'OMITIDO', error: 'ERROR' } as const;
+
+/**
+ * Sondeo de Oracle con caché y espera acotada.
+ *
+ * `/estado` lo consultan la cabecera y la barra lateral cada minuto. Sin esto, con
+ * Oracle inalcanzable cada llamada esperaba a que el driver se rindiera y la interfaz
+ * se quedaba colgada. Ahora: se responde en 2,5 s como mucho, el sondeo real termina
+ * en segundo plano y su resultado queda cacheado para las siguientes llamadas.
+ */
+const ESTADO_TTL_MS = 30_000;
+const ESTADO_ESPERA_MS = 2_500;
+let estadoCacheado: { valor: EstadoFuente; expira: number } | null = null;
+let sondeoEnCurso: Promise<void> | null = null;
+
+/**
+ * Sondea Oracle al arrancar, sin bloquear: así la primera pantalla que pida el
+ * estado ya lo encuentra en caché en vez de esperar.
+ */
+export function precalentarEstadoOracle(): void {
+  void lanzarSondeo();
+}
+
+function lanzarSondeo(): Promise<void> {
+  if (sondeoEnCurso) return sondeoEnCurso;
+  sondeoEnCurso = fuente
+    .estado()
+    .then((valor) => {
+      estadoCacheado = { valor, expira: Date.now() + ESTADO_TTL_MS };
+    })
+    .catch((error: unknown) => {
+      estadoCacheado = {
+        valor: { modo: fuente.modo, conectado: false, detalle: (error as Error).message },
+        expira: Date.now() + ESTADO_TTL_MS,
+      };
+    })
+    .finally(() => {
+      sondeoEnCurso = null;
+    });
+  return sondeoEnCurso;
+}
+
+async function estadoOracle(): Promise<EstadoFuente & { comprobando?: boolean }> {
+  const fresco = estadoCacheado && estadoCacheado.expira > Date.now();
+  if (fresco) return estadoCacheado!.valor;
+
+  const sondeo = lanzarSondeo();
+
+  // Con un valor anterior a mano se devuelve al instante y el sondeo se refresca
+  // por detrás: solo la primera llamada de todas llega a esperar.
+  if (estadoCacheado) return estadoCacheado.valor;
+
+  await Promise.race([sondeo, new Promise((listo) => setTimeout(listo, ESTADO_ESPERA_MS))]);
+  return (
+    estadoCacheado?.valor ?? {
+      modo: fuente.modo,
+      conectado: false,
+      detalle: 'Comprobando la conexión…',
+      comprobando: true,
+    }
+  );
+}
+
+/**
+ * Numera un caso registrado sin referencia externa: CASO-2026-0001.
+ *
+ * Se cuenta solo sobre los que ya llevan este formato, para no chocar con los
+ * números del SIR ni con los que alguien escriba a mano.
+ */
+async function siguienteNumero(): Promise<string> {
+  const anio = new Date().getFullYear();
+  const [fila] = await filas<{ ultimo: string | null }>(
+    `SELECT MAX(numero) AS ultimo FROM soporte.tickets WHERE numero LIKE $1`,
+    [`CASO-${anio}-%`],
+  );
+  const correlativo = Number(fila?.ultimo?.split('-')[2] ?? 0) + 1;
+  return `CASO-${anio}-${String(correlativo).padStart(4, '0')}`;
+}
+
+function validarEstadoTicket(estado: unknown): void {
+  if (estado !== undefined && !(ESTADOS_TICKET as readonly unknown[]).includes(estado)) {
+    throw solicitudInvalida(`Estado inválido. Valores permitidos: ${ESTADOS_TICKET.join(', ')}.`);
+  }
+}
+
+/** Convierte un diagnóstico en un paso de investigación del ticket. */
+function pasoDesdeDiagnostico(r: ResultadoDiagnostico) {
+  const consultas = r.pasos.flatMap((p) => p.consultas);
+  return {
+    titulo: `Diagnóstico automático: ${r.nombrePlaybook}`,
+    fecha: r.inicio.slice(0, 16).replace('T', ' '),
+    sql: consultas.length
+      ? consultas.map((c) => `-- ${c.descripcion}${c.biblioteca ? ` (${c.biblioteca})` : ''}\n${c.sql};`).join('\n\n')
+      : null,
+    resultado: r.pasos.map((p) => `[${ETIQUETA_ESTADO[p.estado]}] ${p.titulo}: ${p.detalle}`).join('\n'),
+    evidencia: `Datos de entrada: ${Object.entries(r.entrada).map(([k, v]) => `${k}=${v}`).join(', ')} · Fuente: ${r.origenDatos === 'demo' ? 'demostración' : 'Oracle'}`,
+    conclusion: [r.resumen, ...r.hallazgos.map((hh) => `- (${hh.severidad}) ${hh.titulo}`)].join('\n'),
+    origen: 'diagnostico' as const,
+    diagnostico_id: r.id ?? null,
+  };
+}
+
+/** Lo que el módulo necesita del motor de consultas para sembrar vocabulario. */
+export interface PuenteMotor {
+  /** La misma huella con la que el motor lee semantic_learning. */
+  obtenerHuella: () => string;
+  /** Recarga la caché del motor tras escribir. */
+  refrescar: () => Promise<unknown>;
+}
+
+export function crearSoporteRouter(
+  { log, motor }: { log?: (datos: object, mensaje: string) => void; motor?: PuenteMotor } = {},
+): Router {
+  const router = Router();
+  const registrar = log ?? (() => undefined);
+
+  // ─── Sistema ──────────────────────────────────────────────────────────────
+  router.get(
+    '/estado',
+    h(async () => ({
+      version: config.version,
+      oracle: await estadoOracle(),
+      // Base registrada contra la que corren los diagnósticos, o null en modo demo.
+      baseDiagnosticos: config.oracle.dbId,
+      vigilancia: config.vigilancia.habilitada,
+      correccionesEjecutables: config.correccionesEjecutables,
+      reglas: config.reglas,
+    })),
+  );
+
+  router.get(
+    '/resumen',
+    h(async () => {
+      // Sin alertas ni diagnosticos: esas dos pantallas se retiraron, y un panel que
+      // cuenta cosas que ya nadie puede abrir solo ocupa sitio. En su lugar, lo que de
+      // verdad hay que mirar cada dia: cuantos aportes esperan revision.
+      const [porEstado, porSistema, aportesPendientes, temas] = await Promise.all([
+        filas<{ estado: string; total: number }>('SELECT estado, COUNT(*)::int AS total FROM soporte.tickets GROUP BY estado'),
+        filas(`SELECT COALESCE(sistema, 'Sin sistema') AS sistema, COUNT(*)::int AS total
+               FROM soporte.tickets GROUP BY 1 ORDER BY total DESC`),
+        contarAportesPendientes(),
+        filas<{ total: number }>('SELECT COUNT(*)::int AS total FROM knowledge_base'),
+      ]);
+      const total = (e: string) => porEstado.find((x) => x.estado === e)?.total ?? 0;
+      return {
+        tickets: {
+          abiertos: total('abierto'),
+          investigacion: total('investigacion'),
+          pendientes: total('pendiente'),
+          resueltos: total('resuelto'),
+          porSistema,
+        },
+        aportesPendientes,
+        temas: temas[0]?.total ?? 0,
+      };
+    }),
+  );
+
+  // ─── Tickets ──────────────────────────────────────────────────────────────
+  router.get(
+    '/tickets',
+    h(async (req) =>
+      listarTickets({
+        texto: texto(req.query.q),
+        estado: texto(req.query.estado),
+        sistema: texto(req.query.sistema),
+      }),
+    ),
+  );
+
+  router.get(
+    '/tickets/:numero',
+    h(async (req) => {
+      const ticket = await obtenerTicket(req.params.numero);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      const similares = await buscarSimilares(
+        `${ticket.titulo} ${ticket.descripcion ?? ''} ${ticket.modulo ?? ''}`,
+        4,
+        ticket.numero,
+      );
+      return { ...ticket, similares };
+    }),
+  );
+
+  router.post(
+    '/tickets',
+    h(async (req, res) => {
+      const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+
+      // Los pasos, en la misma forma que un aporte: cada uno con lo que se hizo y, si
+      // hace falta, la consulta que lo comprueba.
+      //
+      // Antes un ticket se creaba vacio y los pasos se anadian despues, uno a uno, en
+      // otra pantalla. Al final un ticket resuelto y un aporte son lo mismo —alguien
+      // cuenta que paso y como lo comprobo—, asi que se registran igual.
+      //
+      // Se leen y se validan ANTES de escribir nada. Al reves, un paso con una
+      // escritura dejaba el ticket ya creado y la peticion fallando: quedaba un caso
+      // huerfano que nadie pidio.
+      const pasos = (Array.isArray(cuerpo.pasos) ? cuerpo.pasos : [])
+        .map((bruto) => {
+          const paso = (bruto ?? {}) as Record<string, unknown>;
+          return {
+            descripcion: texto(paso.descripcion) ?? texto(paso.titulo),
+            sql: texto(paso.script) ?? texto(paso.sql),
+          };
+        })
+        .filter((paso) => paso.descripcion || paso.sql);
+
+      for (const paso of pasos) {
+        if (!paso.sql) continue;
+        try {
+          asegurarSoloConsulta(paso.sql);
+        } catch (error) {
+          // 400 y no 500: lo que esta mal es lo que mandaron, no el servidor.
+          throw solicitudInvalida((error as Error).message);
+        }
+      }
+
+      // El número deja de ser obligatorio: no todo lo que entra viene de otro sistema
+      // con su referencia. Sin uno se numera solo, con el año y un correlativo.
+      const numero = texto(cuerpo.numero) ?? (await siguienteNumero());
+      if (await obtenerTicket(numero)) throw solicitudInvalida(`El ticket ${numero} ya existe.`);
+      validarEstadoTicket(cuerpo.estado);
+      const datos = Object.fromEntries(CAMPOS_TICKET.map((c) => [c, texto(cuerpo[c]) ?? undefined]));
+      const ticket = await guardarTicket({
+        ...datos,
+        numero,
+        titulo: textoRequerido(cuerpo.titulo, 'titulo'),
+        estado: (datos.estado as never) ?? 'abierto',
+        creado_en: datos.creado_en ?? new Date().toISOString().slice(0, 10),
+      });
+      for (const paso of pasos) {
+        await agregarPaso(numero, {
+          titulo: paso.descripcion ?? '(sin descripcion)',
+          sql: paso.sql ?? null,
+          resultado: null,
+          evidencia: null,
+          conclusion: null,
+        });
+      }
+
+      // El diagnostico lo lanza la persona con «Revisar error». Hacerlo en el alta
+      // dejaba el boton sin sentido y disparaba consultas sin que nadie las pidiera.
+      res.status(201);
+      return ticket;
+    }),
+  );
+
+  router.patch(
+    '/tickets/:numero',
+    h(async (req) => {
+      const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+      validarEstadoTicket(cuerpo.estado);
+      const cambios = Object.fromEntries(
+        CAMPOS_TICKET.filter((c) => cuerpo[c] !== undefined).map((c) => [c, texto(cuerpo[c])]),
+      );
+      if (cambios.titulo === null) throw solicitudInvalida('El título no puede quedar vacío.');
+      const ticket = await actualizarTicket(req.params.numero, cambios);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      return ticket;
+    }),
+  );
+
+  router.post(
+    '/tickets/:numero/pasos',
+    h(async (req, res) => {
+      const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+      if (!(await obtenerTicket(req.params.numero))) throw noEncontrado('Ticket no encontrado.');
+      const paso = await agregarPaso(req.params.numero, {
+        titulo: textoRequerido(cuerpo.titulo, 'titulo'),
+        sql: texto(cuerpo.sql),
+        resultado: texto(cuerpo.resultado),
+        evidencia: texto(cuerpo.evidencia),
+        conclusion: texto(cuerpo.conclusion),
+      });
+      res.status(201);
+      return paso;
+    }),
+  );
+
+  /**
+   * Revisa el error del ticket: deduce qué comprobar de su texto, ejecuta el
+   * diagnóstico y devuelve el resultado completo para mostrarlo en pantalla.
+   * El paso queda registrado en la investigación del ticket.
+   */
+  router.post(
+    '/tickets/:numero/revisar',
+    h(async (req) => {
+      const ticket = await obtenerTicket(req.params.numero);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      const quien = (req as unknown as { usuarioSoporte?: { username: string } }).usuarioSoporte?.username ?? null;
+      const revision = await diagnosticarTicket(ticket, quien);
+      registrar({ ticket: ticket.numero, ...revision, resultado: undefined }, 'ticket revisado');
+      return revision;
+    }),
+  );
+
+  /**
+   * Publica la solución que escribió una persona en el ticket.
+   *
+   * Es lo que cierra el ciclo: lo que alguien resolvió a mano pasa a la base de
+   * conocimiento y aparece como precedente la próxima vez que entre un caso igual.
+   */
+  router.post(
+    '/tickets/:numero/publicar',
+    h(async (req, res) => {
+      const ticket = await obtenerTicket(req.params.numero);
+      if (!ticket) throw noEncontrado('Ticket no encontrado.');
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      if (!usuario) throw solicitudInvalida('No se pudo identificar al usuario que publica.');
+
+      const cuerpo = (req.body ?? {}) as { sql?: string; dinamico?: boolean };
+      try {
+        const publicado = await publicarSolucionDeTicket(ticket, {
+          autorId: usuario.id,
+          autorNombre: usuario.username,
+          sql: texto(cuerpo.sql),
+          dinamico: cuerpo.dinamico !== false,
+        });
+        registrar({ ticket: ticket.numero, ...publicado }, 'solución del ticket publicada');
+        res.status(publicado.creado ? 201 : 200);
+        return publicado;
+      } catch (error) {
+        throw solicitudInvalida((error as Error).message);
+      }
+    }),
+  );
+
+  /**
+   * Buscar una solución a partir del texto de un error, sin crear ticket.
+   *
+   * Es la puerta de entrada del sistema: alguien pega lo que le pasa y se le responde
+   * con lo que ya se resolvió antes. No pregunta de qué sistema es ni pide
+   * identificadores — para eso está el ticket con su diagnóstico.
+   */
+  router.post(
+    '/solucionar',
+    h(async (req) => {
+      const cuerpo = (req.body ?? {}) as { texto?: string; limite?: number };
+      const consulta = textoRequerido(cuerpo.texto, 'texto');
+      const limite = Math.min(Math.max(Number(cuerpo.limite) || 8, 1), 20);
+      const precedentes = await buscarPrecedentes(consulta, { limite });
+      return { consulta, precedentes };
+    }),
+  );
+
+  /** Sistemas y categorías que existen de verdad, para no escribirlos a mano. */
+  router.get(
+    '/sistemas',
+    h(async () =>
+      filas<{ nombre: string; total: number }>(
+        `SELECT nombre, SUM(total)::int AS total FROM (
+           SELECT sistema AS nombre, COUNT(*)::int AS total FROM soporte.tickets
+            WHERE sistema IS NOT NULL AND btrim(sistema) <> '' GROUP BY sistema
+           UNION ALL
+           SELECT categoria AS nombre, COUNT(*)::int AS total FROM knowledge_base
+            WHERE categoria IS NOT NULL AND btrim(categoria) <> '' GROUP BY categoria
+         ) t GROUP BY nombre ORDER BY 2 DESC, 1`,
+      ),
+    ),
+  );
+
+  // ─── Biblioteca SQL ───────────────────────────────────────────────────────
+  router.get(
+    '/consultas',
+    h(async (req) => ({
+      consultas: await listarConsultas({
+        texto: texto(req.query.q),
+        categoria: texto(req.query.categoria),
+        riesgo: texto(req.query.riesgo),
+      }),
+      categorias: await categoriasConsultas(),
+    })),
+  );
+
+  router.get(
+    '/consultas/:codigo',
+    h(async (req) => {
+      const consulta = await obtenerConsulta(req.params.codigo);
+      if (!consulta) throw noEncontrado('Consulta no encontrada.');
+      return consulta;
+    }),
+  );
+
+  // ─── Diagnósticos ─────────────────────────────────────────────────────────
+
+
+
+
+
+  // ─── Puente con el motor de consultas ─────────────────────────────────────
+  // La Biblioteca SQL es un corpus curado que mapea lenguaje de negocio a las
+  // tablas reales. Esto lo deriva y lo deja donde el motor ya sabe buscarlo.
+
+  router.get(
+    '/vocabulario',
+    h(async (req) => {
+      const derivado = await construirVocabulario({
+        minApariciones: Number(req.query.minApariciones) || undefined,
+        minExclusividad: Number(req.query.minExclusividad) || undefined,
+      });
+      return { ...derivado, huella: motor?.obtenerHuella() ?? null };
+    }),
+  );
+
+  router.post(
+    '/vocabulario',
+    h(async (req) => {
+      if (!motor) throw solicitudInvalida('El puente con el motor de consultas no está configurado.');
+      const cuerpo = (req.body ?? {}) as { minApariciones?: number; minExclusividad?: number };
+      const resultado = await sembrarVocabulario(motor.obtenerHuella(), {
+        minApariciones: Number(cuerpo.minApariciones) || undefined,
+        minExclusividad: Number(cuerpo.minExclusividad) || undefined,
+      });
+      await motor.refrescar();
+      registrar(resultado, 'vocabulario de la Biblioteca sembrado en el motor');
+      return resultado;
+    }),
+  );
+
+  // ─── Correcciones publicadas como artículos ───────────────────────────────
+
+
+
+
+  router.get('/bases-tickets', h(async () => basesParaTickets()));
+
+  // ─── Vigilancia ───────────────────────────────────────────────────────────
+
+
+
+
+  // ─── Aportes de quien reporta ─────────────────────────────────────────────
+  //
+  // Lo que manda un usuario no entra solo a la base de conocimiento. Llega aquí, se
+  // lee, y si está bien se publica como tema. Aceptar es lo único que escribe en
+  // `knowledge_base`; rechazar exige un motivo, que el autor sí ve.
+
+  router.get('/aportes', h(async (req) => listarAportes(texto(req.query.estado))));
+
+  /**
+   * Lo que la gente buscó y no encontró.
+   *
+   * Es la lista de lo que le falta a la base de conocimiento, dicha con las palabras de
+   * quien lo necesitaba. Un término repetido muchas veces sin resultado es un tema que
+   * hay que escribir; uno que sí tiene tema pero nadie abre es una palabra que falta en
+   * su título.
+   */
+  router.get('/busquedas-fallidas', h(async (req) => busquedasFallidas(Number(req.query.dias) || 30)));
+
+  router.get(
+    '/aportes/:id',
+    h(async (req) => {
+      const aporte = await obtenerAporte(req.params.id);
+      if (!aporte) throw noEncontrado('No se encontró ese aporte.');
+      return aporte;
+    }),
+  );
+
+  router.post(
+    '/aportes/:id/aceptar',
+    h(async (req) => {
+      const usuario = (req as unknown as { usuarioSoporte?: { id: string; username: string } }).usuarioSoporte;
+      const resultado = await aceptarAporte(req.params.id, (req.body ?? {}) as RevisionAporte, {
+        id: usuario?.id ?? null,
+        nombre: usuario?.username ?? 'soporte',
+      });
+      registrar({ aporte: req.params.id, articulo: resultado.articulo }, 'aporte publicado');
+      return resultado;
+    }),
+  );
+
+  router.post(
+    '/aportes/:id/rechazar',
+    h(async (req) => {
+      const usuario = (req as unknown as { usuarioSoporte?: { username: string } }).usuarioSoporte;
+      const nota = (req.body ?? {}).nota;
+      return rechazarAporte(req.params.id, nota, usuario?.username ?? 'soporte');
+    }),
+  );
+
+  // Traduce los ErrorHttp del módulo al formato { error } que espera su frontend.
+  router.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
+    if (err instanceof ErrorHttp) {
+      res.status(err.estado).json({ error: err.message });
+      return;
+    }
+    registrar({ err: (err as Error)?.message }, 'error en el módulo de soporte');
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  });
+
+  return router;
+}

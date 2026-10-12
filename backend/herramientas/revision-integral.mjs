@@ -22,7 +22,7 @@ configurarPool(() => pool);
 await aplicarEsquema();
 
 const admin = (await pool.query("SELECT id, username FROM users WHERE role = 'admin' LIMIT 1")).rows[0];
-const { crearSoporteRouter } = await import('../src/soporte/rutas.ts');
+const { crearSoporteRouter } = await import('../src/soporte/adaptadores/http/rutas-admin.ts');
 
 const app = express();
 app.use(express.json());
@@ -88,10 +88,27 @@ comprobar(encontrado, 'lo encuentra sin haber creado ticket', `${busqueda.preced
 
 console.log('\n5. AISLAMIENTO — lo que ve un cliente no es lo que ve un admin');
 const { buscarPrecedentes } = await import('../src/soporte/precedentes.ts');
-const q = 'no puede ingresar clave bloqueada';
+
+// La prueba se crea su propio artículo de solo admin, con palabras que no usa nadie
+// más. Antes buscaba 'no puede ingresar clave bloqueada' y daba por hecho que algún
+// artículo restringido encajaría; cuando el contenido cambió dejó de encajar ninguno y
+// la prueba falló sin que el filtro tuviera nada malo. Una prueba no debe depender de
+// qué contenido haya ese día.
+const MARCA = 'xilofonte-restringido-' + Date.now();
+const { rows: [autor] } = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+await pool.query(
+  `INSERT INTO knowledge_base (id, titulo, categoria, contenido, tipo_solucion, visible_para, creado_por)
+   VALUES (gen_random_uuid(), $1, 'prueba', $2, 'lectura', 'admin', $3)`,
+  [`Procedimiento ${MARCA}`, `Documento interno sobre ${MARCA}, visible solo para administradores.`, autor?.id],
+);
+
+const q = MARCA;
 const comoAdmin = (await buscarPrecedentes(q, { limite: 30 })).filter((p) => p.tipo === 'articulo').length;
 const comoCliente = (await buscarPrecedentes(q, { limite: 30, soloPublicos: true })).filter((p) => p.tipo === 'articulo').length;
+comprobar(comoAdmin > 0, 'el admin ve el artículo restringido', `${comoAdmin} resultado(s)`);
 comprobar(comoCliente < comoAdmin, 'el filtro de visibilidad recorta', `admin ${comoAdmin} · cliente ${comoCliente}`);
+
+await pool.query('DELETE FROM knowledge_base WHERE titulo = $1', [`Procedimiento ${MARCA}`]);
 
 console.log('\n6. SISTEMAS — la lista sale de los datos');
 const sistemas = await api('/sistemas');

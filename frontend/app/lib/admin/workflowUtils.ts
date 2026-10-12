@@ -5,14 +5,20 @@ import {
 } from './adminTypes';
 
 export function normalizeSolutionType(value?: string): SolutionType {
-  if (value === 'database' || value === 'script') return value;
+  // Los nombres viejos se leen como «dinamico»: significan lo mismo —solo lectura—
+  // y asi el contenido ya creado sigue abriendose sin migrar nada.
+  if (value === 'dinamico' || value === 'database' || value === 'script' || value === 'ejecutable') {
+    return 'dinamico';
+  }
   return 'lectura';
 }
 
-export function isDatabaseSolutionType(tipo: SolutionType) { return tipo === 'database'; }
-export function isScriptSolutionType(tipo: SolutionType) { return tipo === 'script'; }
+// Los tres nombres viejos se tratan como dinamico; se mantienen las funciones para
+// no tocar los sitios que las llaman.
+export function isDatabaseSolutionType(tipo: SolutionType) { return normalizeSolutionType(tipo) === 'dinamico'; }
+export function isScriptSolutionType(tipo: SolutionType) { return normalizeSolutionType(tipo) === 'dinamico'; }
 export function isExecutableSolutionType(tipo: SolutionType) {
-  return isDatabaseSolutionType(tipo) || isScriptSolutionType(tipo);
+  return normalizeSolutionType(tipo) === 'dinamico';
 }
 
 export function getAllowedActionTypes(solutionType: SolutionType): WorkflowActionType[] {
@@ -20,8 +26,11 @@ export function getAllowedActionTypes(solutionType: SolutionType): WorkflowActio
 }
 
 export function getCreationModesForSolutionType(tipo: SolutionType): Array<{ value: ScriptCreationMode; label: string; level: string }> {
-  if (isDatabaseSolutionType(tipo)) return SCRIPT_CREATION_MODES.filter((m) => m.value !== 'codigo_manual');
-  if (isScriptSolutionType(tipo)) return SCRIPT_CREATION_MODES.filter((m) => m.value === 'codigo_manual');
+  // Un articulo dinamico admite las tres formas de escribirlo, y el script manual es
+  // la que mas se va a usar: es donde se escribe el SELECT con sus parametros
+  // (... WHERE cedula = :cedula). Antes este modo solo salia para el tipo 'script', y
+  // al unificar los tres nombres en 'dinamico' se habria quedado fuera.
+  if (isExecutableSolutionType(tipo)) return SCRIPT_CREATION_MODES;
   return [];
 }
 
@@ -55,7 +64,7 @@ export function sanitizeWorkflowRowForMode(row: WorkflowRow, solutionType: Solut
     return { ...row, config: { ...createEmptyWorkflowConfig(), ...(row.config || {}) } };
   }
 
-  if (!allowedTypes.includes(row.tipo)) {
+  if (!(allowedTypes as string[]).includes(row.tipo)) {
     return isDatabaseSolutionType(solutionType) && row.tipo === 'validacion' ? null : { ...row, tipo: '' };
   }
 

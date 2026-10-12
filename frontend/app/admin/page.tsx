@@ -7,6 +7,7 @@ import { useTheme } from '../components/ThemeProvider';
 import CabeceraPanel from '../components/CabeceraPanel';
 import BarraLateralPanel, { agruparCategorias } from '../components/BarraLateralPanel';
 import ContentPanel from '../components/ContentPanel';
+import PanelDeEntrada from '../components/PanelDeEntrada';
 import CommentsSection from '../components/CommentsSection';
 import WorkflowBuilder from '@/components/WorkflowBuilder/WorkflowBuilder';
 import { KnowledgeArticle } from '../types';
@@ -866,11 +867,7 @@ function AdminPage() {
           </aside>
 
           {!selectedArticle ? (
-            <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 flex flex-col items-center justify-center gap-3">
-              <div className="text-4xl opacity-30">📄</div>
-              <p className="text-base font-medium text-(--ink-700)">Selecciona un artículo del menú</p>
-              <p className="text-xs text-(--ink-500)">Haz clic en una categoría o usa el buscador</p>
-            </section>
+            <PanelDeEntrada articulos={visibleArticles} onAbrir={handleArticleSelect} />
           ) : (
             <>
               <section className="glass-panel-strong glass-panel-hover flex-1 min-w-0 rounded-2xl p-3 h-full min-h-0 overflow-auto">

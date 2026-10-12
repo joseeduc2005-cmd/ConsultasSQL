@@ -160,10 +160,14 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
 
   return (
     <aside className="glass-panel-strong min-h-0 space-y-4 overflow-y-auto scroll-fino rounded-2xl p-3">
+      {/* Arriba del todo, igual que en el panel: que el mismo campo esté en un sitio
+          distinto según quién entre obliga a buscarlo. */}
+      <BuscadorBarra valor={filtro} onCambio={setFiltro} etiqueta="Filtrar los temas" />
+
       {/*
         Dos botones y no uno con pestañas: son dos intenciones distintas —vengo a que
         me ayuden, vengo a contar cómo lo arreglé— y quien entra a la segunda ya sabe
-        lo que busca. Van juntos y arriba del todo, antes del árbol de temas.
+        lo que busca.
       */}
       <div className="space-y-0.5">
         <button
@@ -198,8 +202,6 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
           )}
         </button>
       </div>
-
-      <BuscadorBarra valor={filtro} onCambio={setFiltro} etiqueta="Filtrar los temas" />
 
       <Grupo titulo="Temas de ayuda">
         {filtrados === null ? (

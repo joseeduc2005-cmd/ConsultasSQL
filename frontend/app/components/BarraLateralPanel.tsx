@@ -88,6 +88,8 @@ export default function BarraLateralPanel({
   const router = useRouter();
   const autonoma = articles === undefined;
   const [propios, setPropios] = useState<KnowledgeArticle[]>([]);
+  /** El filtro de la barra, para las paginas que no traen el suyo. */
+  const [filtroPropio, setFiltroPropio] = useState('');
   // Hasta que la petición termine no se sabe si hay categorías o no, y decir «no hay»
   // mientras se están pidiendo es afirmar algo que todavía no es cierto.
   const [cargando, setCargando] = useState(true);
@@ -116,8 +118,19 @@ export default function BarraLateralPanel({
     return () => { vigente = false; };
   }, [autonoma]);
 
-  const lista = autonoma ? propios : articles;
-  const grupos = categories ?? agruparCategorias(lista ?? []);
+  const todos = autonoma ? propios : articles;
+
+  // Cuando la pagina no filtra su propia lista, filtra la barra. Asi el campo sirve en
+  // tickets y en aportes, que es donde hace falta para llegar a un tema sin volver atras.
+  const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const aguja = onBuscar ? '' : plano(filtroPropio.trim());
+  const lista = !aguja
+    ? todos
+    : (todos ?? []).filter((a) => plano(`${a.titulo} ${a.categoria ?? ''}`).includes(aguja));
+
+  const grupos = aguja
+    ? agruparCategorias(lista ?? [])
+    : categories ?? agruparCategorias(lista ?? []);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -137,8 +150,16 @@ export default function BarraLateralPanel({
       </div>
 
       {/* Arriba del todo porque es lo primero que se intenta: quien ya sabe donde esta
-          baja al arbol, y quien no lo sabe, escribe. */}
-      {onBuscar && <BuscadorBarra valor={busqueda ?? ''} onCambio={onBuscar} colapsado={collapsed} />}
+          baja al arbol, y quien no lo sabe, escribe.
+
+          Siempre, no solo cuando la pagina pasa un manejador. Antes solo se pintaba en
+          /admin, y en tickets o aportes —donde la barra es la misma— desaparecia: un
+          campo que esta o no esta segun la pantalla no es un campo, es una sorpresa. */}
+      <BuscadorBarra
+        valor={onBuscar ? (busqueda ?? '') : filtroPropio}
+        onCambio={onBuscar ?? setFiltroPropio}
+        colapsado={collapsed}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}

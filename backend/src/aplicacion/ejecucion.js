@@ -1898,7 +1898,32 @@ export function crearEjecucionDeScripts({
     return { success: false, message: 'Script JSON sin acción soportada' };
   }
 
+  /**
+   * Ejecuta un articulo y deja dicho cual era.
+   *
+   * La tabla de auditoria tiene una columna `article_titulo` y estaba vacia en las ciento
+   * treinta y ocho filas que habia: ninguna rama de aqui devolvia el titulo, asi que
+   * todos los que escriben el apunte mandaban cadena vacia. Un registro que dice «se
+   * ejecuto el articulo 601ad651-...» y nada mas sirve de poco cuando ese articulo ya se
+   * renombro, o se borro, que es justo cuando se consulta una auditoria.
+   *
+   * El titulo se pega aqui y no en cada `return` porque hay once, y once sitios que hay
+   * que acordarse de tocar es como se quedo vacia la primera vez. Cuesta una consulta por
+   * clave primaria sobre una ruta que ya hace varias.
+   */
   async function executeArticleById(articleId, rawParams, emit, options = {}) {
+    const salida = await ejecutarArticuloPorId(articleId, rawParams, emit, options);
+    if (!salida || typeof salida !== 'object' || salida.articleTitulo !== undefined) return salida;
+    try {
+      const { rows } = await obtenerPool().query('SELECT titulo FROM knowledge_base WHERE id = $1', [articleId]);
+      return { ...salida, articleTitulo: rows[0]?.titulo ?? '' };
+    } catch {
+      // Sin titulo se pierde contexto, pero la ejecucion ya ocurrio: no se tira por esto.
+      return salida;
+    }
+  }
+
+  async function ejecutarArticuloPorId(articleId, rawParams, emit, options = {}) {
     await ensureDynamicSchemaReady(false);
 
     const articleResult = await obtenerPool().query(

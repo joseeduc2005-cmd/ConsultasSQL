@@ -34,16 +34,26 @@ const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`
 let fallos = 0;
 let n = 0;
 
-// El limitador son cien peticiones por minuto y cada caso gasta dos. Sin esta pausa la
-// bateria se delata a si misma con un 429 que parece un fallo del sistema.
-const respirar = async () => {
-  n += 1;
-  if (n % 40 === 0) await new Promise((listo) => { setTimeout(listo, 62_000); });
-};
+/**
+ * Una peticion que espera si el limitador la frena.
+ *
+ * Son cien por minuto, y cada caso gasta dos. Contar las propias no basta: si la bateria
+ * anterior dejo el minuto gastado, esta se come el 429 en el primer caso y reporta
+ * fallos que no existen — que es peor que tardar, porque manda a buscar una causa donde
+ * no esta.
+ */
+async function traer(url, opciones) {
+  let r = await fetch(url, opciones);
+  if (r.status === 429) {
+    process.stdout.write('  (el limitador pide calma: 60 s)\n');
+    await new Promise((listo) => { setTimeout(listo, 62_000); });
+    r = await fetch(url, opciones);
+  }
+  return r;
+}
 
 async function probar(baseId, titulo, script, datos) {
-  await respirar();
-  const alta = await fetch(`${BASE}/api/articles`, {
+  const alta = await traer(`${BASE}/api/articles`, {
     method: 'POST',
     headers: H,
     body: JSON.stringify({
@@ -60,7 +70,7 @@ async function probar(baseId, titulo, script, datos) {
   if (!alta.ok) throw new Error(`no se guarda: ${String(jAlta.error || '').slice(0, 130)}`);
   const id = jAlta.data?.id || jAlta.article?.id || jAlta.id;
 
-  const ej = await fetch(`${BASE}/api/execute`, {
+  const ej = await traer(`${BASE}/api/execute`, {
     method: 'POST', headers: H, body: JSON.stringify({ articleId: id, formData: datos ?? {} }),
   });
   const jEj = await ej.json();

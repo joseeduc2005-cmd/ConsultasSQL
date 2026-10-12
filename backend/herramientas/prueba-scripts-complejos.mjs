@@ -40,8 +40,26 @@ let fallos = 0;
 const creados = [];
 
 /** Guarda el artículo y lo ejecuta. Devuelve las filas, o lanza con el motivo. */
+/**
+ * Una peticion que espera si el limitador la frena.
+ *
+ * Son cien por minuto, y cada caso gasta dos. Contar las propias no basta: si la bateria
+ * anterior dejo el minuto gastado, esta se come el 429 en el primer caso y reporta
+ * fallos que no existen — que es peor que tardar, porque manda a buscar una causa donde
+ * no esta.
+ */
+async function traer(url, opciones) {
+  let r = await fetch(url, opciones);
+  if (r.status === 429) {
+    process.stdout.write('  (el limitador pide calma: 60 s)\n');
+    await new Promise((listo) => { setTimeout(listo, 62_000); });
+    r = await fetch(url, opciones);
+  }
+  return r;
+}
+
 async function probar(titulo, sql, datos) {
-  const alta = await fetch(`${BASE}/api/articles`, {
+  const alta = await traer(`${BASE}/api/articles`, {
     method: 'POST',
     headers: H,
     body: JSON.stringify({
@@ -59,7 +77,7 @@ async function probar(titulo, sql, datos) {
   const id = jAlta.data?.id || jAlta.article?.id || jAlta.id;
   creados.push(id);
 
-  const ej = await fetch(`${BASE}/api/execute`, {
+  const ej = await traer(`${BASE}/api/execute`, {
     method: 'POST', headers: H, body: JSON.stringify({ articleId: id, formData: datos ?? {} }),
   });
   const jEj = await ej.json();

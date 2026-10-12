@@ -56,6 +56,42 @@ const ACOMPANAN = new Set([
  */
 const ETAPAS_QUE_ESCRIBEN = new Set(['$out', '$merge']);
 
+/**
+ * Los operadores que llevan JavaScript y lo ejecutan en el servidor.
+ *
+ * No escriben nada, así que la puerta —que miraba si la consulta escribe— los dejaba
+ * pasar, y se ejecutaban. Pero un `$where` con un bucle infinito tumba la base igual que
+ * un DELETE, y lo que ejecuta código deja de ser una consulta por mucho que devuelva
+ * filas. La promesa del sistema es que lo peor que puede hacer alguien aquí es leer.
+ */
+const OPERADORES_CON_CODIGO = new Set(['$where', '$function', '$accumulator', '$js']);
+
+/**
+ * Recorre la consulta entera buscando una clave prohibida.
+ *
+ * Entera y no solo las etapas de primer nivel: un `$where` vive dentro del filtro, y un
+ * `$out` se puede esconder al final de un pipeline largo o dentro de un `$unionWith`.
+ * Mirar solo la superficie es mirar donde no está.
+ */
+function buscarClave(valor, prohibidas, visto = new Set()) {
+  if (!valor || typeof valor !== 'object') return null;
+  if (visto.has(valor)) return null;
+  visto.add(valor);
+  if (Array.isArray(valor)) {
+    for (const x of valor) {
+      const hallado = buscarClave(x, prohibidas, visto);
+      if (hallado) return hallado;
+    }
+    return null;
+  }
+  for (const [clave, dentro] of Object.entries(valor)) {
+    if (prohibidas.has(clave)) return clave;
+    const hallado = buscarClave(dentro, prohibidas, visto);
+    if (hallado) return hallado;
+  }
+  return null;
+}
+
 // ─── Leer la sintaxis de la consola de Mongo ─────────────────────────────────
 
 /** Lo que se acepta dentro de una consulta, y en qué se convierte. */
@@ -312,21 +348,26 @@ export function asegurarConsultaDeMongo(entrada) {
     );
   }
 
-  // Un agregado que termina en $out o en $merge guarda el resultado en una colección.
-  // Se llama aggregate y escribe, igual que el CTE que borra se llama SELECT y borra.
-  if (operacion === 'aggregate') {
-    const etapas = Array.isArray(consulta.aggregate) ? consulta.aggregate
-      : Array.isArray(consulta.pipeline) ? consulta.pipeline : [];
-    for (const etapa of etapas) {
-      for (const clave of Object.keys(etapa ?? {})) {
-        if (ETAPAS_QUE_ESCRIBEN.has(clave)) {
-          throw new Error(
-            `Ese agregado termina en ${clave}, que guarda el resultado en una colección. `
-            + 'Quítelo: un artículo solo consulta.',
-          );
-        }
-      }
-    }
+  // Un $out o un $merge guardan el resultado en una colección: se llama aggregate y
+  // escribe, igual que el CTE que borra se llama SELECT y borra. Se busca en toda la
+  // consulta y no solo en las etapas de primer nivel, porque se puede esconder al final
+  // de un pipeline largo o dentro de un $unionWith.
+  const escribe = buscarClave(consulta, ETAPAS_QUE_ESCRIBEN);
+  if (escribe) {
+    throw new Error(
+      `Ese agregado lleva ${escribe}, que guarda el resultado en una colección. `
+      + 'Quítelo: un artículo solo consulta.',
+    );
+  }
+
+  // Y el código. `$where`, `$function` y `$accumulator` ejecutan JavaScript dentro del
+  // motor; no escriben, pero ejecutar código no es consultar.
+  const codigo = buscarClave(consulta, OPERADORES_CON_CODIGO);
+  if (codigo) {
+    throw new Error(
+      `Esa consulta lleva ${codigo}, que ejecuta JavaScript en el servidor de Mongo. `
+      + 'Un artículo consulta, no ejecuta código: use los operadores de agregación.',
+    );
   }
 
   return consulta;

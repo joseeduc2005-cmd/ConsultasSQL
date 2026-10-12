@@ -36,8 +36,26 @@ await pool.query(
 );
 
 const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+/**
+ * Una peticion que espera si el limitador la frena.
+ *
+ * Son cien por minuto, y cada caso gasta dos. Contar las propias no basta: si la bateria
+ * anterior dejo el minuto gastado, esta se come el 429 en el primer caso y reporta
+ * fallos que no existen — que es peor que tardar, porque manda a buscar una causa donde
+ * no esta.
+ */
+async function traer(url, opciones) {
+  let r = await fetch(url, opciones);
+  if (r.status === 429) {
+    process.stdout.write('  (el limitador pide calma: 60 s)\n');
+    await new Promise((listo) => { setTimeout(listo, 62_000); });
+    r = await fetch(url, opciones);
+  }
+  return r;
+}
+
 const pedir = async (ruta, cuerpo) => {
-  const r = await fetch(BASE + ruta, cuerpo ? { method: 'POST', headers: H, body: JSON.stringify(cuerpo) } : { headers: H });
+  const r = await traer(BASE + ruta, cuerpo ? { method: 'POST', headers: H, body: JSON.stringify(cuerpo) } : { headers: H });
   const txt = await r.text();
   let json = null;
   try { json = JSON.parse(txt); } catch { /* no era json */ }

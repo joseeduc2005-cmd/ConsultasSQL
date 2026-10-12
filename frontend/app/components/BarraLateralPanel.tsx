@@ -161,6 +161,12 @@ export default function BarraLateralPanel({
         colapsado={collapsed}
       />
 
+      {/* Una linea entre el campo y «Buscar solucion». Quedaban pegados, con la misma lupa
+          y el mismo tamano, y hacen cosas distintas: este recorta la lista de temas, el
+          otro busca por significado en toda la base. Sin nada en medio no habia como
+          saber cual es cual. */}
+      {!collapsed && <div className="mx-1 mb-2 border-t border-(--line)" />}
+
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}
         {mostrarSoporte && !collapsed && <div className="mx-3 my-3 border-t border-(--line)" />}

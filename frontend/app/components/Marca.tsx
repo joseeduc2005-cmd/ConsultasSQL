@@ -21,25 +21,17 @@ export function Marca({ className = 'size-9' }: { className?: string }) {
       aria-hidden="true"
     >
       {/*
-        El dibujo va centrado dentro del recuadro, que es lo que fallaba: la base ocupaba
-        la mitad izquierda y la lupa se salia por la derecha y por abajo, asi que el
-        conjunto quedaba descolgado hacia una esquina. Se ve enseguida cuando el recuadro
-        es un circulo o un cuadrado con mucho redondeo.
+        Cinco trazos no caben en veinte pixeles.
+        Llevaba una base de datos con su tapa y sus dos costados, mas una lupa encima: a
+        tamano de cabecera eso se convierte en una mancha y se lee como «algo raro». Se
+        queda la lupa sola, con el trazo mas grueso y centrada: es lo que hace el sistema
+        —buscar una solucion— y a ese tamano se reconoce de un vistazo, que es lo unico
+        que se le pide a una marca.
       */}
-      <svg viewBox="0 0 24 24" fill="none" className="size-[64%]">
-        <g
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          transform="translate(0.2 -0.4)"
-        >
-          {/* La base: su tapa y los dos costados. */}
-          <ellipse cx="10.6" cy="6.3" rx="6.3" ry="2.5" />
-          <path d="M4.3 6.3v5.8c0 1.4 2.8 2.5 6.3 2.5" />
-          <path d="M16.9 6.3v2.6" />
-          {/* La lupa, apoyada sobre la base y dentro del recuadro. */}
-          <circle cx="14.4" cy="14.6" r="4.1" />
-          <path d="m17.5 17.7 2.4 2.4" />
+      <svg viewBox="0 0 24 24" fill="none" className="size-[58%]">
+        <g stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m15.4 15.4 4.1 4.1" />
         </g>
       </svg>
     </span>

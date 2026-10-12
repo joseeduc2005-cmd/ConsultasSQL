@@ -18,7 +18,7 @@ export function BuscadorBarra({
   valor,
   onCambio,
   colapsado,
-  etiqueta = 'Buscar un tema',
+  etiqueta = 'Filtrar la lista',
 }: {
   valor: string;
   onCambio: (texto: string) => void;

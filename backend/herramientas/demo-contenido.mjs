@@ -248,6 +248,77 @@ for (const a of ARTICULOS) {
   console.log(`  tema dinámico · ${a.titulo}`);
 }
 
+// ── Dos temas contra Oracle ───────────────────────────────────────────
+//
+// Los siete de arriba consultan PostgreSQL. Estos dos consultan Oracle, que es donde vive
+// la base de la cooperativa, y usan su dialecto de verdad —CONNECT BY, LISTAGG— que es
+// justo lo que no se puede enseñar con una consulta corriente.
+//
+// Se saltan si la base de Oracle no está registrada: un artículo que apunta a una base
+// que no existe sale en el árbol y falla al pulsarlo, que es peor que no estar.
+const BASE_ORACLE = 'oracle_local';
+const ARTICULOS_ORACLE = config.databases.some((d) => d.id === BASE_ORACLE) ? [
+  {
+    titulo: `${MARCA} Carga de cada área de la mesa de servicios`,
+    categoria: 'Reportes',
+    descripcion: 'Cuántos casos lleva cada área y cuánto tarda en resolverlos.',
+    contenido: 'Para saber dónde se acumula el trabajo antes de que alguien lo reporte. '
+      + 'Recorre el árbol de grupos con CONNECT BY y cuenta por la rama de arriba.',
+    sql: `WITH arbol AS (
+         SELECT g.id, CONNECT_BY_ROOT g.nombre AS raiz
+           FROM grupos g
+          START WITH g.padre_id IS NULL
+          CONNECT BY PRIOR g.id = g.padre_id
+       )
+   SELECT a.raiz AS area,
+          COUNT(t.id) AS casos,
+          ROUND(AVG(t.resolucion_min), 1) AS promedio_minutos,
+          SUM(CASE WHEN t.excedida = 'S' THEN 1 ELSE 0 END) AS fuera_de_plazo
+     FROM arbol a
+     LEFT JOIN tickets t ON t.grupo_id = a.id
+    GROUP BY a.raiz
+    ORDER BY casos DESC`,
+  },
+  {
+    titulo: `${MARCA} Los casos de un socio por su cédula (Oracle)`,
+    categoria: 'Socios',
+    descripcion: 'Todo lo que se abrió a nombre de un socio, con su estado y su valor.',
+    contenido: 'Cuando un socio llama por segunda vez, lo primero es ver qué se le abrió antes. '
+      + 'Escriba la cédula.',
+    sql: `SELECT t.id,
+       t.titulo,
+       t.prioridad,
+       t.estado,
+       c.ruta AS categoria,
+       ts.valor,
+       TO_CHAR(t.abierto_en, 'DD/MM/YYYY HH24:MI') AS abierto
+  FROM tickets t
+  JOIN ticket_socio ts ON ts.ticket_id = t.id
+  JOIN categorias c ON c.id = t.categoria_id
+ WHERE ts.cedula = :cedula
+ ORDER BY t.abierto_en DESC`,
+  },
+] : [];
+
+for (const a of ARTICULOS_ORACLE) {
+  const id = randomUUID();
+  const campos = [...new Set([...a.sql.matchAll(/(?<!:):([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))]
+    .map((nombre) => ({ nombre, etiqueta: ETIQUETAS[nombre] ?? nombre, tipo: 'text', requerido: true }));
+  await pool.query(
+    `INSERT INTO knowledge_base
+       (id, titulo, categoria, descripcion, contenido, contenido_md, tipo_solucion,
+        script_json, campos_formulario, creado_por, creado_por_username, visible_para)
+     VALUES ($1,$2,$3,$4,$5,$5,'dinamico',$6,$7,$8,$9,'todos')`,
+    [
+      id, a.titulo, a.categoria, a.descripcion, a.contenido,
+      JSON.stringify({ modo: 'script', origen: 'manual-sql', sql: a.sql, target_database: BASE_ORACLE, databaseId: BASE_ORACLE }),
+      campos.length ? JSON.stringify(campos) : null,
+      admin.id, admin.username,
+    ],
+  );
+  console.log(`  tema Oracle · ${a.titulo}`);
+}
+
 // ── Un aporte esperando revisión ──────────────────────────────────────────────
 //
 // Es la otra mitad del sistema: alguien que resolvió algo lo sube, y soporte decide si

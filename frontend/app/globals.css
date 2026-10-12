@@ -409,17 +409,14 @@ body[data-theme='dark'] .dashboard-shell::before {
 }
 
 .dashboard-gradient-text {
-  background: var(--surface);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* Llevaba un degradado recortado al texto. Sin degradado, `color: transparent`
+     dejaba el texto del color de la superficie: invisible sobre su propio panel. */
+  color: var(--ink-900);
 }
 
 :root[data-theme='dark'] .dashboard-gradient-text,
 body[data-theme='dark'] .dashboard-gradient-text {
-  background: var(--surface);
-  -webkit-background-clip: text;
-  background-clip: text;
+  color: var(--ink-900);
 }
 
 @keyframes dashboard-fade-up {

@@ -3,6 +3,7 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import BuscadorBarra from './BuscadorBarra';
 import NavegacionSoporte from './NavegacionSoporte';
 import Sidebar from './Sidebar';
 import type { KnowledgeArticle } from '../types';
@@ -66,6 +67,8 @@ export default function BarraLateralPanel({
   onToggleCollapse,
   mostrarSoporte = true,
   onNavegar,
+  busqueda,
+  onBuscar,
 }: {
   articles?: KnowledgeArticle[];
   categories?: Categoria[];
@@ -78,6 +81,9 @@ export default function BarraLateralPanel({
   onToggleCollapse?: () => void;
   mostrarSoporte?: boolean;
   onNavegar?: () => void;
+  /** El buscador vive aqui, encima del arbol: buscar y navegar son la misma tarea. */
+  busqueda?: string;
+  onBuscar?: (texto: string) => void;
 }) {
   const router = useRouter();
   const autonoma = articles === undefined;
@@ -129,6 +135,10 @@ export default function BarraLateralPanel({
           {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
         </button>
       </div>
+
+      {/* Arriba del todo porque es lo primero que se intenta: quien ya sabe donde esta
+          baja al arbol, y quien no lo sabe, escribe. */}
+      {onBuscar && <BuscadorBarra valor={busqueda ?? ''} onCambio={onBuscar} colapsado={collapsed} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {mostrarSoporte && <NavegacionSoporte colapsado={collapsed} onNavegar={onNavegar} />}

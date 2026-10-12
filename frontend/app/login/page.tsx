@@ -3,6 +3,7 @@
 'use client';
 
 import { useState } from 'react';
+import Marca from '../components/Marca';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -72,7 +73,7 @@ export default function LoginPage() {
         <section className="glass-panel-strong glass-panel-hover hidden rounded-3xl p-10 lg:flex lg:flex-col lg:justify-between">
           <div>
             <div className="mb-7 flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-(--accent) to-(--accent-2) text-lg font-extrabold text-white shadow-md">S</span>
+              <Marca className="size-11" />
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--ink-800)">Sistema de Soporte</p>
                 <p className="text-xs text-(--ink-700)">Workspace inteligente de soluciones</p>

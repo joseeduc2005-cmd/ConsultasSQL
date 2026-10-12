@@ -29,6 +29,8 @@ import { withAuth } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
 import UserIdentityBadge from '../components/UserIdentityBadge';
 import { useTheme } from '../components/ThemeProvider';
+import BuscadorBarra from '../components/BuscadorBarra';
+import Marca from '../components/Marca';
 import { Markdown, resumenPlano } from './markdown';
 import { useDictado, type Dictado } from './dictado';
 import {
@@ -129,8 +131,32 @@ function SoportePage() {
 
 function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) => void }) {
   const { data: temas } = useQuery({ queryKey: ['temas'], queryFn: clienteApi.temas });
+  // Filtrar por una palabra que ya se sabe no es lo mismo que contar el problema entero
+  // en la caja grande: esa busca por significado y devuelve candidatos. Las dos hacen
+  // falta, y esta no estaba.
+  const [filtro, setFiltro] = useState('');
   const { data: aportes } = useQuery({ queryKey: ['mis-aportes'], queryFn: clienteApi.misAportes });
   const enRevision = (aportes ?? []).filter((a) => a.estado === 'pendiente').length;
+
+  // Se busca sin tildes y sin mayúsculas: quien escribe deprisa no pone tildes, y que la
+  // herramienta no encuentre «cedula» porque el título dice «cédula» es de las cosas que
+  // hacen desconfiar de un buscador.
+  const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const aguja = plano(filtro.trim());
+  const filtrados = !temas
+    ? null
+    : !aguja
+      ? temas
+      : temas
+        .map((c) => ({
+          ...c,
+          articulos: c.articulos.filter(
+            (a) => plano(a.titulo).includes(aguja) || plano(a.descripcion ?? '').includes(aguja),
+          ),
+        }))
+        // Una categoría que se queda sin artículos no se enseña vacía, salvo que sea su
+        // propio nombre lo que se buscó.
+        .filter((c) => c.articulos.length > 0 || plano(c.categoria).includes(aguja));
 
   return (
     <aside className="glass-panel-strong min-h-0 space-y-4 overflow-y-auto scroll-fino rounded-2xl p-3">
@@ -173,19 +199,28 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
         </button>
       </div>
 
+      <BuscadorBarra valor={filtro} onCambio={setFiltro} etiqueta="Filtrar los temas" />
+
       <Grupo titulo="Temas de ayuda">
-        {temas?.length ? (
-          temas.map((t) => (
+        {filtrados === null ? (
+          <p className="px-3 py-1 text-[13px] text-(--ink-500)">Sin temas todavía.</p>
+        ) : filtrados.length === 0 ? (
+          <p className="px-3 py-1 text-[13px] text-(--ink-500)">
+            Nada con «{filtro}». Pruebe con otra palabra, o cuente el problema entero arriba.
+          </p>
+        ) : (
+          filtrados.map((t) => (
             <Categoria
               key={t.categoria}
               nombre={t.categoria}
               articulos={t.articulos}
+              // Con un filtro escrito las categorías salen abiertas: tener que desplegarlas
+              // una a una después de buscar deshace lo que la búsqueda acaba de hacer.
+              abiertaPorDefecto={filtro.trim().length > 0}
               activo={vista.tipo === 'articulo' ? vista.id : null}
               onElegir={(id) => onElegir({ tipo: 'articulo', id })}
             />
           ))
-        ) : (
-          <p className="px-3 py-1 text-[13px] text-(--ink-500)">Sin temas todavía.</p>
         )}
       </Grupo>
     </aside>
@@ -208,15 +243,22 @@ function Categoria({
   articulos,
   activo,
   onElegir,
+  abiertaPorDefecto = false,
 }: {
   nombre: string;
   articulos: { id: string; titulo: string }[];
   activo: string | null;
   onElegir: (id: string) => void;
+  /** Con un filtro escrito, las ramas salen abiertas. */
+  abiertaPorDefecto?: boolean;
 }) {
   // Abierta si el artículo que se está viendo es suyo: al entrar por un enlace, la
   // rama correspondiente aparece desplegada en vez de haber que buscarla.
   const [abierta, setAbierta] = useState(() => articulos.some((a) => a.id === activo));
+
+  // Y abierta también mientras haya un filtro: tener que desplegar una a una las ramas
+  // después de buscar deshace justo lo que la búsqueda acaba de hacer.
+  const desplegada = abierta || abiertaPorDefecto;
 
   return (
     <div>
@@ -224,13 +266,13 @@ function Categoria({
         type="button"
         onClick={() => setAbierta((v) => !v)}
         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[14px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
-        aria-expanded={abierta}
+        aria-expanded={desplegada}
       >
-        <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${abierta ? '' : '-rotate-90'}`} />
+        <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${desplegada ? '' : '-rotate-90'}`} />
         <span className="min-w-0 flex-1 truncate">{nombre}</span>
         <span className="text-[12px] text-(--ink-500)">{articulos.length}</span>
       </button>
-      {abierta && (
+      {desplegada && (
         <div className="ml-4 space-y-0.5 border-l border-(--line) pl-2">
           {articulos.map((a) => (
             <button
@@ -570,6 +612,44 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
 }
 
 /**
+ * Los estados que conviene que salten a la vista, y de qué color.
+ *
+ * El estado es el dato por el que se hizo la consulta: alguien escribe una cédula justo
+ * para saber si está bloqueada. Salía del mismo gris que el teléfono y la fecha, así que
+ * había que buscarlo con el dedo.
+ *
+ * Son pocos y escritos a mano a propósito: colorear por heurística acaba pintando de rojo
+ * cualquier palabra que empiece por «no», y entonces el color deja de significar nada.
+ */
+const ESTADOS: Record<string, 'malo' | 'bueno' | 'medio'> = {
+  bloqueado: 'malo', bloqueada: 'malo', inactivo: 'malo', inactiva: 'malo',
+  rechazada: 'malo', rechazado: 'malo', anulada: 'malo', anulado: 'malo',
+  cerrado: 'malo', cerrada: 'malo', vencido: 'malo', vencida: 'malo',
+  activo: 'bueno', activa: 'bueno', aprobada: 'bueno', aprobado: 'bueno',
+  cobrada: 'bueno', cobrado: 'bueno', resuelto: 'bueno', resuelta: 'bueno',
+  pendiente: 'medio', abierto: 'medio', abierta: 'medio', investigacion: 'medio',
+  'no se genero': 'malo',
+};
+
+const TONO_ESTADO = {
+  malo: 'text-(--peligro)',
+  bueno: 'text-(--exito)',
+  medio: 'text-(--aviso)',
+} as const;
+
+/** Una celda de la tabla: el valor como se lee, y el estado con su color. */
+function Celda({ columna, valor }: { columna: string; valor: unknown }) {
+  const texto = comoSeVe(valor);
+  // Solo en las columnas que hablan de estado. Un socio que se apellide «Activo» no
+  // tiene por qué salir en verde.
+  const esColumnaDeEstado = /estado|situacion|diagnostico|comprobante/i.test(columna);
+  const tono = esColumnaDeEstado ? ESTADOS[texto.trim().toLowerCase()] : undefined;
+
+  if (!tono) return <span className="text-(--ink-900)">{texto}</span>;
+  return <span className={`font-medium ${TONO_ESTADO[tono]}`}>{texto}</span>;
+}
+
+/**
  * Un valor de la tabla, como se lee.
  *
  * Las fechas llegan en ISO —«2021-04-04T05:00:00.000Z»— y así no las lee nadie. Se
@@ -719,8 +799,8 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
                   {resultado.filas.map((fila, i) => (
                     <tr key={i} className="border-t border-(--line)">
                       {resultado.columnas.map((c) => (
-                        <td key={c} className="px-3 py-2 text-(--ink-900) whitespace-nowrap">
-                          {comoSeVe(fila[c])}
+                        <td key={c} className="px-3 py-2 whitespace-nowrap">
+                          <Celda columna={c} valor={fila[c]} />
                         </td>
                       ))}
                     </tr>
@@ -1116,9 +1196,7 @@ function Cabecera() {
     // usuario queda encerrado dentro, así que sin elevar la cabecera entera el panel de
     // comentarios —que va después en el DOM— le pasaba por encima al desplegarlo.
     <div className="glass-panel-strong relative z-30 flex items-center gap-4 rounded-2xl border px-4 py-3 sm:px-5">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#2363eb] to-[#1aa0c8] text-[15px] font-bold text-white shadow-sm">
-        S
-      </div>
+      <Marca className="size-10" />
       <div className="min-w-0">
         <p className="truncate text-[16px] leading-tight font-semibold tracking-tight text-(--ink-900)">Soporte</p>
         <p className="truncate text-[12.5px] leading-tight text-(--ink-700)">

@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Lightbulb, Search, Ticket } from 'lucide-react';
+import { LayoutDashboard, Search, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -40,12 +40,11 @@ const SECCIONES = [
   // base conectada, y para la mayoría de los casos es la única puerta que hace falta.
   { ruta: '/admin/solucionar', etiqueta: 'Buscar solución', icono: Search },
 
-  { grupo: 'Lo que llega' },
-  // Problemas que alguien reportó y hay que investigar.
-  { ruta: '/admin/tickets', etiqueta: 'Tickets', icono: Ticket, contadorTickets: true },
-  // Soluciones que alguien encontró y hay que revisar. Lleva contador porque es una
-  // bandeja: si no se ve que hay algo esperando, se queda sin revisar.
-  { ruta: '/admin/aportes', etiqueta: 'Aportes', icono: Lightbulb, contador: true },
+  // Una sola bandeja. Eran dos entradas —Tickets y Aportes— y lo que llega de otra
+  // persona llega por un sitio: los aportes salen ahora dentro de esta lista, marcados
+  // como tales y con su propio estado. La pantalla de revisarlos sigue existiendo, se
+  // llega pulsando el aporte; lo que desaparece es tener que acordarse de mirarla.
+  { ruta: '/admin/tickets', etiqueta: 'Casos y aportes', icono: Ticket, contadorBandeja: true },
   // Se quitaron tres opciones del menú:
   //
   //   Diagnósticos   ejecutaba playbooks contra una base
@@ -106,20 +105,9 @@ export default function NavegacionSoporte({
       )}
 
       {SECCIONES.map((seccion) => {
-        // Un encabezado que separa las dos bandejas del resto.
-        if ('grupo' in seccion) {
-          if (colapsado) return <span key={seccion.grupo} className="my-1 h-px w-5 bg-(--line)" />;
-          return (
-            <p
-              key={seccion.grupo}
-              className="px-3 pt-3 pb-1.5 text-[12px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase"
-            >
-              {seccion.grupo}
-            </p>
-          );
-        }
-
-        const { ruta: destino, etiqueta, icono: Icono, exacta, contador, contadorTickets } = seccion;
+        // El encabezado «Lo que llega» vivía aquí, separando Tickets de Aportes. Con
+        // las dos bandejas unidas en una sola entrada ya no separa nada.
+        const { ruta: destino, etiqueta, icono: Icono, exacta, contadorBandeja } = seccion;
         const activa = exacta ? ruta === destino : ruta.startsWith(destino);
         const apagada = false;
 
@@ -171,24 +159,23 @@ export default function NavegacionSoporte({
             {/* Las dos bandejas llevan su numero. El de aportes en ambar porque espera una
                 decision de alguien; el de tickets en gris porque es trabajo en curso, no
                 algo detenido esperando. */}
-            {contador && pendientes > 0 && (
+            {/* Un solo numero: todo lo que espera, venga de donde venga. En ambar si hay
+                algo sin revisar, porque eso es lo que esta detenido esperando a alguien;
+                en gris si solo hay casos en curso, que es trabajo andando. */}
+            {contadorBandeja && pendientes + ticketsActivos > 0 && (
               <span
-                title={`${pendientes} por revisar`}
-                className={`ml-auto rounded-full bg-(--aviso)/15 px-1.5 text-[12px] font-semibold text-(--aviso) ${
-                  colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''
-                }`}
+                title={
+                  pendientes > 0
+                    ? `${pendientes} por revisar · ${ticketsActivos} casos sin cerrar`
+                    : `${ticketsActivos} casos sin cerrar`
+                }
+                className={`ml-auto rounded-full px-1.5 text-[12px] font-semibold ${
+                  pendientes > 0
+                    ? 'bg-(--aviso)/15 text-(--aviso)'
+                    : 'bg-(--surface-2) font-medium text-(--ink-600)'
+                } ${colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''}`}
               >
-                {pendientes}
-              </span>
-            )}
-            {contadorTickets && ticketsActivos > 0 && (
-              <span
-                title={`${ticketsActivos} sin cerrar`}
-                className={`ml-auto rounded-full bg-(--surface-2) px-1.5 text-[12px] font-medium text-(--ink-600) ${
-                  colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''
-                }`}
-              >
-                {ticketsActivos}
+                {pendientes + ticketsActivos}
               </span>
             )}
           </Link>

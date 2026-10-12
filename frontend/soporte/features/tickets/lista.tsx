@@ -43,6 +43,95 @@ function useSistemas(): string[] {
 }
 type FiltroEstado = 'activos' | EstadoTicket | 'todos';
 
+/**
+ * Una fila de la bandeja, venga de donde venga.
+ *
+ * Las dos tablas siguen separadas por debajo: un ticket tiene numero, sistema, modulo,
+ * prioridad y pasos de investigacion; un aporte tiene autor, problema y los pasos que esa
+ * persona siguio. Meterlos en una tabla comun habria obligado a inventar columnas vacias
+ * para la mitad de las filas. Lo que se une es lo que se ve.
+ */
+interface Fila {
+  clave: string;
+  origen: 'ticket' | 'aporte';
+  titulo: string;
+  referencia: string;
+  detalle: string | null;
+  sistema: string | null;
+  estado: EstadoTicket;
+  /** Lo que se escribe en la pastilla: un aporte no esta «abierto», esta «por revisar». */
+  etiquetaEstado: string;
+  prioridad: string | null;
+  pasos: number;
+  creado: string | null;
+  destino: string;
+}
+
+function deTicket(t: {
+  numero: string; titulo: string; modulo?: string | null; sistema?: string | null;
+  estado: EstadoTicket; prioridad?: string | null; pasos: number; creado_en?: string | null;
+}): Fila {
+  return {
+    clave: `t:${t.numero}`,
+    origen: 'ticket',
+    titulo: t.titulo,
+    referencia: t.numero,
+    detalle: t.modulo ?? null,
+    sistema: t.sistema ?? null,
+    estado: t.estado,
+    etiquetaEstado: ESTADO_TICKET[t.estado].etiqueta,
+    prioridad: t.prioridad ?? null,
+    pasos: t.pasos,
+    creado: t.creado_en ?? null,
+    destino: `/admin/tickets/${t.numero}`,
+  };
+}
+
+/**
+ * Un aporte, como fila de la bandeja.
+ *
+ * El estado se traduce al del ticket para que la lista se pueda filtrar entera con los
+ * mismos botones, pero la palabra que se ve es la del aporte: uno «por revisar» no esta
+ * abierto, esta esperando una decision, y «publicado» no es lo mismo que «resuelto».
+ */
+function deAporte(a: {
+  id: string; titulo: string; autor: string; estado: string; base?: string | null;
+  pasos_json?: unknown[] | null; creado_en?: string | null;
+}): Fila {
+  const comoTicket: EstadoTicket =
+    a.estado === 'pendiente' ? 'investigacion' : a.estado === 'aceptado' ? 'resuelto' : 'pendiente';
+  const etiqueta =
+    a.estado === 'pendiente' ? 'Por revisar' : a.estado === 'aceptado' ? 'Publicado' : 'Rechazado';
+  return {
+    clave: `a:${a.id}`,
+    origen: 'aporte',
+    titulo: a.titulo,
+    referencia: `Aporte de ${a.autor}`,
+    detalle: a.base ?? null,
+    sistema: null,
+    estado: comoTicket,
+    etiquetaEstado: etiqueta,
+    prioridad: null,
+    pasos: Array.isArray(a.pasos_json) ? a.pasos_json.length : 0,
+    creado: a.creado_en ?? null,
+    destino: '/admin/aportes',
+  };
+}
+
+function encaja(f: Fila, filtro: FiltroEstado): boolean {
+  if (filtro === 'todos') return true;
+  if (filtro === 'activos') return f.estado !== 'resuelto';
+  return f.estado === filtro;
+}
+
+/** El filtro de texto y de sistema para lo que no filtra el backend. */
+function coincide(f: Fila, texto: string, sistema: string): boolean {
+  if (sistema) return false; // un aporte no tiene sistema: filtrar por uno lo excluye
+  const aguja = texto.trim().toLowerCase();
+  if (!aguja) return true;
+  return `${f.titulo} ${f.referencia}`.toLowerCase().includes(aguja);
+}
+
 export function PaginaTickets() {
   const sistemas = useSistemas();
   const params = useSearchParams();
@@ -61,9 +150,19 @@ export function PaginaTickets() {
     placeholderData: keepPreviousData,
   });
 
-  const cuenta = (e: FiltroEstado) =>
-    todos?.filter((t) => (e === 'todos' ? true : e === 'activos' ? t.estado !== 'resuelto' : t.estado === e)).length;
-  const lista = data?.filter((t) => (estado === 'todos' ? true : estado === 'activos' ? t.estado !== 'resuelto' : t.estado === estado));
+  // Los aportes entran en esta lista. Lo que llega de otra persona llega por un sitio, y
+  // tener dos pantallas obligaba a acordarse de mirar la segunda.
+  const { data: aportes } = useQuery({ queryKey: ['aportes', 'todos'], queryFn: () => api.aportes('todos') });
+
+  const filasTodas = [...(todos ?? []).map(deTicket), ...(aportes ?? []).map(deAporte)];
+  const filasVisibles = [...(data ?? []).map(deTicket), ...(aportes ?? []).map(deAporte)]
+    // El filtro de texto lo aplica el backend a los tickets; los aportes se filtran aqui,
+    // que es donde estan.
+    .filter((f) => (f.origen === 'ticket' ? true : coincide(f, busqueda, sistema)))
+    .sort((a, b) => String(b.creado ?? '').localeCompare(String(a.creado ?? '')));
+
+  const cuenta = (e: FiltroEstado) => filasTodas.filter((f) => encaja(f, e)).length || undefined;
+  const lista = filasVisibles.filter((f) => encaja(f, estado));
 
   const actualizarParams = (cambios: Record<string, string>) => {
     const p = new URLSearchParams(params.toString());
@@ -74,8 +173,8 @@ export function PaginaTickets() {
   return (
     <>
       <EncabezadoPagina
-        titulo="Tickets"
-        descripcion="Base de conocimiento de casos: descripción, causa raíz, solución y cada paso de la investigación."
+        titulo="Casos y aportes"
+        descripcion="Todo lo que llega: los casos que hay que investigar y las soluciones que manda el equipo, esperando revisión."
         acciones={
           <Button onClick={() => setNuevo(true)}>
             <Plus />
@@ -132,7 +231,7 @@ export function PaginaTickets() {
         {isLoading ? (
           <Cargando />
         ) : !lista?.length ? (
-          <Vacio icono={<IconoTicket />} titulo="No hay tickets con estos filtros" descripcion="Cambie los filtros o registre un ticket nuevo." />
+          <Vacio icono={<IconoTicket />} titulo="Nada con estos filtros" descripcion="Cambie los filtros, o registre un caso nuevo." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -147,26 +246,35 @@ export function PaginaTickets() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {lista.map((t) => (
-                  <tr key={t.numero} onClick={() => router.push(`/admin/tickets/${t.numero}`)} className="group cursor-pointer transition-colors hover:bg-surface-muted/50">
+                {lista.map((f) => (
+                  <tr key={f.clave} onClick={() => router.push(f.destino)} className="group cursor-pointer transition-colors hover:bg-surface-muted/50">
                     <td className="max-w-xl px-5 py-3">
-                      <p className="truncate font-medium group-hover:text-primary">{t.titulo}</p>
+                      <div className="flex items-center gap-2">
+                        {/* De dónde viene. Sin esto, un aporte y un ticket se leerían igual,
+                            y lo que hay que hacer con cada uno no se parece. */}
+                        {f.origen === 'aporte' && (
+                          <span className="shrink-0 rounded-md bg-surface-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            Aporte
+                          </span>
+                        )}
+                        <p className="truncate font-medium group-hover:text-primary">{f.titulo}</p>
+                      </div>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        <span className="font-mono">{t.numero}</span>
-                        {t.modulo && <> · {t.modulo}</>}
+                        <span className={f.origen === 'ticket' ? 'font-mono' : ''}>{f.referencia}</span>
+                        {f.detalle && <> · {f.detalle}</>}
                       </p>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{t.sistema ?? '—'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{f.sistema ?? '—'}</td>
                     <td className="px-3 py-3">
-                      <Badge tono={ESTADO_TICKET[t.estado].tono} punto>
-                        {ESTADO_TICKET[t.estado].etiqueta}
+                      <Badge tono={ESTADO_TICKET[f.estado].tono} punto>
+                        {f.etiquetaEstado}
                       </Badge>
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
-                      {t.prioridad ? <Badge tono={t.prioridad === 'Alta' ? 'danger' : t.prioridad === 'Media' ? 'warning' : 'neutral'}>{t.prioridad}</Badge> : <span className="text-muted-foreground">—</span>}
+                      {f.prioridad ? <Badge tono={f.prioridad === 'Alta' ? 'danger' : f.prioridad === 'Media' ? 'warning' : 'neutral'}>{f.prioridad}</Badge> : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="tabular px-3 py-3 text-right text-muted-foreground">{t.pasos}</td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap text-muted-foreground">{fechaCorta(t.creado_en)}</td>
+                    <td className="tabular px-3 py-3 text-right text-muted-foreground">{f.pasos}</td>
+                    <td className="px-5 py-3 text-right whitespace-nowrap text-muted-foreground">{fechaCorta(f.creado)}</td>
                   </tr>
                 ))}
               </tbody>

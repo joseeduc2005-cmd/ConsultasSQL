@@ -40,7 +40,7 @@ export function PaginaPanel() {
     <>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[13px] text-muted-foreground first-letter:uppercase">{fecha}</p>
+          <p className="text-[14px] text-muted-foreground first-letter:uppercase">{fecha}</p>
           <h2 className="mt-0.5 text-2xl font-semibold tracking-tight">{saludo()}</h2>
         </div>
         <Link
@@ -93,7 +93,7 @@ export function PaginaPanel() {
             titulo="Tickets en curso"
             icono={<Ticket />}
             acciones={
-              <Link href="/admin/tickets" className="text-[13px] font-medium text-primary hover:underline">
+              <Link href="/admin/tickets" className="text-[14px] font-medium text-primary hover:underline">
                 Ver tickets
               </Link>
             }
@@ -109,7 +109,7 @@ export function PaginaPanel() {
                     className="group flex items-center gap-4 px-5 py-3 hover:bg-surface-muted/50"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13.5px] font-medium group-hover:text-primary">{t.titulo}</p>
+                      <p className="truncate text-[14px] font-medium group-hover:text-primary">{t.titulo}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         <span className="font-mono">{t.numero}</span> · {t.pasos} paso{t.pasos === 1 ? '' : 's'}
                       </p>
@@ -142,7 +142,7 @@ function Indicador({
     <Link href={a} className="group">
       <Card className="p-5 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop">
         <div className="flex items-start justify-between">
-          <p className="text-[13px] font-medium text-muted-foreground">{etiqueta}</p>
+          <p className="text-[14px] font-medium text-muted-foreground">{etiqueta}</p>
           <span className={cn('grid size-8 place-items-center rounded-lg [&_svg]:size-4', ACENTOS[acento])}>{icono}</span>
         </div>
         {valor === undefined ? <Skeleton className="mt-2 h-9 w-16" /> : <p className="tabular mt-1 text-3xl font-semibold tracking-tight">{valor}</p>}

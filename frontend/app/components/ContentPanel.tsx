@@ -254,7 +254,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
   const mdPanelClass = isLightTheme
     ? 'dashboard-panel dashboard-elevate rounded-2xl border border-sky-200 bg-white/90 p-6 mb-6 overflow-hidden'
     : 'dashboard-panel dashboard-elevate rounded-2xl border border-slate-700/70 bg-slate-950/55 p-6 mb-6 overflow-hidden';
-  const mdPanelSubtitleClass = isLightTheme ? 'text-[11px] text-slate-500' : 'text-[11px] text-slate-400';
+  const mdPanelSubtitleClass = isLightTheme ? 'text-[12px] text-slate-500' : 'text-[12px] text-slate-400';
   const mdInlineCodeClass = isLightTheme
     ? 'inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sm font-mono text-sky-800'
     : 'inline-flex items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-sm font-mono text-cyan-200';
@@ -290,7 +290,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                 <h2 className="dashboard-gradient-text mt-1 text-lg font-semibold">Solución</h2>
                 <p className={`mt-1 ${mdPanelSubtitleClass}`}>Mismo estilo visual del panel SQL automático.</p>
               </div>
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${isLightTheme ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'}`}>
                 Markdown
               </span>
             </div>
@@ -499,7 +499,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
               if (isNoticeLog) {
                 return (
                   <div className="mb-4 rounded-lg border border-slate-700 overflow-hidden" style={{ background: 'rgba(15,23,42,0.85)' }}>
-                    <div className="px-3 py-2 border-b border-slate-700 text-[10px] font-bold uppercase tracking-wide text-slate-400" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <div className="px-3 py-2 border-b border-slate-700 text-[12px] font-bold uppercase tracking-wide text-slate-400" style={{ background: 'rgba(255,255,255,0.03)' }}>
                       📋 Resumen del resultado
                     </div>
                     <div style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.8', overflowX: 'auto' }}>
@@ -574,7 +574,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                 const lines = rows.map((r) => String(r.output ?? '')).filter(Boolean);
                 return (
                   <div className="mb-4 rounded-lg border border-orange-900/40 overflow-hidden" style={{ background: 'rgba(15,10,5,0.9)' }}>
-                    <div className="px-3 py-2 border-b border-orange-900/30 text-[10px] font-bold uppercase tracking-wide text-orange-400/80" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <div className="px-3 py-2 border-b border-orange-900/30 text-[12px] font-bold uppercase tracking-wide text-orange-400/80" style={{ background: 'rgba(255,255,255,0.02)' }}>
                       🔶 DBMS_OUTPUT
                     </div>
                     <div style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.8', overflowX: 'auto' }}>
@@ -680,7 +680,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                       <thead className="sticky top-0 z-10">
                         <tr className="bg-slate-50 dark:bg-slate-800">
                           {cols.map((col) => (
-                            <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap border-b border-slate-200 dark:border-slate-700">
+                            <th key={col} className="px-3 py-2 text-left text-[12px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap border-b border-slate-200 dark:border-slate-700">
                               {col}
                             </th>
                           ))}
@@ -704,7 +704,7 @@ export default function ContentPanel({ selectedArticle, loading, currentUser: cu
                             {cols.map((col, idx) => (
                               <td key={col} className="px-3 py-2 text-xs font-bold whitespace-nowrap text-slate-800 dark:text-slate-100">
                                 {idx === 0 && !numericCols.includes(col)
-                                  ? <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">TOTAL</span>
+                                  ? <span className="text-[12px] uppercase tracking-wide text-slate-500 dark:text-slate-400">TOTAL</span>
                                   : numericCols.includes(col)
                                     ? new Intl.NumberFormat('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals[col])
                                     : ''}

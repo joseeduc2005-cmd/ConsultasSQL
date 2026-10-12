@@ -23,7 +23,7 @@ export function PrecedentesVista({ precedentes }: { precedentes: Precedente[] })
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">
+        <h3 className="text-[14px] font-semibold tracking-wide text-muted-foreground uppercase">
           Casos parecidos ya resueltos ({precedentes.length})
         </h3>
       </div>
@@ -43,7 +43,7 @@ export function PrecedentesVista({ precedentes }: { precedentes: Precedente[] })
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link href={p.enlace} className="text-[13.5px] font-medium hover:text-primary hover:underline">
+                  <Link href={p.enlace} className="text-[14px] font-medium hover:text-primary hover:underline">
                     {p.titulo}
                   </Link>
                   <Badge tono="neutral">{p.tipo === 'ticket' ? 'Ticket' : 'Artículo'}</Badge>
@@ -53,16 +53,16 @@ export function PrecedentesVista({ precedentes }: { precedentes: Precedente[] })
                       Con script
                     </Badge>
                   )}
-                  <span className="tabular ml-auto text-[12px] text-muted-foreground">
+                  <span className="tabular ml-auto text-[12.5px] text-muted-foreground">
                     {Math.round(p.relevancia * 100)} %
                   </span>
                 </div>
 
                 {p.detalle && (
-                  <p className="mt-1 line-clamp-3 text-[12.5px] leading-relaxed text-muted-foreground">{p.detalle}</p>
+                  <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-muted-foreground">{p.detalle}</p>
                 )}
 
-                <p className="mt-1 text-[11.5px] text-muted-foreground">
+                <p className="mt-1 text-[12.5px] text-muted-foreground">
                   {p.tipo === 'ticket' ? `Caso ${p.id}` : 'Artículo del árbol de categorías'}
                   {p.categoria ? ` · ${p.categoria}` : ''}
                 </p>
@@ -72,7 +72,7 @@ export function PrecedentesVista({ precedentes }: { precedentes: Precedente[] })
         ))}
       </div>
 
-      <p className="text-[11.5px] text-muted-foreground">
+      <p className="text-[12.5px] text-muted-foreground">
         Salen de la base de conocimiento: tickets resueltos que dejaron causa raíz o solución escrita, y artículos
         del árbol. Los que traen script pesan más, porque además de explicar dan con qué arreglarlo.
       </p>

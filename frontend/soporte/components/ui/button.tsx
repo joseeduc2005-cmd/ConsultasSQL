@@ -15,7 +15,7 @@ export const estilosBoton = cva(
         peligro: 'bg-danger text-white shadow-sm hover:opacity-90',
       },
       tamano: {
-        sm: 'h-8 px-3 text-[13px]',
+        sm: 'h-8 px-3 text-[14px]',
         md: 'h-9 px-4',
         lg: 'h-10 px-5',
         icono: 'size-9',

@@ -49,7 +49,7 @@ export default function CabeceraPanel({
               Panel de Administración
               <span className="ml-2 hidden text-(--ink-700) sm:inline">· Soluciones MD</span>
             </h1>
-            <p className="truncate text-[12px] leading-tight text-(--ink-700)">{subtitulo}</p>
+            <p className="truncate text-[12.5px] leading-tight text-(--ink-700)">{subtitulo}</p>
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">

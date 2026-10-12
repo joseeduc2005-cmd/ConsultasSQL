@@ -143,7 +143,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
         <button
           type="button"
           onClick={() => onElegir({ tipo: 'buscar' })}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] font-semibold transition-colors ${
             vista.tipo === 'buscar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
           }`}
         >
@@ -154,7 +154,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
         <button
           type="button"
           onClick={() => onElegir({ tipo: 'aportar' })}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] font-semibold transition-colors ${
             vista.tipo === 'aportar' ? 'bg-(--accent) text-white' : 'text-(--ink-900) hover:bg-(--surface-2)'
           }`}
         >
@@ -163,7 +163,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
           {enRevision > 0 && (
             <span
               title={`${enRevision} esperando revisión`}
-              className={`ml-auto rounded-full px-1.5 text-[10.5px] font-semibold ${
+              className={`ml-auto rounded-full px-1.5 text-[12px] font-semibold ${
                 vista.tipo === 'aportar' ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-600'
               }`}
             >
@@ -185,7 +185,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
             />
           ))
         ) : (
-          <p className="px-3 py-1 text-[12.5px] text-(--ink-500)">Sin temas todavía.</p>
+          <p className="px-3 py-1 text-[13px] text-(--ink-500)">Sin temas todavía.</p>
         )}
       </Grupo>
     </aside>
@@ -195,7 +195,7 @@ function BarraLateral({ vista, onElegir }: { vista: Vista; onElegir: (v: Vista) 
 function Grupo({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div>
-      <p className="px-3 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
+      <p className="px-3 pt-1 pb-1.5 text-[12px] font-semibold tracking-[0.14em] text-(--ink-500) uppercase">
         {titulo}
       </p>
       <div className="space-y-0.5">{children}</div>
@@ -223,12 +223,12 @@ function Categoria({
       <button
         type="button"
         onClick={() => setAbierta((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[14px] text-(--ink-900) transition-colors hover:bg-(--surface-2)"
         aria-expanded={abierta}
       >
         <ChevronDown className={`size-3.5 shrink-0 text-(--ink-500) transition-transform ${abierta ? '' : '-rotate-90'}`} />
         <span className="min-w-0 flex-1 truncate">{nombre}</span>
-        <span className="text-[11px] text-(--ink-500)">{articulos.length}</span>
+        <span className="text-[12px] text-(--ink-500)">{articulos.length}</span>
       </button>
       {abierta && (
         <div className="ml-4 space-y-0.5 border-l border-(--line) pl-2">
@@ -237,7 +237,7 @@ function Categoria({
               key={a.id}
               type="button"
               onClick={() => onElegir(a.id)}
-              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
+              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                 activo === a.id ? 'bg-(--accent)/10 font-medium text-(--accent)' : 'text-(--ink-700) hover:bg-(--surface-2)'
               }`}
             >
@@ -264,7 +264,7 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
     return (
       <span
         title="Este navegador no permite dictar"
-        className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-500) opacity-60"
+        className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-(--line) px-3.5 text-[14px] font-semibold text-(--ink-500) opacity-60"
       >
         <MicOff className="size-4" />
         Dictar (no disponible)
@@ -291,7 +291,7 @@ function BotonDictado({ dictado }: { dictado: Dictado }) {
             : 'Dictar el problema'
       }
       aria-pressed={dictado.grabando}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-[14px] font-semibold transition-colors disabled:opacity-60 ${
         dictado.grabando
           ? 'border-rose-500/40 bg-rose-500/10 text-rose-600'
           : 'border-(--line) bg-(--surface-2) text-(--ink-900) hover:border-(--accent)'
@@ -359,7 +359,7 @@ function Buscar({
             {buscar.isPending ? 'Buscando…' : 'Buscar solución'}
           </button>
           <BotonDictado dictado={dictado} />
-          <span className="text-[12.5px] text-(--ink-500)">
+          <span className="text-[13px] text-(--ink-500)">
             {dictado.error
               ? dictado.error
               : dictado.preparando
@@ -382,7 +382,7 @@ function Buscar({
                 mejor que hay es un parecido flojo, anunciarlo como «esto es lo suyo»
                 hace perder más tiempo que no devolver nada.
               */}
-              <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">
+              <h2 className="text-[14px] font-semibold tracking-wide text-(--ink-500) uppercase">
                 {resultados[0].confianza === 'baja' ? 'Quizá tenga que ver, revíselo' : 'Esto se parece a lo suyo'}
               </h2>
               {resultados.map((p) => (
@@ -419,13 +419,13 @@ function Buscar({
             <p className="text-[14px] font-medium text-(--ink-900)">
               {resultados.length > 0 ? '¿Ninguna le sirve?' : '¿Lo resolvió por su cuenta?'}
             </p>
-            <p className="mt-0.5 text-[13px] text-(--ink-700)">
+            <p className="mt-0.5 text-[14px] text-(--ink-700)">
               Si da con la solución, cuéntela aquí y queda como tema de ayuda para el que venga detrás.
             </p>
             <button
               type="button"
               onClick={() => onAbrir({ tipo: 'aportar', titulo: primeraLinea(texto) })}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[13px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-(--line) bg-(--surface-2) px-3.5 text-[14px] font-semibold text-(--ink-900) transition-colors hover:border-(--accent)"
             >
               <Lightbulb className="size-4" />
               Aportar mi solución
@@ -469,10 +469,10 @@ function Resultado({ precedente: p, onAbrir }: { precedente: PrecedentePublico; 
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-(--ink-900)">{p.titulo}</span>
           {!abierto && cuerpo && (
-            <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[13px] text-(--ink-700)">{resumenPlano(cuerpo)}</span>
           )}
           {navegable && (
-            <span className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-(--accent)">
+            <span className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-medium text-(--accent)">
               Ver el tema completo
               <ChevronRight className="size-3.5" />
             </span>
@@ -484,7 +484,7 @@ function Resultado({ precedente: p, onAbrir }: { precedente: PrecedentePublico; 
           {cuerpo ? (
             <Markdown contenido={cuerpo} />
           ) : (
-            <p className="text-[13.5px] text-(--ink-700)">Este caso no dejó una explicación escrita.</p>
+            <p className="text-[14px] text-(--ink-700)">Este caso no dejó una explicación escrita.</p>
           )}
         </div>
       )}
@@ -507,14 +507,14 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
         <button
           type="button"
           onClick={onVolver}
-          className="mb-3 inline-flex items-center gap-1 text-[12.5px] font-medium text-(--ink-500) transition-colors hover:text-(--ink-900)"
+          className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-(--ink-500) transition-colors hover:text-(--ink-900)"
         >
           <ChevronLeft className="size-3.5" />
           Volver a los resultados
         </button>
       )}
       {data.categoria && (
-        <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
+        <p className="text-[12.5px] font-semibold tracking-wide text-(--ink-500) uppercase">{data.categoria}</p>
       )}
       <h1 className="mt-1 text-xl font-semibold tracking-tight text-(--ink-900)">{data.titulo}</h1>
 
@@ -522,7 +522,7 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
         {data.contenido ? (
           <Markdown contenido={data.contenido} />
         ) : (
-          <p className="text-[13.5px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
+          <p className="text-[14px] text-(--ink-700)">Este tema no tiene contenido escrito.</p>
         )}
       </div>
 
@@ -535,11 +535,11 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
       {data.sentencia && (
         <section className="mt-6 border-t border-(--line) pt-5">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11.5px] font-semibold tracking-wide text-(--ink-500) uppercase">
+            <p className="text-[12.5px] font-semibold tracking-wide text-(--ink-500) uppercase">
               {data.sentencia.lenguaje === 'sql' ? 'Sentencia' : 'Instrucción'}
             </p>
             {data.base && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[11px] text-(--ink-700)">
+              <span className="inline-flex items-center gap-1 rounded-full bg-(--surface-2) px-2 py-0.5 text-[12px] text-(--ink-700)">
                 <Database className="size-3" />
                 {data.base}
               </span>
@@ -547,19 +547,19 @@ function Articulo({ id, onVolver }: { id: string; onVolver?: () => void }) {
             <button
               type="button"
               onClick={() => navigator.clipboard?.writeText(data.sentencia!.texto)}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[11.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[12.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
             >
               <Copy className="size-3" />
               Copiar
             </button>
           </div>
-          <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[12.5px] leading-relaxed text-(--ink-900)">
+          <pre className="mt-2 overflow-x-auto rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3 text-[13px] leading-relaxed text-(--ink-900)">
             <code>{data.sentencia.texto}</code>
           </pre>
           {data.ejecutable ? (
             <Ejecutar id={data.id} titulo={data.titulo} pide={data.pide ?? []} />
           ) : (
-            <p className="mt-2 text-[12.5px] text-(--ink-500)">
+            <p className="mt-2 text-[13px] text-(--ink-500)">
               Este tema es de lectura: la sentencia está para consultarla, no corre nada.
             </p>
           )}
@@ -643,40 +643,40 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
     <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-2)/40 p-4">
       {pide.length > 0 ? (
         <>
-          <p className="text-[12.5px] font-medium text-(--ink-700)">
+          <p className="text-[13px] font-medium text-(--ink-700)">
             {pide.length === 1 ? 'Para consultarlo hace falta este dato:' : 'Para consultarlo hacen falta estos datos:'}
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {pide.map((campo) => (
               <label key={campo.nombre} className="block">
-                <span className="text-[12px] text-(--ink-500)">{campo.etiqueta}</span>
+                <span className="text-[12.5px] text-(--ink-500)">{campo.etiqueta}</span>
                 <input
                   type={campo.tipo === 'date' ? 'date' : 'text'}
                   value={datos[campo.nombre] ?? ''}
                   onChange={(e) => setDatos((d) => ({ ...d, [campo.nombre]: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === 'Enter' && faltan.length === 0) correr.mutate(); }}
-                  className="mt-1 w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13.5px] text-(--ink-900) outline-none focus:border-(--accent)"
+                  className="mt-1 w-full rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[14px] text-(--ink-900) outline-none focus:border-(--accent)"
                 />
               </label>
             ))}
           </div>
         </>
       ) : (
-        <p className="text-[12.5px] text-(--ink-700)">Este tema no necesita ningún dato.</p>
+        <p className="text-[13px] text-(--ink-700)">Este tema no necesita ningún dato.</p>
       )}
 
       <button
         type="button"
         onClick={() => correr.mutate()}
         disabled={faltan.length > 0 || correr.isPending}
-        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-(--accent) px-4 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-40"
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-(--accent) px-4 py-2 text-[14px] font-medium text-white transition-opacity disabled:opacity-40"
       >
         <Play className="size-3.5" />
         {correr.isPending ? 'Consultando…' : 'Consultar'}
       </button>
 
       {error && (
-        <p className="mt-3 rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[12.5px] text-(--ink-900)">
+        <p className="mt-3 rounded-lg border border-(--line) bg-(--surface-2) px-3 py-2 text-[13px] text-(--ink-900)">
           {error}
         </p>
       )}
@@ -684,7 +684,7 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
       {resultado && (
         <div className="mt-4">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[12.5px] text-(--ink-700)">
+            <p className="text-[13px] text-(--ink-700)">
               {resultado.filas.length === 0
                 ? 'No hay nada con esos datos.'
                 : `${resultado.filas.length} ${resultado.filas.length === 1 ? 'resultado' : 'resultados'}`}
@@ -693,7 +693,7 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
               <button
                 type="button"
                 onClick={descargar}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[11.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-(--line) px-2.5 py-1 text-[12.5px] text-(--ink-700) transition-colors hover:text-(--ink-900)"
               >
                 <Download className="size-3" />
                 Descargar CSV
@@ -702,12 +702,12 @@ function Ejecutar({ id, titulo, pide }: { id: string; titulo: string; pide: Camp
           </div>
 
           {resultado.resumen && (
-            <p className="mt-2 text-[12.5px] text-(--ink-500)">{resultado.resumen}</p>
+            <p className="mt-2 text-[13px] text-(--ink-500)">{resultado.resumen}</p>
           )}
 
           {resultado.filas.length > 0 && (
             <div className="mt-2 overflow-x-auto rounded-xl border border-(--line)">
-              <table className="w-full text-left text-[12.5px]">
+              <table className="w-full text-left text-[13px]">
                 <thead className="bg-(--surface-2) text-(--ink-500)">
                   <tr>
                     {resultado.columnas.map((c) => (
@@ -822,7 +822,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
         {enviado && (
           <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-            <p className="text-[13.5px] text-(--ink-900)">
+            <p className="text-[14px] text-(--ink-900)">
               Enviado. Queda pendiente de revisión — abajo puede ver en qué va.
             </p>
           </div>
@@ -848,8 +848,8 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
           </Campo>
 
           <div>
-            <p className="text-[13px] font-medium text-(--ink-900)">Qué hizo, paso a paso</p>
-            <p className="mt-0.5 text-[12px] text-(--ink-500)">
+            <p className="text-[14px] font-medium text-(--ink-900)">Qué hizo, paso a paso</p>
+            <p className="mt-0.5 text-[12.5px] text-(--ink-500)">
               Añada un paso por cada cosa que hizo. Si en alguno usó un script, péguelo ahí mismo.
             </p>
 
@@ -869,7 +869,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
             <button
               type="button"
               onClick={() => setPasos((previos) => [...previos, { ...PASO_VACIO }])}
-              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-dashed border-(--line) px-3.5 text-[13px] font-semibold text-(--ink-700) transition-colors hover:border-(--accent) hover:text-(--ink-900)"
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-dashed border-(--line) px-3.5 text-[14px] font-semibold text-(--ink-700) transition-colors hover:border-(--accent) hover:text-(--ink-900)"
             >
               <Plus className="size-4" />
               Agregar paso
@@ -898,7 +898,7 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
                   ))}
                 </select>
               ) : (
-                <p className="text-[12.5px] text-(--ink-500)">
+                <p className="text-[13px] text-(--ink-500)">
                   Ahora mismo el sistema no alcanza ninguna base. Mándelo igual y soporte lo completa.
                 </p>
               )}
@@ -915,20 +915,20 @@ function Aportar({ titulo: tituloInicial }: { titulo?: string }) {
               <Send className="size-4" />
               {enviar.isPending ? 'Enviando…' : 'Enviar para revisión'}
             </button>
-            <span className="text-[12.5px] text-(--ink-500)">
+            <span className="text-[13px] text-(--ink-500)">
               {listo ? 'No se publica hasta que soporte lo apruebe.' : 'Falta el título o describir los pasos.'}
             </span>
           </div>
 
           {enviar.isError && (
-            <p className="text-[12.5px] text-rose-600">No se pudo enviar: {(enviar.error as Error).message}</p>
+            <p className="text-[13px] text-rose-600">No se pudo enviar: {(enviar.error as Error).message}</p>
           )}
         </div>
       </section>
 
       {mios && mios.length > 0 && (
         <section className="border-t border-(--line) pt-6">
-          <h2 className="text-[13px] font-semibold tracking-wide text-(--ink-500) uppercase">Lo que ha enviado</h2>
+          <h2 className="text-[14px] font-semibold tracking-wide text-(--ink-500) uppercase">Lo que ha enviado</h2>
           <div className="mt-3 space-y-2">
             {mios.map((a) => (
               <MiAporte key={a.id} aporte={a} />
@@ -958,10 +958,10 @@ function Paso({
   return (
     <div className="rounded-xl border border-(--line) bg-(--surface-2) px-4 py-3.5">
       <div className="flex items-center gap-2">
-        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[11.5px] font-semibold text-(--accent)">
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-(--accent)/10 text-[12.5px] font-semibold text-(--accent)">
           {numero}
         </span>
-        <span className="text-[12px] text-(--ink-500)">Paso {numero}</span>
+        <span className="text-[12.5px] text-(--ink-500)">Paso {numero}</span>
         {sePuedeQuitar && (
           <button
             type="button"
@@ -979,14 +979,14 @@ function Paso({
         onChange={(e) => onCambiar({ descripcion: e.target.value })}
         rows={2}
         placeholder="Qué hizo en este paso"
-        className="mt-2 w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 text-[13.5px] leading-relaxed outline-none focus:border-(--accent)"
+        className="mt-2 w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-(--accent)"
       />
 
       {!tieneScript ? (
         <button
           type="button"
           onClick={() => onCambiar({ script: '', efecto: 'consulta' })}
-          className="mt-2 text-[12.5px] font-medium text-(--accent) hover:underline"
+          className="mt-2 text-[13px] font-medium text-(--accent) hover:underline"
         >
           + Añadir un script a este paso
         </button>
@@ -998,7 +998,7 @@ function Paso({
             rows={3}
             spellCheck={false}
             placeholder="SELECT …"
-            className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none focus:border-(--accent)"
+            className="w-full resize-none rounded-lg border border-(--line) bg-(--surface) px-3 py-2 font-mono text-[13px] leading-relaxed outline-none focus:border-(--accent)"
           />
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1008,11 +1008,11 @@ function Paso({
               que luego se rechaza. Todo script de un aporte es una consulta, y se dice
               sin preguntarlo.
             */}
-            <span className="mr-1 text-[12px] text-(--ink-500)">Este script solo consulta</span>
+            <span className="mr-1 text-[12.5px] text-(--ink-500)">Este script solo consulta</span>
             <button
               type="button"
               onClick={() => onCambiar({ script: null, efecto: null })}
-              className="ml-auto text-[12px] text-(--ink-500) hover:text-rose-600"
+              className="ml-auto text-[12.5px] text-(--ink-500) hover:text-rose-600"
             >
               Quitar script
             </button>
@@ -1040,7 +1040,7 @@ function Opcion({
       type="button"
       onClick={onClick}
       aria-pressed={activo}
-      className={`rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors ${
+      className={`rounded-full border px-2.5 py-0.5 text-[12.5px] font-medium transition-colors ${
         activo ? encendido : 'border-(--line) text-(--ink-500) hover:text-(--ink-700)'
       }`}
     >
@@ -1052,8 +1052,8 @@ function Opcion({
 function Campo({ etiqueta, ayuda, children }: { etiqueta: string; ayuda?: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-(--ink-900)">{etiqueta}</span>
-      {ayuda && <span className="mt-0.5 block text-[12px] text-(--ink-500)">{ayuda}</span>}
+      <span className="text-[14px] font-medium text-(--ink-900)">{etiqueta}</span>
+      {ayuda && <span className="mt-0.5 block text-[12.5px] text-(--ink-500)">{ayuda}</span>}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -1074,13 +1074,13 @@ function MiAporte({ aporte }: { aporte: Aporte }) {
       <div className="flex items-start gap-2.5">
         <Icono className={`mt-0.5 size-4 shrink-0 ${color}`} />
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-medium text-(--ink-900)">{aporte.titulo}</p>
-          <p className="mt-0.5 text-[12px] text-(--ink-500)">
+          <p className="text-[14px] font-medium text-(--ink-900)">{aporte.titulo}</p>
+          <p className="mt-0.5 text-[12.5px] text-(--ink-500)">
             {texto}
             {pasos > 0 ? ` · ${pasos} paso${pasos === 1 ? '' : 's'}` : ''}
             {aporte.revisado_por ? ` · revisó ${aporte.revisado_por}` : ''}
           </p>
-          {aporte.nota && <p className="mt-1.5 text-[12.5px] text-(--ink-700)">{aporte.nota}</p>}
+          {aporte.nota && <p className="mt-1.5 text-[13px] text-(--ink-700)">{aporte.nota}</p>}
         </div>
       </div>
     </div>
@@ -1121,7 +1121,7 @@ function Cabecera() {
       </div>
       <div className="min-w-0">
         <p className="truncate text-[16px] leading-tight font-semibold tracking-tight text-(--ink-900)">Soporte</p>
-        <p className="truncate text-[12px] leading-tight text-(--ink-700)">
+        <p className="truncate text-[12.5px] leading-tight text-(--ink-700)">
           Busque su problema, o cuente cómo lo resolvió.
         </p>
       </div>

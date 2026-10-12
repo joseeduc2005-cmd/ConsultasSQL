@@ -24,7 +24,7 @@ export function CardHeader({ titulo, descripcion, acciones, icono, className }: 
         )}
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight">{titulo}</h2>
-          {descripcion && <p className="mt-0.5 text-[13px] text-muted-foreground">{descripcion}</p>}
+          {descripcion && <p className="mt-0.5 text-[14px] text-muted-foreground">{descripcion}</p>}
         </div>
       </div>
       {acciones && <div className="flex shrink-0 items-center gap-2">{acciones}</div>}

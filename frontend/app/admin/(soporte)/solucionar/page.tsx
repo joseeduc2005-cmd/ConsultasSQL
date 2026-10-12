@@ -35,7 +35,7 @@ export default function SolucionarPage() {
     <div className="mx-auto max-w-3xl space-y-6 py-2">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Buscar solución</h1>
-        <p className="mt-1 text-[13.5px] text-muted-foreground">
+        <p className="mt-1 text-[14px] text-muted-foreground">
           Escriba el error tal como se lo reportaron. El sistema busca en todo lo que ya se resolvió: tickets
           cerrados con su causa y artículos del árbol de categorías.
         </p>
@@ -58,14 +58,14 @@ export default function SolucionarPage() {
             {!buscar.isPending && <Search />}
             Buscar solución
           </Button>
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-[12.5px] text-muted-foreground">
             {puedeBuscar ? 'Ctrl + Enter para buscar' : 'Escriba un poco más para poder buscar'}
           </span>
         </div>
       </Card>
 
       {buscar.isError && (
-        <p className="rounded-lg border border-danger/25 bg-danger-soft/50 px-4 py-3 text-[13px]">
+        <p className="rounded-lg border border-danger/25 bg-danger-soft/50 px-4 py-3 text-[14px]">
           No se pudo buscar: {(buscar.error as Error).message}
         </p>
       )}
@@ -77,7 +77,7 @@ export default function SolucionarPage() {
           <Card className="p-6 text-center">
             <Sparkle className="mx-auto size-5 text-muted-foreground" />
             <p className="mt-2 text-[14px] font-medium">Nada parecido todavía</p>
-            <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+            <p className="mx-auto mt-1 max-w-md text-[14px] text-muted-foreground">
               Ningún caso resuelto se parece a este. Registre un ticket: cuando lo resuelvan y escriban la causa y la
               solución, el próximo que llegue con lo mismo lo encontrará aquí.
             </p>

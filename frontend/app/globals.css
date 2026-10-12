@@ -1,6 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@600;700;800&display=swap')
-layer(base);
-
+/* Manrope y Sora estaban aquí y se van: una sola familia, y la que ya se descargaba
+   para el módulo de soporte. Dos fuentes menos que pedir en cada carga. */
 @import 'tailwindcss';
 
 /* Tipografías del módulo de soporte. Solo se descargan en /soporte, donde se usan. */
@@ -25,325 +24,319 @@ layer(base);
   }
 }
 
+/* ── Color ────────────────────────────────────────────────────────────
+
+   Casi todo es gris. El azul aparece en lo que se pulsa y en donde uno esta parado, y en
+   nada mas: cuando todo esta resaltado, no hay nada resaltado. Antes el azul estaba en el
+   fondo, en los paneles, en los bordes, en las barras y en los titulos, y por eso una
+   cedula bloqueada no destacaba sobre el resto.                                        */
+
 :root {
-  --bg-0: #f4f8ff;
-  --bg-1: #e8f0ff;
-  --bg-2: #d7e6ff;
-  --ink-900: #0f1d3b;
-  --ink-800: #1e305a;
-  --ink-700: #31456f;
-  --ink-600: #3d5a8a;
-  --ink-500: #5570a5;
-  --surface-2: #eef4ff;
-  --line: rgba(73, 109, 175, 0.2);
-  --glass: rgba(255, 255, 255, 0.62);
-  --glass-strong: rgba(255, 255, 255, 0.8);
-  --glow: rgba(89, 146, 255, 0.3);
-  --accent: #2363eb;
-  --accent-strong: #1f4fc7;
-  --accent-2: #1aa0c8;
+  --bg-0: #fbfbfd;
+  --bg-1: #f5f5f7;
+  --bg-2: #efeff2;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+
+  --ink-900: #1d1d1f;
+  --ink-800: #2c2c2e;
+  --ink-700: #48484a;
+  --ink-600: #6e6e73;
+  --ink-500: #86868b;
+
+  --line: rgba(0, 0, 0, 0.09);
+  --line-fuerte: rgba(0, 0, 0, 0.16);
+
+  --accent: #0071e3;
+  --accent-strong: #0062c4;
+  --accent-2: #0071e3;
+  --accent-suave: rgba(0, 113, 227, 0.08);
+
+  --exito: #1d8a4e;
+  --aviso: #b25000;
+  --peligro: #c8102e;
+
+  /* La sombra se insinua. Lo que no flota, no la lleva. */
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sombra-2: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sombra-3: 0 8px 28px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.05);
+
+  --glass: var(--surface);
+  --glass-strong: var(--surface);
+  --glow: transparent;
+
+  --radio-control: 10px;
+  --radio-tarjeta: 14px;
 }
 
 :root[data-theme='dark'],
 body[data-theme='dark'] {
-  --bg-0: #0a0e27;
-  --bg-1: #0f172a;
-  --bg-2: #1e3a8a;
-  --ink-900: #f1f5f9;
-  --ink-800: #e2e8f0;
-  --ink-700: #cbd5e1;
-  --ink-600: #b0bec8;
-  --ink-500: #94a3b8;
-  --surface-2: #111a2f;
-  --line: rgba(56, 189, 248, 0.3);
-  --glass: rgba(15, 23, 42, 0.72);
-  --glass-strong: rgba(15, 23, 42, 0.85);
-  --glow: rgba(56, 189, 248, 0.4);
-  --accent: #06b6d4;
-  --accent-strong: #22d3ee;
-  --accent-2: #0ea5e9;
-}
+  --bg-0: #0b0b0c;
+  --bg-1: #121214;
+  --bg-2: #161619;
+  --surface: #1c1c1e;
+  --surface-2: #242427;
 
+  --ink-900: #f5f5f7;
+  --ink-800: #e3e3e6;
+  --ink-700: #c7c7cc;
+  --ink-600: #a1a1a6;
+  --ink-500: #8e8e93;
+
+  --line: rgba(255, 255, 255, 0.10);
+  --line-fuerte: rgba(255, 255, 255, 0.18);
+
+  --accent: #0a84ff;
+  --accent-strong: #409cff;
+  --accent-2: #0a84ff;
+  --accent-suave: rgba(10, 132, 255, 0.14);
+
+  --exito: #30d158;
+  --aviso: #ff9f0a;
+  --peligro: #ff453a;
+
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sombra-2: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --sombra-3: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+  --glass: var(--surface);
+  --glass-strong: var(--surface);
+}
 
 :root[data-theme='light'],
 body[data-theme='light'] {
-  --bg-0: #f4f8ff;
-  --bg-1: #e8f0ff;
-  --bg-2: #d7e6ff;
+  --bg-0: #fbfbfd;
+  --bg-1: #f5f5f7;
+  --bg-2: #efeff2;
 }
+
+/* ── Base ───────────────────────────────────────────────────────────── */
 
 html,
 body {
   height: 100%;
 }
 
+/* Una sola familia. Habia cuatro —Manrope, Sora, Inter y la monoespaciada— y cuatro
+   familias no dan variedad, dan ruido: el contraste sale del tamaño y del peso. */
 body {
   margin: 0;
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  font-family: 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--ink-900);
-  background:
-    radial-gradient(1200px 700px at -10% -15%, rgba(35, 99, 235, 0.2), transparent 62%),
-    radial-gradient(1000px 620px at 110% -20%, rgba(26, 160, 200, 0.2), transparent 60%),
-    linear-gradient(145deg, var(--bg-0), var(--bg-1) 55%, var(--bg-2));
+  background: var(--bg-0);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  position: relative;
 }
 
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  pointer-events: none;
-  z-index: -1;
-  border-radius: 9999px;
-  filter: blur(55px);
+/* Aquí vivían dos manchas azules desenfocadas, fijas detrás de todo. Se quitan: un fondo
+   que se mueve compite con una tabla de resultados, y la tabla es lo que importa. */
+
+/* Dentro de @layer base, y no fuera, para que una clase de Tailwind siga mandando.
+   Fuera de la capa, un `h1 { font-size }` suelto le gana a `text-sm` y deja todos los
+   titulos de la aplicacion del mismo tamano gigante — que es lo que paso. */
+@layer base {
+  h1, h2, h3, h4 {
+    font-family: inherit;
+    letter-spacing: -0.021em;
+    font-weight: 600;
+    color: var(--ink-900);
+  }
+
+  h1 { font-size: 1.75rem; line-height: 1.2; letter-spacing: -0.028em; }
+  h2 { font-size: 1.3rem;  line-height: 1.25; }
+  h3 { font-size: 1.05rem; line-height: 1.3; }
+
+  body { font-size: 15px; line-height: 1.5; }
 }
 
-body::before {
-  width: 360px;
-  height: 360px;
-  top: 10%;
-  left: -90px;
-  background: rgba(79, 125, 255, 0.24);
+button, aside, section, input, textarea, select {
+  transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-body::after {
-  width: 420px;
-  height: 420px;
-  right: -120px;
-  bottom: -90px;
-  background: rgba(26, 160, 200, 0.18);
-}
-
-h1,
-h2,
-h3,
-h4 {
-  font-family: 'Sora', 'Manrope', sans-serif;
-  letter-spacing: -0.02em;
-}
-
-button,
-aside,
-section,
-input,
-textarea,
-select {
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
+/* La barra de desplazamiento se calla. Era azul y de diez píxeles, y en una pantalla con
+   tres columnas con scroll eso son tres rayas de color pidiendo atención. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #7da7ff #dbe7ff;
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
 }
 
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-*::-webkit-scrollbar-track {
-  background: #dbe7ff;
-}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #7da7ff;
+  background-color: rgba(0, 0, 0, 0.18);
   border-radius: 999px;
-  border: 2px solid #dbe7ff;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-  background-color: #6492f7;
+*::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.3); }
+
+:root[data-theme='dark'] *,
+body[data-theme='dark'] * {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
-.app-shell {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15));
+:root[data-theme='dark'] *::-webkit-scrollbar-thumb,
+body[data-theme='dark'] *::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
 }
+
+:root[data-theme='dark'] *::-webkit-scrollbar-thumb:hover,
+body[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+::selection {
+  background: var(--accent-suave);
+  color: var(--ink-900);
+}
+
+/* ── Superficies ─────────────────────────────────────────────────────
+
+   Los nombres se quedan —están en cincuenta componentes— pero ya no son de cristal:
+   son tarjetas blancas con una línea de un píxel. El blur se va entero. Desenfocar lo
+   que hay detrás baja el contraste de lo que hay delante, que es justo lo que se lee. */
+
+.app-shell { background: transparent; }
 
 .glass-panel {
-  background: var(--glass);
+  background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 18px 45px rgba(45, 77, 136, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--radio-tarjeta);
+  box-shadow: var(--sombra-1);
 }
 
 .glass-panel-strong {
-  background: var(--glass-strong);
-  border: 1px solid rgba(73, 109, 175, 0.24);
-  box-shadow: 0 20px 48px rgba(36, 74, 138, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-
-:root[data-theme='dark'] .glass-panel,
-body[data-theme='dark'] .glass-panel {
-  background: rgba(12, 20, 48, 0.58);
-  border-color: rgba(56, 189, 248, 0.14);
-  box-shadow: 0 18px 45px rgba(0, 4, 18, 0.52),
-              inset 0 1px 0 rgba(56, 189, 248, 0.10),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.18);
-}
-
-:root[data-theme='dark'] .glass-panel-strong,
-body[data-theme='dark'] .glass-panel-strong {
-  background: rgba(8, 14, 36, 0.70);
-  border-color: rgba(56, 189, 248, 0.20);
-  box-shadow: 0 20px 48px rgba(0, 4, 18, 0.58),
-              inset 0 1px 0 rgba(56, 189, 248, 0.12),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radio-tarjeta);
+  box-shadow: var(--sombra-2);
 }
 
 .glass-panel-hover {
-  transition: box-shadow 0.14s ease, border-color 0.14s ease;
-  will-change: box-shadow, border-color;
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(53, 111, 227, 0.45);
-  box-shadow: 0 16px 36px rgba(32, 80, 163, 0.18), 0 0 0 1px rgba(53, 111, 227, 0.14);
-}
-
-:root[data-theme='dark'] .glass-panel-hover:hover,
-body[data-theme='dark'] .glass-panel-hover:hover {
-  border-color: rgba(56, 189, 248, 0.38);
-  box-shadow: 0 20px 42px rgba(0, 4, 18, 0.55),
-              0 0 0 1px rgba(56, 189, 248, 0.18),
-              inset 0 1px 0 rgba(56, 189, 248, 0.14);
+  border-color: var(--line-fuerte);
+  box-shadow: var(--sombra-2);
 }
 
 .glass-pill {
-  border: 1px solid rgba(83, 122, 196, 0.25);
-  background: rgba(255, 255, 255, 0.65);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-:root[data-theme='dark'] .glass-pill,
-body[data-theme='dark'] .glass-pill {
-  border-color: rgba(56, 189, 248, 0.22);
-  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink-700);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.focus-ring {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(35, 99, 235, 0.22);
-  border-color: rgba(35, 99, 235, 0.6);
+.focus-ring,
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
+/* El título con degradado se queda en texto. Un degradado de tres colores en la cabecera
+   es lo primero que mira el ojo, y no es lo primero que hay que leer. */
 .text-gradient-title {
-  background: linear-gradient(92deg, #1e3a74 0%, #2363eb 48%, #1aa0c8 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--ink-900);
+  letter-spacing: -0.028em;
 }
 
 .sticker-badge {
   border-radius: 999px;
-  border: 1px solid rgba(73, 109, 175, 0.26);
-  background: rgba(255, 255, 255, 0.74);
-  color: var(--ink-700);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.35rem 0.6rem;
-  box-shadow: 0 8px 24px rgba(54, 93, 169, 0.16);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-600);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  padding: 0.25rem 0.6rem;
+  box-shadow: none;
 }
 
-.input-glass {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(88, 124, 194, 0.28);
+/* ── Campos ─────────────────────────────────────────────────────── */
+
+.input-glass,
+.input-field {
+  background: var(--surface);
+  border: 1px solid var(--line-fuerte);
+  border-radius: var(--radio-control);
   color: var(--ink-900);
+  font-size: 15px;
 }
 
-:root[data-theme='dark'] .input-glass,
-body[data-theme='dark'] .input-glass {
-  background: rgba(2, 6, 23, 0.74);
-  border-color: rgba(71, 85, 105, 0.7);
-  color: var(--ink-900);
+.input-glass::placeholder,
+.input-field::placeholder {
+  color: var(--ink-500);
 }
 
-.input-glass::placeholder {
-  color: rgba(67, 89, 137, 0.7);
-}
-
-:root[data-theme='dark'] .input-glass::placeholder,
-body[data-theme='dark'] .input-glass::placeholder {
-  color: rgba(203, 213, 225, 0.58);
-}
-
-.input-glass:focus {
+.input-glass:focus,
+.input-field:focus {
   outline: none;
-  border-color: rgba(35, 99, 235, 0.6);
-  box-shadow: 0 0 0 3px rgba(35, 99, 235, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-suave);
 }
 
-.btn-accent {
-  background: linear-gradient(92deg, var(--accent), #3454ef 52%, var(--accent-2));
+/* ── Botones ────────────────────────────────────────────────────
+
+   Un color plano en vez de un degradado de tres paradas con sombra de treinta píxeles.
+   Un botón no tiene que parecer un botón de un sitio web de 2014.                     */
+
+.btn-accent,
+.btn-primary {
+  background: var(--accent);
   color: #fff;
-  border: 1px solid rgba(35, 99, 235, 0.55);
-  box-shadow: 0 16px 30px rgba(31, 84, 187, 0.25);
-  transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+  border: 1px solid transparent;
+  border-radius: var(--radio-control);
+  font-weight: 500;
+  box-shadow: none;
+  transition: background-color 0.16s ease, opacity 0.16s ease;
 }
 
-.btn-accent:hover {
-  filter: saturate(1.06);
-  box-shadow: 0 18px 32px rgba(31, 84, 187, 0.28);
+.btn-accent:hover,
+.btn-primary:hover {
+  background: var(--accent-strong);
+  filter: none;
+  box-shadow: none;
 }
 
 .btn-primary {
-  @apply text-white font-bold py-2 px-4 rounded-lg transition duration-200;
-  background: linear-gradient(92deg, var(--accent), #3454ef 52%, var(--accent-2));
+  @apply py-2 px-4;
 }
 
 .btn-secondary {
-  @apply text-slate-700 font-bold py-2 px-4 rounded-lg transition duration-200;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(88, 124, 194, 0.32);
-}
-
-:root[data-theme='dark'] .btn-secondary,
-body[data-theme='dark'] .btn-secondary {
-  background: rgba(15, 23, 42, 0.82);
-  border-color: rgba(71, 85, 105, 0.7);
+  @apply font-medium py-2 px-4 transition duration-200;
+  background: var(--surface);
+  border: 1px solid var(--line-fuerte);
+  border-radius: var(--radio-control);
   color: var(--ink-900);
 }
 
+.btn-secondary:hover { background: var(--surface-2); }
+
 .btn-danger {
-  @apply text-white font-bold py-2 px-4 rounded-lg transition duration-200;
-  background: linear-gradient(92deg, #e44a68, #ca2646);
+  @apply text-white font-medium py-2 px-4 transition duration-200;
+  background: var(--peligro);
+  border-radius: var(--radio-control);
 }
 
-.btn-small {
-  @apply py-1 px-3 text-sm;
-}
+.btn-small { @apply py-1 px-3 text-sm; }
 
-.input-field {
-  @apply w-full px-4 py-2 rounded-lg;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(88, 124, 194, 0.28);
-}
-
-.error-message {
-  @apply text-red-600 text-sm mt-1;
-}
-
-.success-message {
-  @apply text-indigo-700 text-sm mt-1;
-}
+.error-message { color: var(--peligro); @apply text-sm mt-1; }
+.success-message { color: var(--exito); @apply text-sm mt-1; }
 
 .tag {
-  @apply inline-block text-xs font-semibold px-2.5 py-0.5 rounded-sm mr-1;
-  background: rgba(208, 223, 255, 0.8);
-  color: #284074;
+  @apply inline-block text-xs font-medium px-2 py-0.5 mr-1;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink-600);
 }
 
 :root[data-theme='dark'] * {
@@ -372,52 +365,38 @@ body[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
 }
 
 .dashboard-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(620px 260px at 10% 0%, rgba(35, 99, 235, 0.18), transparent 70%),
-    radial-gradient(700px 280px at 95% 5%, rgba(26, 160, 200, 0.2), transparent 72%);
+  content: none;  /* aqui vivian dos manchas azules sobre el fondo limpio */
 }
 
 .dashboard-panel {
   background: var(--glass);
   border: 1px solid var(--line);
-  box-shadow: 0 16px 38px rgba(31, 64, 124, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--sombra-2);
 }
 
 .dashboard-panel-hero {
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.86), rgba(241, 248, 255, 0.74));
-  border: 1px solid rgba(83, 122, 196, 0.28);
-  box-shadow: 0 24px 48px rgba(31, 64, 124, 0.2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--sombra-2);
 }
 
 :root[data-theme='dark'] .dashboard-panel,
 body[data-theme='dark'] .dashboard-panel {
   background: rgba(10, 17, 40, 0.62);
-  border-color: rgba(56, 189, 248, 0.16);
-  box-shadow: 0 20px 42px rgba(0, 4, 18, 0.50),
-              0 1px 3px rgba(56, 189, 248, 0.06),
-              inset 0 1px 0 rgba(56, 189, 248, 0.09);
+  border-color: var(--line);
+  box-shadow: var(--sombra-2);
 }
 
 :root[data-theme='dark'] .dashboard-panel-hero,
 body[data-theme='dark'] .dashboard-panel-hero {
-  background: linear-gradient(145deg, rgba(10, 18, 48, 0.88), rgba(6, 12, 32, 0.88));
-  border-color: rgba(56, 189, 248, 0.26);
-  box-shadow: 0 24px 52px rgba(0, 4, 18, 0.56),
-              inset 0 1px 0 rgba(56, 189, 248, 0.14);
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--sombra-2);
 }
 
 :root[data-theme='dark'] .dashboard-shell::before,
 body[data-theme='dark'] .dashboard-shell::before {
-  background:
-    radial-gradient(680px 300px at 8% 0%, rgba(6, 182, 212, 0.16), transparent 68%),
-    radial-gradient(760px 320px at 94% 6%, rgba(14, 165, 233, 0.13), transparent 70%);
+  content: none;  /* aqui vivian dos manchas azules sobre el fondo limpio */
 }
 
 .dashboard-elevate {
@@ -426,11 +405,11 @@ body[data-theme='dark'] .dashboard-shell::before {
 
 .dashboard-elevate:hover {
   transform: translateY(-1px);
-  box-shadow: 0 24px 46px rgba(33, 73, 146, 0.2);
+  box-shadow: var(--sombra-2);
 }
 
 .dashboard-gradient-text {
-  background: linear-gradient(95deg, #0f2454 0%, #1d4ed8 45%, #0ea5e9 100%);
+  background: var(--surface);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -438,7 +417,7 @@ body[data-theme='dark'] .dashboard-shell::before {
 
 :root[data-theme='dark'] .dashboard-gradient-text,
 body[data-theme='dark'] .dashboard-gradient-text {
-  background: linear-gradient(95deg, #e0f2fe 0%, #67e8f9 50%, #38bdf8 100%);
+  background: var(--surface);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -466,11 +445,7 @@ body[data-theme='dark'] .dashboard-gradient-text {
    ══════════════════════════════════════════════════════════════════ */
 
 body[data-theme='dark'] {
-  background:
-    radial-gradient(1000px 600px at 6% -5%,  rgba(6, 182, 212, 0.18), transparent 58%),
-    radial-gradient(900px 520px at 96% 98%,   rgba(14, 165, 233, 0.14), transparent 55%),
-    radial-gradient(1100px 700px at 50% 48%,  rgba(37, 99, 235, 0.12), transparent 68%),
-    linear-gradient(150deg, #060912 0%, #080e1c 48%, #0c1328 100%);
+  background: var(--surface);
 }
 
 body[data-theme='dark']::before {
@@ -492,18 +467,16 @@ body[data-theme='dark']::after {
 /* ── Dark mode glass-pill ────────────────────────────────────────── */
 :root[data-theme='dark'] .glass-pill,
 body[data-theme='dark'] .glass-pill {
-  border-color: rgba(56, 189, 248, 0.24);
+  border-color: var(--line);
   background: rgba(10, 18, 44, 0.72);
-  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.09);
+  box-shadow: var(--sombra-2);
 }
 
 /* ── Dark mode dashboard elevate hover ───────────────────────────── */
 :root[data-theme='dark'] .dashboard-elevate:hover,
 body[data-theme='dark'] .dashboard-elevate:hover {
   transform: translateY(-2px);
-  box-shadow: 0 28px 52px rgba(0, 4, 18, 0.54),
-              0 0 0 1px rgba(56, 189, 248, 0.18),
-              inset 0 1px 0 rgba(56, 189, 248, 0.12);
+  box-shadow: var(--sombra-2);
 }
 
 

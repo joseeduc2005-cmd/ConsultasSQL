@@ -101,7 +101,7 @@ export default function UserIdentityBadge({
         className={`flex items-center gap-2.5 rounded-xl py-1.5 pr-2 pl-1.5 text-left transition-colors ${hover} ${activo}`}
       >
         <span
-          className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${
+          className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold text-white ${
             isAdmin
               ? 'bg-linear-to-br from-[#2363eb] to-[#1aa0c8]'
               : 'bg-linear-to-br from-[#5f84ba] to-[#46618f]'
@@ -111,10 +111,10 @@ export default function UserIdentityBadge({
         </span>
 
         <span className="hidden min-w-0 sm:block">
-          <span className={`block truncate text-[13.5px] font-semibold leading-tight ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>
+          <span className={`block truncate text-[14px] font-semibold leading-tight ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>
             {displayName}
           </span>
-          <span className={`block text-[11.5px] leading-tight ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+          <span className={`block text-[12.5px] leading-tight ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
             {displayRole}
           </span>
         </span>
@@ -144,8 +144,8 @@ export default function UserIdentityBadge({
         >
           {/* En móvil el nombre no cabe en la barra, así que encabeza el menú. */}
           <div className={`mb-1 border-b px-3 py-2 sm:hidden ${isLightTheme ? 'border-slate-200/70' : 'border-white/10'}`}>
-            <p className={`truncate text-[13.5px] font-semibold ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>{displayName}</p>
-            <p className={`text-[11.5px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>{displayRole}</p>
+            <p className={`truncate text-[14px] font-semibold ${isLightTheme ? 'text-slate-800' : 'text-slate-100'}`}>{displayName}</p>
+            <p className={`text-[12.5px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>{displayRole}</p>
           </div>
 
           {primaryActionLabel && onPrimaryAction && (
@@ -156,7 +156,7 @@ export default function UserIdentityBadge({
                 setOpen(false);
                 onPrimaryAction();
               }}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ${
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-medium transition-colors ${
                 isLightTheme ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-200 hover:bg-white/10'
               }`}
             >
@@ -173,7 +173,7 @@ export default function UserIdentityBadge({
                 setOpen(false);
                 onLogout();
               }}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ${
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-medium transition-colors ${
                 isLightTheme ? 'text-rose-600 hover:bg-rose-50' : 'text-rose-400 hover:bg-[rgba(244,63,94,0.12)]'
               }`}
             >

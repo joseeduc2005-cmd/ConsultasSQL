@@ -20,7 +20,7 @@ export function Vacio({ icono, titulo, descripcion, accion, className }: { icono
     <div className={cn('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
       {icono && <div className="mb-3 grid size-11 place-items-center rounded-xl bg-surface-muted text-muted-foreground [&_svg]:size-5">{icono}</div>}
       <p className="text-sm font-medium">{titulo}</p>
-      {descripcion && <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">{descripcion}</p>}
+      {descripcion && <p className="mt-1 max-w-sm text-[14px] text-muted-foreground">{descripcion}</p>}
       {accion && <div className="mt-4">{accion}</div>}
     </div>
   );

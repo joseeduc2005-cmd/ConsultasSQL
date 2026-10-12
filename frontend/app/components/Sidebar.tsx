@@ -136,7 +136,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
           aquí solo va la etiqueta de sección, para que no parezca que contrae
           únicamente las categorías. */}
       {!isCollapsed && (
-        <p className="px-3 pt-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
+        <p className="px-3 pt-1 pb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
           Categorías
         </p>
       )}
@@ -215,7 +215,7 @@ export default function Sidebar({ categories, articles, onSelectCategory, onSele
                       return (
                         <div key={subgroup.subcategoria}>
                           {!hideSubcategoryHeading && visibleArticles.length > 0 && (
-                            <p className={`px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-widest select-none ${
+                            <p className={`px-3 pt-2 pb-0.5 text-[12px] font-semibold uppercase tracking-widest select-none ${
                               isLightTheme ? 'text-(--ink-500)' : 'text-slate-500'
                             }`}>
                               {subgroup.subcategoria}

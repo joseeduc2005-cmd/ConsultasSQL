@@ -38,14 +38,14 @@ export function PaginaTicket() {
 
   return (
     <>
-      <Link href="/admin/tickets" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+      <Link href="/admin/tickets" className="mb-4 inline-flex items-center gap-1.5 text-[14px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-3.5" />
         Tickets
       </Link>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-[14px] text-muted-foreground">
             <span className="font-mono">{t.numero}</span>
             {t.sistema && <span>· {t.sistema}</span>}
             {t.modulo && <span>· {t.modulo}</span>}
@@ -54,7 +54,7 @@ export function PaginaTicket() {
         </div>
         <div className="flex items-center gap-2">
           {t.url_sir && (
-            <a href={t.url_sir} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-card hover:bg-surface-muted">
+            <a href={t.url_sir} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[14px] font-medium shadow-card hover:bg-surface-muted">
               <ExternalLink className="size-4" />
               Abrir en SIR
             </a>
@@ -80,7 +80,7 @@ export function PaginaTicket() {
 
         <aside className="space-y-6 lg:sticky lg:top-0">
           <Card>
-            <CardContent className="space-y-3 text-[13px]">
+            <CardContent className="space-y-3 text-[14px]">
               <Dato etiqueta="Estado">
                 <Badge tono={ESTADO_TICKET[t.estado].tono} punto>
                   {ESTADO_TICKET[t.estado].etiqueta}
@@ -88,7 +88,7 @@ export function PaginaTicket() {
               </Dato>
               <Dato etiqueta="Prioridad">{t.prioridad ?? '—'}</Dato>
               <Dato etiqueta="Base de datos">
-                {t.base_datos ? <span className="font-mono text-[12.5px]">{t.base_datos}</span> : '—'}
+                {t.base_datos ? <span className="font-mono text-[13px]">{t.base_datos}</span> : '—'}
               </Dato>
               <Dato etiqueta="Categoría">{t.categoria ?? '—'}</Dato>
               <Dato etiqueta="Autor">
@@ -107,13 +107,13 @@ export function PaginaTicket() {
           <Card>
             <CardHeader titulo="Casos similares" />
             {t.similares.length === 0 ? (
-              <p className="px-5 py-4 text-[13px] text-muted-foreground">Sin casos parecidos.</p>
+              <p className="px-5 py-4 text-[14px] text-muted-foreground">Sin casos parecidos.</p>
             ) : (
               <ul className="divide-y">
                 {t.similares.map((s) => (
                   <li key={s.numero}>
                     <Link href={`/admin/tickets/${s.numero}`} className="group block px-5 py-3 hover:bg-surface-muted/60">
-                      <p className="line-clamp-2 text-[13px] font-medium group-hover:text-primary">{s.titulo}</p>
+                      <p className="line-clamp-2 text-[14px] font-medium group-hover:text-primary">{s.titulo}</p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">{s.numero}</p>
                     </Link>
                   </li>
@@ -132,7 +132,7 @@ function Seccion({ titulo, texto, vacio }: { titulo: string; texto: string | nul
   return (
     <section>
       <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</h3>
-      {texto ? <p className="text-[14px] leading-relaxed whitespace-pre-line">{texto}</p> : <p className="text-[13.5px] text-muted-foreground italic">{vacio}</p>}
+      {texto ? <p className="text-[14px] leading-relaxed whitespace-pre-line">{texto}</p> : <p className="text-[14px] text-muted-foreground italic">{vacio}</p>}
     </section>
   );
 }
@@ -185,7 +185,7 @@ function DiagnosticarDesdeTicket({ numero, base }: { numero: string; base: strin
     return (
       <Card>
         <CardHeader titulo="Diagnosticar" icono={<ScanSearch />} />
-        <p className="px-5 py-4 text-[13px] text-muted-foreground">
+        <p className="px-5 py-4 text-[14px] text-muted-foreground">
           Este caso se investiga contra <span className="font-mono">{base}</span>, y los diagnósticos
           automáticos están escritos contra <span className="font-mono">{baseDiagnosticos}</span>. Use la
           Biblioteca SQL o el panel de consultas para esta base.
@@ -200,7 +200,7 @@ function DiagnosticarDesdeTicket({ numero, base }: { numero: string; base: strin
       <ul className="divide-y">
         {playbooks?.map((p) => (
           <li key={p.id}>
-            <Link href={`/admin/diagnostico/${p.id}?ticket=${encodeURIComponent(numero)}`} className="group flex items-center justify-between gap-2 px-5 py-2.5 text-[13px] hover:bg-surface-muted/60">
+            <Link href={`/admin/diagnostico/${p.id}?ticket=${encodeURIComponent(numero)}`} className="group flex items-center justify-between gap-2 px-5 py-2.5 text-[14px] hover:bg-surface-muted/60">
               {p.nombre}
               <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
             </Link>
@@ -261,14 +261,14 @@ function Investigacion({ ticket }: { ticket: TicketDetalle }) {
       />
 
       {sinBase && (
-        <p className="mx-5 mb-4 rounded-lg border px-4 py-3 text-[13px] text-muted-foreground">
+        <p className="mx-5 mb-4 rounded-lg border px-4 py-3 text-[14px] text-muted-foreground">
           Sin base de datos conectada, «Revisar error» busca casos parecidos ya resueltos en la base de
           conocimiento. Cuando se configure la conexión, además comprobará el caso en Oracle.
         </p>
       )}
 
       {revision && !revision.ejecutado && (
-        <p className="mx-5 mb-4 rounded-lg border border-warning/25 bg-warning-soft/60 px-4 py-3 text-[13px]">
+        <p className="mx-5 mb-4 rounded-lg border border-warning/25 bg-warning-soft/60 px-4 py-3 text-[14px]">
           {revision.motivo}
         </p>
       )}
@@ -324,7 +324,7 @@ function PasoItem({ paso, ultimo }: { paso: PasoTicket; ultimo: boolean }) {
             <p className="text-[14px] leading-snug font-medium">{paso.titulo}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {paso.fecha && <span>{paso.fecha}</span>}
-              <Badge tono={ORIGEN[paso.origen].tono} className="h-5 px-1.5 text-[11px]">
+              <Badge tono={ORIGEN[paso.origen].tono} className="h-5 px-1.5 text-[12px]">
                 {ORIGEN[paso.origen].etiqueta}
               </Badge>
               {paso.diagnostico_id && (
@@ -343,8 +343,8 @@ function PasoItem({ paso, ultimo }: { paso: PasoTicket; ultimo: boolean }) {
             {paso.evidencia && <Bloque etiqueta="Evidencia" texto={paso.evidencia} />}
             {paso.conclusion && (
               <div className="rounded-lg border-l-2 border-primary bg-primary-soft/40 px-3 py-2">
-                <p className="text-[11px] font-semibold tracking-wide text-primary-soft-foreground uppercase">Conclusión</p>
-                <p className="mt-0.5 text-[13.5px] leading-relaxed whitespace-pre-line">{paso.conclusion}</p>
+                <p className="text-[12px] font-semibold tracking-wide text-primary-soft-foreground uppercase">Conclusión</p>
+                <p className="mt-0.5 text-[14px] leading-relaxed whitespace-pre-line">{paso.conclusion}</p>
               </div>
             )}
           </div>
@@ -357,8 +357,8 @@ function PasoItem({ paso, ultimo }: { paso: PasoTicket; ultimo: boolean }) {
 function Bloque({ etiqueta, texto }: { etiqueta: string; texto: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{etiqueta}</p>
-      <p className="mt-0.5 text-[13.5px] leading-relaxed whitespace-pre-line">{texto}</p>
+      <p className="text-[12px] font-semibold tracking-wide text-muted-foreground uppercase">{etiqueta}</p>
+      <p className="mt-0.5 text-[14px] leading-relaxed whitespace-pre-line">{texto}</p>
     </div>
   );
 }

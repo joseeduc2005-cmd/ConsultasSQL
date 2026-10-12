@@ -276,14 +276,14 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
         */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium">Pasos de lo que se hizo</p>
-            <span className="text-[12px] text-muted-foreground">opcional</span>
+            <p className="text-[14px] font-medium">Pasos de lo que se hizo</p>
+            <span className="text-[12.5px] text-muted-foreground">opcional</span>
           </div>
 
           {pasos.map((paso, i) => (
             <div key={i} className="space-y-2 rounded-lg border p-3">
               <div className="flex items-start gap-2">
-                <span className="mt-2 grid size-5 shrink-0 place-items-center rounded-full bg-surface-muted text-[11px] font-medium tabular">
+                <span className="mt-2 grid size-5 shrink-0 place-items-center rounded-full bg-surface-muted text-[12px] font-medium tabular">
                   {i + 1}
                 </span>
                 <Textarea
@@ -295,7 +295,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
                 <button
                   type="button"
                   onClick={() => setPasos((previos) => previos.filter((_, j) => j !== i))}
-                  className="mt-1.5 shrink-0 text-[12px] text-muted-foreground hover:text-danger"
+                  className="mt-1.5 shrink-0 text-[12.5px] text-muted-foreground hover:text-danger"
                 >
                   Quitar
                 </button>
@@ -305,7 +305,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
                 <button
                   type="button"
                   onClick={() => cambiarPaso(i, { script: '' })}
-                  className="ml-7 text-[12px] font-medium text-primary hover:underline"
+                  className="ml-7 text-[12.5px] font-medium text-primary hover:underline"
                 >
                   Añadir la consulta que lo comprueba
                 </button>
@@ -317,14 +317,14 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
                     placeholder="SELECT …"
                     rows={3}
                     spellCheck={false}
-                    className="font-mono text-[12.5px]"
+                    className="font-mono text-[13px]"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-muted-foreground">Esta consulta solo lee</span>
+                    <span className="text-[12.5px] text-muted-foreground">Esta consulta solo lee</span>
                     <button
                       type="button"
                       onClick={() => cambiarPaso(i, { script: null })}
-                      className="ml-auto text-[12px] text-muted-foreground hover:text-danger"
+                      className="ml-auto text-[12.5px] text-muted-foreground hover:text-danger"
                     >
                       Quitar consulta
                     </button>
@@ -346,12 +346,12 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
         <button
           type="button"
           onClick={() => setMasDetalles((v) => !v)}
-          className="flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+          className="flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[14px] font-medium transition-colors hover:bg-surface-muted/50"
           aria-expanded={masDetalles}
         >
           <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', masDetalles && 'rotate-180')} />
           Clasificación y referencia
-          <span className="ml-auto text-[12px] font-normal text-muted-foreground">opcional</span>
+          <span className="ml-auto text-[12.5px] font-normal text-muted-foreground">opcional</span>
         </button>
 
         {masDetalles && (
@@ -418,7 +418,7 @@ function NuevoTicket({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => 
                       </option>
                     ))}
                   </Select>
-                  {baseElegida?.nota && <p className="mt-1.5 text-[12px] text-muted-foreground">{baseElegida.nota}</p>}
+                  {baseElegida?.nota && <p className="mt-1.5 text-[12.5px] text-muted-foreground">{baseElegida.nota}</p>}
                 </Campo>
               </div>
             )}

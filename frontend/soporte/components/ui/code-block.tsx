@@ -40,7 +40,7 @@ export function CodeBlock({ codigo, etiqueta = 'SQL', className, maxAlto = 'max-
       )}
     >
       <div className="flex items-center justify-between border-b border-inherit px-3 py-1.5">
-        <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{etiqueta}</span>
+        <span className="text-[12px] font-semibold tracking-wider text-muted-foreground uppercase">{etiqueta}</span>
         <button
           type="button"
           onClick={() => copiar(codigo)}
@@ -50,7 +50,7 @@ export function CodeBlock({ codigo, etiqueta = 'SQL', className, maxAlto = 'max-
           {copiado ? 'Copiado' : 'Copiar'}
         </button>
       </div>
-      <pre className={cn('scroll-fino overflow-auto px-3.5 py-3 text-[12.5px] leading-relaxed', maxAlto)}>
+      <pre className={cn('scroll-fino overflow-auto px-3.5 py-3 text-[13px] leading-relaxed', maxAlto)}>
         <code>{codigo}</code>
       </pre>
     </div>

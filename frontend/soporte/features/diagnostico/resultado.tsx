@@ -97,7 +97,7 @@ export function ResultadoDiagnosticoVista({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tono={v.tono}>{v.etiqueta}</Badge>
-              <span className="text-[13px] text-muted-foreground">{resultado.nombrePlaybook}</span>
+              <span className="text-[14px] text-muted-foreground">{resultado.nombrePlaybook}</span>
             </div>
             <p className="mt-1.5 text-[15px] font-semibold">{resultado.resumen}</p>
           </div>
@@ -111,7 +111,7 @@ export function ResultadoDiagnosticoVista({
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-5 py-2.5 text-[12.5px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-5 py-2.5 text-[13px] text-muted-foreground">
           {Object.entries(resultado.entrada).map(([k, valor]) => (
             <span key={k}>
               {ETIQUETA_CAMPO[k] ?? k} <span className="font-mono text-foreground">{valor}</span>
@@ -154,7 +154,7 @@ function Hallazgos({ hallazgos }: { hallazgos: Hallazgo[] }) {
         aria-expanded={abierto}
       >
         <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', abierto && 'rotate-180')} />
-        <h3 className="text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">
+        <h3 className="text-[14px] font-semibold tracking-wide text-muted-foreground uppercase">
           Hallazgos ({hallazgos.length})
         </h3>
         {criticos > 0 && (
@@ -184,7 +184,7 @@ function HallazgoCard({ hallazgo: h }: { hallazgo: Hallazgo }) {
           {s.etiqueta}
         </Badge>
       </div>
-      <p className="mt-1.5 text-[13.5px] leading-relaxed whitespace-pre-line text-muted-foreground">{h.detalle}</p>
+      <p className="mt-1.5 text-[14px] leading-relaxed whitespace-pre-line text-muted-foreground">{h.detalle}</p>
 
       {h.ticketsRelacionados && h.ticketsRelacionados.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -218,12 +218,12 @@ function HallazgoCard({ hallazgo: h }: { hallazgo: Hallazgo }) {
               </Link>
             )}
           </div>
-          <p className="mt-2 text-[13px]">{a.descripcion}</p>
+          <p className="mt-2 text-[14px]">{a.descripcion}</p>
           {a.sql && (
             <>
               <CodeBlock codigo={a.sql} className="mt-2.5" etiqueta={a.riesgo === 'escritura' ? 'SQL de corrección' : 'SQL'} tono={a.riesgo === 'escritura' ? 'peligro' : 'normal'} />
               {a.riesgo === 'escritura' && (
-                <p className="mt-2 text-[11.5px] text-muted-foreground">
+                <p className="mt-2 text-[12.5px] text-muted-foreground">
                   Este sistema no ejecuta sentencias de escritura. Revise los valores y envíe la corrección al responsable.
                 </p>
               )}
@@ -265,7 +265,7 @@ export function PropuestaExploracionVista({ propuesta: p }: { propuesta: Propues
             </Badge>
           </div>
           <p className="mt-1.5 text-[15px] font-semibold">{p.resumen}</p>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Comparado contra {p.poblacion} usuarios que operaron en los ultimos {p.dias} dias.
           </p>
         </div>
@@ -277,9 +277,9 @@ export function PropuestaExploracionVista({ propuesta: p }: { propuesta: Propues
 
       <div className="space-y-4 px-5 py-4">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[14px]">
             <thead>
-              <tr className="text-[11.5px] tracking-wide text-muted-foreground uppercase">
+              <tr className="text-[12.5px] tracking-wide text-muted-foreground uppercase">
                 <th className="pb-1.5 font-medium">Columna</th>
                 <th className="pb-1.5 font-medium">Tiene</th>
                 <th className="pb-1.5 font-medium">Lo normal</th>
@@ -289,7 +289,7 @@ export function PropuestaExploracionVista({ propuesta: p }: { propuesta: Propues
             <tbody className="divide-y">
               {p.anomalias.map((a) => (
                 <tr key={a.columna}>
-                  <td className="py-1.5 font-mono text-[12.5px]">{a.columna}</td>
+                  <td className="py-1.5 font-mono text-[13px]">{a.columna}</td>
                   <td className="py-1.5 font-mono text-danger">{a.valorActual}</td>
                   <td className="py-1.5 font-mono text-success">{a.valorSano}</td>
                   <td className="tabular py-1.5 text-muted-foreground">{Math.round(a.cuota * 100)} %</td>
@@ -301,7 +301,7 @@ export function PropuestaExploracionVista({ propuesta: p }: { propuesta: Propues
 
         <CodeBlock codigo={p.sql} etiqueta="Correccion propuesta" tono="peligro" />
 
-        <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
           Esta sentencia no viene del catalogo de correcciones aprobadas: la redacto el sistema comparando este caso
           con la poblacion. Afecta a una sola fila, por clave primaria. Confirmela antes de aplicarla; publicarla la
           deja lista en categorias, no la ejecuta.
@@ -377,10 +377,10 @@ function FilaOpcion({
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13.5px] font-medium">{opcion.titulo}</span>
+          <span className="text-[14px] font-medium">{opcion.titulo}</span>
           {opcion.insignia}
         </div>
-        <p className="mt-1 text-[12.5px] text-muted-foreground">{opcion.detalle}</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">{opcion.detalle}</p>
       </div>
     </label>
   );
@@ -489,7 +489,7 @@ function PublicarSolucion({
     return (
       <Link
         href={`/admin?articulo=${encodeURIComponent(publicado.articulo.id)}`}
-        className="text-[13px] font-medium text-primary hover:underline"
+        className="text-[14px] font-medium text-primary hover:underline"
       >
         Ver en categorias
       </Link>
@@ -528,7 +528,7 @@ function PublicarSolucion({
         <div className="space-y-3">
           {principal && (
             <div>
-              <p className="mb-1.5 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase">
+              <p className="mb-1.5 text-[12.5px] font-semibold tracking-wide text-muted-foreground uppercase">
                 Solucion principal
               </p>
               <FilaOpcion
@@ -544,12 +544,12 @@ function PublicarSolucion({
               <button
                 type="button"
                 onClick={() => setVerMas((v) => !v)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] font-medium transition-colors hover:bg-surface-muted/50"
                 aria-expanded={verMas}
               >
                 <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', verMas && 'rotate-180')} />
                 Mas soluciones ({secundarias.length})
-                <span className="ml-auto text-[12px] font-normal text-muted-foreground">
+                <span className="ml-auto text-[12.5px] font-normal text-muted-foreground">
                   si la principal no funciono
                 </span>
               </button>
@@ -572,12 +572,12 @@ function PublicarSolucion({
             <button
               type="button"
               onClick={() => setConPropio((v) => !v)}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-surface-muted/50"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] font-medium transition-colors hover:bg-surface-muted/50"
               aria-expanded={conPropio}
             >
               <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', conPropio && 'rotate-180')} />
               Subir mi propia solucion
-              <span className="ml-auto text-[12px] font-normal text-muted-foreground">si ninguna sirve</span>
+              <span className="ml-auto text-[12.5px] font-normal text-muted-foreground">si ninguna sirve</span>
             </button>
             {conPropio && (
               <div className="animate-entrada space-y-2.5 border-t p-3">
@@ -585,31 +585,31 @@ function PublicarSolucion({
                   value={tituloPropio}
                   onChange={(e) => setTituloPropio(e.target.value)}
                   placeholder="Nombre de la correccion (opcional)"
-                  className="w-full rounded-lg border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary/50"
+                  className="w-full rounded-lg border bg-surface px-3 py-2 text-[14px] outline-none focus:border-primary/50"
                 />
                 <div>
-                  <p className="mb-1 text-[12px] font-medium text-muted-foreground">Pasos que seguiste (opcional)</p>
+                  <p className="mb-1 text-[12.5px] font-medium text-muted-foreground">Pasos que seguiste (opcional)</p>
                   <textarea
                     value={pasosPropios}
                     onChange={(e) => setPasosPropios(e.target.value)}
                     rows={4}
                     placeholder={'Un paso por linea. Por ejemplo:\nEntrar al modulo de Corresponsales\nAbrir Opciones > Mantenimiento de usuarios\nBuscar por cedula y quitar la marca de clave temporal'}
-                    className="w-full rounded-lg border bg-surface px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-primary/50"
+                    className="w-full rounded-lg border bg-surface px-3 py-2 text-[13px] leading-relaxed outline-none focus:border-primary/50"
                   />
-                  <p className="mt-1 text-[11.5px] text-muted-foreground">
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">
                     Para arreglos que no son una sentencia sino un procedimiento. Cada linea se numera como paso.
                   </p>
                 </div>
 
                 <div>
-                  <p className="mb-1 text-[12px] font-medium text-muted-foreground">SQL (opcional)</p>
+                  <p className="mb-1 text-[12.5px] font-medium text-muted-foreground">SQL (opcional)</p>
                   <textarea
                     value={sqlPropio}
                     onChange={(e) => setSqlPropio(e.target.value)}
                     rows={6}
                     spellCheck={false}
                     placeholder={'UPDATE CORRESPONSALES.USUARIO\nSET USR_ESTADO = 1\nWHERE USR_CODIGO = :usr_codigo;\nCOMMIT;'}
-                    className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[12.5px] outline-none focus:border-primary/50"
+                    className="w-full rounded-lg border bg-surface-muted/40 px-3 py-2 font-mono text-[13px] outline-none focus:border-primary/50"
                   />
                 </div>
 
@@ -622,7 +622,7 @@ function PublicarSolucion({
                         onChange={() => setDinamico(true)}
                         className="mt-0.5 size-3.5 shrink-0 accent-[var(--color-primary)]"
                       />
-                      <span className="text-[12.5px]">
+                      <span className="text-[13px]">
                         <span className="font-medium">Script dinamico.</span> Los{' '}
                         <span className="font-mono">:marcadores</span> se vuelven campos del formulario y el articulo
                         sirve para el proximo caso.
@@ -635,7 +635,7 @@ function PublicarSolucion({
                         onChange={() => setDinamico(false)}
                         className="mt-0.5 size-3.5 shrink-0 accent-[var(--color-primary)]"
                       />
-                      <span className="text-[12.5px]">
+                      <span className="text-[13px]">
                         <span className="font-medium">De un solo uso.</span> Se ejecuta tal cual, sin formulario.
                       </span>
                     </label>
@@ -646,7 +646,7 @@ function PublicarSolucion({
           </div>
         </div>
 
-        <p className="mt-3 text-[12px] text-muted-foreground">
+        <p className="mt-3 text-[12.5px] text-muted-foreground">
           Publicar no ejecuta nada: deja los articulos listos en categorias con su formulario.
           {estado && !estado.correccionesEjecutables && (
             <>

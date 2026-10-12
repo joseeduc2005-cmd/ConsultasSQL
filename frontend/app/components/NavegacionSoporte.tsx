@@ -76,7 +76,7 @@ export default function NavegacionSoporte({
   return (
     <nav className={colapsado ? 'flex flex-col items-center gap-1' : 'space-y-0.5'}>
       {!colapsado && (
-        <p className="px-3 pt-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
+        <p className="px-3 pt-1 pb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-(--ink-500)">
           Centro de Soporte
         </p>
       )}
@@ -133,7 +133,7 @@ export default function NavegacionSoporte({
             {contador && pendientes > 0 && (
               <span
                 title={`${pendientes} por revisar`}
-                className={`ml-auto rounded-full bg-amber-500/20 px-1.5 text-[10.5px] font-semibold text-amber-600 ${
+                className={`ml-auto rounded-full bg-amber-500/20 px-1.5 text-[12px] font-semibold text-amber-600 ${
                   colapsado ? 'absolute top-0.5 right-0.5 ml-0 px-1' : ''
                 }`}
               >

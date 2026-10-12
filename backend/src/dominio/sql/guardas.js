@@ -39,6 +39,70 @@ export function stripSqlStringsAndComments(sqlText = '') {
     .replace(/"(?:[^"]|"")*"/g, '""');       // double-quoted identifiers
 }
 
+/**
+ * Qué posiciones del texto caen dentro de una cadena o de un comentario.
+ *
+ * Devuelve una marca de la misma longitud que el SQL, con un 1 en cada carácter que no
+ * es código. Hace falta la longitud original: lo que se necesita saber es si un marcador
+ * que está en la posición N es de verdad un marcador, y recortar el texto —como hace
+ * `stripSqlStringsAndComments`— mueve justo eso.
+ *
+ * Existe porque un `:algo` dentro de un texto se tomaba por un parámetro: el `:MI` de
+ * `TO_CHAR(fecha, 'HH24:MI')` destrozaba el formato y añadía un parámetro fantasma. En
+ * Oracle eso es como se escribe una hora, así que caía en cualquier informe.
+ */
+export function marcarLiteralesYComentarios(sqlText = '') {
+  const texto = String(sqlText || '');
+  const dentro = new Uint8Array(texto.length);
+  let i = 0;
+  const marcar = (desde, hasta) => { for (let k = desde; k < hasta && k < texto.length; k += 1) dentro[k] = 1; };
+
+  while (i < texto.length) {
+    const c = texto[i];
+    const siguiente = texto[i + 1];
+
+    if (c === '-' && siguiente === '-') {
+      const fin = texto.indexOf('\n', i);
+      const hasta = fin === -1 ? texto.length : fin;
+      marcar(i, hasta);
+      i = hasta;
+      continue;
+    }
+    if (c === '/' && siguiente === '*') {
+      const fin = texto.indexOf('*/', i + 2);
+      const hasta = fin === -1 ? texto.length : fin + 2;
+      marcar(i, hasta);
+      i = hasta;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < texto.length) {
+        // La comilla repetida es un escape, no el cierre: 'O''Brien' es una sola cadena.
+        if (texto[j] === c && texto[j + 1] === c) { j += 2; continue; }
+        if (texto[j] === c) { j += 1; break; }
+        j += 1;
+      }
+      marcar(i, j);
+      i = j;
+      continue;
+    }
+    // Bloque con dólares de PostgreSQL: $$ … $$ o $etiqueta$ … $etiqueta$
+    if (c === '$') {
+      const etiqueta = texto.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (etiqueta) {
+        const cierre = texto.indexOf(etiqueta[0], i + etiqueta[0].length);
+        const hasta = cierre === -1 ? texto.length : cierre + etiqueta[0].length;
+        marcar(i, hasta);
+        i = hasta;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return dentro;
+}
+
 export function stripLeadingSqlComments(sqlText = '') {
   return String(sqlText || '')
     .replace(/^(?:\s*(?:--[^\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/))+/, '')

@@ -192,11 +192,35 @@ for (const x of demo) console.log(`       ${x.numero}  ${String(x.estado).padEnd
 if (demo.length !== 5) mal('no están los cinco tickets');
 
 console.log('\n── Los aportes ──────────────────────────────────────────────────');
+
+// Si no hay ninguno pendiente, la prueba se crea el suyo.
+//
+// Aceptar el aporte es un paso de la demostración, así que en cuanto alguien ensaya el
+// recorrido la bandeja se queda vacía y esta comprobación fallaba — pareciendo un fallo
+// del sistema cuando lo único que había pasado es que el ensayo funcionó. Depender de
+// lo que haya ese día es lo que vuelve inútil a una prueba.
+const { rows: [pendiente] } = await pool.query(
+  "SELECT id FROM soporte.aportes WHERE estado = 'pendiente' LIMIT 1",
+);
+let aporteDeLaPrueba = null;
+if (!pendiente) {
+  const { rows: [creado] } = await pool.query(
+    `INSERT INTO soporte.aportes (autor, titulo, problema, pasos, base, estado, creado_en)
+     VALUES ('prueba-demo', '[prueba-demo] Aporte para comprobar la bandeja',
+             'Lo crea la prueba porque no había ninguno pendiente.',
+             '1. Comprobar que la bandeja los muestra.', 'demo_cooperativa', 'pendiente', now())
+     RETURNING id`,
+  );
+  aporteDeLaPrueba = creado.id;
+  console.log('   (no había ninguno pendiente: la prueba crea el suyo)');
+}
+
 const a = await pedir('/api/soporte/aportes?estado=pendiente');
 const aportes = Array.isArray(a.json) ? a.json : (a.json?.data ?? []);
 console.log(`   ${aportes.length >= 1 ? '✓' : '✗'} ${aportes.length} aporte(s) esperando revisión`);
 if (!aportes.length) mal('no hay ningún aporte pendiente que enseñar');
 
+if (aporteDeLaPrueba) await pool.query('DELETE FROM soporte.aportes WHERE id = $1', [aporteDeLaPrueba]);
 await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
 await pool.end();
 

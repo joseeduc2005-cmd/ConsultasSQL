@@ -149,6 +149,47 @@ describe('se ejecuta lo que se escribio', () => {
   });
 });
 
+describe('un «:algo» dentro de un texto no es un parametro', () => {
+  // `TO_CHAR(fecha, 'HH24:MI')` es como se escribe una hora en Oracle, y aparece en
+  // cualquier informe. El `:MI` se tomaba por un parametro: el formato salia convertido
+  // en `'YYYY-MM-DD HH24$1'` y se mandaba un parametro de mas con valor nulo, asi que
+  // Oracle respondia «1 bind placeholders were used but 2 bind values were provided».
+  const armar = (sql, datos) => buildManualSqlQuery(sql, datos);
+
+  it('respeta un formato de fecha de Oracle', () => {
+    const r = armar(
+      "SELECT TO_CHAR(t.abierto_en, 'YYYY-MM-DD HH24:MI') AS abierto FROM t WHERE t.cedula = :cedula",
+      { cedula: '012' },
+    );
+    assert.ok(r.text.includes("'YYYY-MM-DD HH24:MI'"), r.text);
+    assert.deepEqual(r.values, ['012']);
+    assert.deepEqual(r.placeholderOrder, ['cedula']);
+  });
+
+  it('respeta una hora literal', () => {
+    const r = armar("SELECT 1 FROM t WHERE hora = '10:30' AND x = :valor", { valor: '9' });
+    assert.ok(r.text.includes("'10:30'"), r.text);
+    assert.deepEqual(r.values, ['9']);
+  });
+
+  it('respeta un comentario', () => {
+    const r = armar(['-- ojo con :esto', 'SELECT 1 FROM t WHERE x = :valor'].join(String.fromCharCode(10)), { valor: '9' });
+    assert.ok(r.text.includes(':esto'), r.text);
+    assert.deepEqual(r.values, ['9']);
+  });
+
+  it('un texto con dos puntos no convierte la consulta en parametrizada', () => {
+    const r = armar("SELECT 'texto con :palabra' AS a FROM t", {});
+    assert.deepEqual(r.values, []);
+    assert.ok(r.text.includes(':palabra'), r.text);
+  });
+
+  it('la comilla repetida no rompe el conteo', () => {
+    const r = armar("SELECT 'O''Brien :x' AS a FROM t WHERE b = :real", { real: '1' });
+    assert.deepEqual(r.values, ['1']);
+  });
+});
+
 describe('el filtro opcional, cuando se pide', () => {
   it('deja el nombre del parametro entero aunque siga un parentesis', () => {
     assert.equal(

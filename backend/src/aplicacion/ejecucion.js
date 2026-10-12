@@ -29,6 +29,7 @@
  * desde fuera es la mitad del punto de haberlas traído aquí.
  */
 import { getBusinessActionMetadata, getRequiredParamsForActions } from '../dominio/acciones/catalogo.js';
+import { asegurarConsultaDeMongo } from '../dominio/mongo/consulta.js';
 import { detectErrorAnalysisMode } from '../dominio/consultas/decidir.js';
 import { evaluateProceduralExpression, evaluateSimpleCondition, evaluateValidationCondition, evaluateWorkflowValidationCondition, extractVariables, formatRaiseNoticeMessage, getManualSqlStepTitle, normalizeWorkflowStoredValue, replaceVariables, resolveTemplateVariable } from '../dominio/flujos/pasos.js';
 import { buildAggregatedResultFromStepPayload, buildComplexWorkflowExplanation, buildDistributedSyntheticSql, buildPerStepWriteSummary } from '../dominio/presentacion/agregacion.js';
@@ -1159,15 +1160,18 @@ export function crearEjecucionDeScripts({
       return executeProceduralScriptWithNotices(sqlText, emit);
     }
 
-    // Guard: reject raw MongoDB BSON documents (ObjectId/NumberInt/ISODate without db. prefix)
-    // These cause confusing JS parser errors downstream. Users must use db.collection.op() syntax.
-    const BSON_CONSTRUCTOR_RE = /\b(ObjectId|NumberInt|NumberLong|NumberDecimal|Double|ISODate)\s*\(/;
-    if (BSON_CONSTRUCTOR_RE.test(sqlText) && !/^\s*db\./.test(sqlText)) {
-      throw new Error(
-        'Se detectó un documento MongoDB (ObjectId/NumberInt/ISODate). '
-        + 'Para consultar usa: db.conciliacion.find({institutionCode:4}) '
-        + 'o db.conciliacion.aggregate([{$match:{institutionCode:4}}])'
-      );
+    // Una consulta de Mongo con los tipos de la consola ya se entiende.
+    //
+    // Aquí se rechazaba cualquier texto con `ObjectId(`, `NumberInt(` o `ISODate(` que no
+    // empezara por `db.`, porque antes esos textos reventaban más abajo con errores del
+    // intérprete de JavaScript. Tenía sentido cuando no había con qué leerlos; ahora sí
+    // lo hay, y lo único que conseguía la guarda era rechazar justo las consultas que
+    // funcionan — las que la gente copia de Compass tal cual.
+    //
+    // Lo que sí hace falta es distinguir una consulta de un documento pegado por error:
+    // eso lo dice la puerta de Mongo, y con un motivo concreto en vez de una sospecha.
+    if (String(sqlText || '').trim().startsWith('{')) {
+      asegurarConsultaDeMongo(sqlText);
     }
 
     const sqlSteps = splitManualSqlSteps(sqlText);

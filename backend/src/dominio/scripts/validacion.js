@@ -310,8 +310,18 @@ const EFECTOS_EN_UNA_CONSULTA = [
 export function asegurarSoloConsulta(sqlText) {
   const bruto = String(sqlText || '').trim();
   if (!bruto) return;
-  // Mongo no es SQL y tiene su propia puerta; aqui llegaria como un JSON suelto.
-  if (bruto.startsWith('{')) return;
+
+  // Mongo no es SQL, pero tiene que pasar por una puerta igual.
+  //
+  // Aqui habia un `return`: «es Mongo, ya lo mira su propia puerta». Para un articulo
+  // con `collection` y `operation` como campos sueltos es cierto. Pero la consulta
+  // tambien se puede escribir entera dentro de `sql`, y entonces baja por este camino y
+  // no habia ninguna otra puerta detras. Un `deleteMany` escrito asi se guardaba sin que
+  // nadie mirara nada.
+  if (bruto.startsWith('{')) {
+    asegurarConsultaDeMongo(bruto);
+    return;
+  }
 
   for (const sentencia of splitManualSqlSteps(bruto)) {
     const limpio = stripLeadingSqlComments(sentencia.replace(/;\s*$/, '').trim());

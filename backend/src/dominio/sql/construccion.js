@@ -13,6 +13,7 @@
  * registradas: eso es estado de la aplicación, no una regla del formato.
  */
 import { ALLOWED_WHERE_OPERATORS, assertManualSqlAllowed, isPlainObject, parseQualifiedFieldRef, resolveWhereEntry } from '../scripts/validacion.js';
+import { marcarLiteralesYComentarios } from './guardas.js';
 
 export const STRUCTURED_PLACEHOLDER_REGEX = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
 
@@ -104,9 +105,14 @@ export function collectManualSqlPlaceholderMetadata(sqlText = '') {
 
   const isContextPlaceholder = (name) => /^(step\d+\.|loopRow\.)/i.test(String(name || '').trim());
 
+  // Lo que esta dentro de una cadena o de un comentario no es un marcador: el `:MI` de
+  // `TO_CHAR(fecha, 'HH24:MI')` se contaba como parametro.
+  const enTexto = marcarLiteralesYComentarios(source);
+
   for (const match of source.matchAll(MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX)) {
     const [rawMatch = '', curlyVariable, namedVariable] = match;
     const offset = Number(match.index || 0);
+    if (enTexto[offset]) continue;
     if (rawMatch.startsWith(':')) {
       const previousChar = offset > 0 ? source[offset - 1] : '';
       if (previousChar === ':') {
@@ -297,6 +303,11 @@ export function applyCastToSqlPlaceholder(sqlPlaceholder = '', castType = null) 
 export function applyOptionalSqlFilterTransform(sqlText = '') {
   let sql = String(sqlText || '');
 
+  // Un marcador dentro de una cadena no se toca. Aqui el riesgo es el mismo que al
+  // sustituir: reescribir el interior de un formato de fecha.
+  const enTexto = marcarLiteralesYComentarios(sql);
+  const esCodigo = (posicion) => !enTexto[Number(posicion) || 0];
+
   // El filtro opcional: si no mandan el dato, no se filtra por el.
   //
   // El orden de los dos lados del OR no es cosmetico. Antes se generaba
@@ -324,7 +335,8 @@ export function applyOptionalSqlFilterTransform(sqlText = '') {
   // el retroceso deja de servir y el nombre se casa entero o no se casa.
   sql = sql.replace(
     /([\w".]+)\s*=\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?![\w])/gi,
-    (match, leftExpr, placeholderExpr, curlyName, namedName) => {
+    (match, leftExpr, placeholderExpr, curlyName, namedName, offset) => {
+      if (!esCodigo(offset)) return match;
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
       return `(${leftExpr} = ${placeholderExpr} OR ${placeholderExpr} IS NULL)`;
@@ -334,7 +346,8 @@ export function applyOptionalSqlFilterTransform(sqlText = '') {
   // campo ILIKE :variable  ->  (campo ILIKE '%' || :variable || '%' OR :variable IS NULL)
   sql = sql.replace(
     /([\w".]+)\s+ILIKE\s*(\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|:([a-zA-Z_][a-zA-Z0-9_]*))(?![\w])(?!\s*\|\|)/gi,
-    (match, leftExpr, placeholderExpr, curlyName, namedName) => {
+    (match, leftExpr, placeholderExpr, curlyName, namedName, offset) => {
+      if (!esCodigo(offset)) return match;
       const varName = String(curlyName || namedName || '').trim();
       if (!isOptionalUserPlaceholder(varName)) return match;
       return `(${leftExpr} ILIKE '%' || ${placeholderExpr} || '%' OR ${placeholderExpr} IS NULL)`;
@@ -463,7 +476,13 @@ export function buildManualSqlQuery(sqlText, rawParams = {}, workflowContext = {
     return `$${variableIndexes.get(key)}`;
   };
 
+  const dentroDeTexto = marcarLiteralesYComentarios(cleaned);
+
   const text = cleaned.replace(MANUAL_SQL_CANONICAL_PLACEHOLDER_REGEX, (match, curlyVariable, namedVariable, offset, source) => {
+    // Dentro de una cadena o de un comentario se deja tal cual. Si no, el formato de
+    // fecha `'YYYY-MM-DD HH24:MI'` salía convertido en `'YYYY-MM-DD HH24$1'`.
+    if (dentroDeTexto[Number(offset) || 0]) return match;
+
     const variableName = String(curlyVariable || namedVariable || '').trim();
     if (!variableName) {
       throw new Error('Placeholder SQL inválido');

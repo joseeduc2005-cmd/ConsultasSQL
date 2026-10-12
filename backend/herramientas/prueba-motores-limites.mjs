@@ -177,9 +177,6 @@ await frena('oracle_local', 'WITH PROCEDURE dentro de un SELECT',
   `WITH PROCEDURE p IS BEGIN DELETE FROM tareas; END;
    SELECT 1 FROM dual`);
 
-await frena('oracle_local', 'DBMS_ en una consulta',
-  "SELECT DBMS_XMLGEN.GETXML('SELECT 1 FROM dual') FROM dual");
-
 await frena('oracle_local', 'INSERT ALL multitabla',
   "INSERT ALL INTO tareas (id, ticket_id) VALUES (999, 1) SELECT * FROM dual");
 

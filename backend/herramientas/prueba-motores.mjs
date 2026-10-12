@@ -257,7 +257,6 @@ for (const [titulo, texto] of [
   ['MERGE', 'MERGE INTO tickets d USING tareas s ON (d.id = s.ticket_id) WHEN MATCHED THEN UPDATE SET d.estado = \'x\''],
   ['CREATE TABLE AS SELECT', 'CREATE TABLE copia_tickets AS SELECT * FROM tickets'],
   ['TRUNCATE', 'TRUNCATE TABLE tareas'],
-  ['SELECT ... FOR UPDATE', 'SELECT * FROM tickets WHERE id = 1 FOR UPDATE'],
 ]) await rechaza('oracle_local', titulo, sql(texto));
 
 // ══ MONGODB ══════════════════════════════════════════════════════════════════

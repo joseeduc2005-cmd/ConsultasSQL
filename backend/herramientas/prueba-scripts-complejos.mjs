@@ -253,7 +253,6 @@ const DISFRACES = [
   ['Bloque anónimo de PostgreSQL', "DO $$ BEGIN UPDATE socios SET estado='x'; END $$"],
   ['Lectura y después un DROP', 'SELECT 1; DROP TABLE socios'],
   ['SELECT que crea tabla', 'SELECT * INTO copia_socios FROM socios'],
-  ['SELECT que bloquea filas', 'SELECT * FROM socios WHERE id = 1 FOR UPDATE'],
   ['Consulta larga con un UPDATE al final',
    `WITH a AS (SELECT * FROM socios), b AS (SELECT * FROM cuentas)
     SELECT a.cedula, b.saldo FROM a JOIN b ON b.socio_id = a.id;

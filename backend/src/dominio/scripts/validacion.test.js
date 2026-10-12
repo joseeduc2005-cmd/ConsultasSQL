@@ -194,9 +194,10 @@ describe('el sistema ya no escribe', () => {
   });
 });
 
-describe('la puerta: solo pasa lo que es una consulta', () => {
-  // Esta puerta se ha cerrado tres veces, y las tres se descubrio probando a mano. Lo
-  // que fallaba no era la lista de lo prohibido: era que lo que no reconocia pasaba.
+describe('la puerta: se bloquea lo que cambia datos', () => {
+  // Esta puerta se ha movido tres veces, y las tres se descubrio probando a mano. La
+  // regla de ahora: se bloquea lo que cambia datos o estructura, y lo que no se puede
+  // leer lo bastante como para saberlo. Todo lo demas se ejecuta, por complicado que sea.
   const rechaza = (sql) => {
     assert.throws(() => asegurarSoloConsulta(sql), undefined, `deberia rechazar: ${sql}`);
   };
@@ -204,50 +205,50 @@ describe('la puerta: solo pasa lo que es una consulta', () => {
     assert.doesNotThrow(() => asegurarSoloConsulta(sql), `deberia dejar pasar: ${sql}`);
   };
 
-  it('rechaza las escrituras que se anuncian', () => {
+  it('rechaza lo que cambia los datos', () => {
     rechaza("UPDATE socios SET estado = 'activo'");
     rechaza('DELETE FROM socios');
     rechaza("INSERT INTO socios (cedula) VALUES ('x')");
     rechaza('MERGE INTO socios s USING t ON (s.id=t.id) WHEN MATCHED THEN UPDATE SET s.e = t.e');
     rechaza('TRUNCATE transacciones');
+    rechaza("INSERT ALL INTO tareas (id) VALUES (1) SELECT * FROM dual");
+  });
+
+  it('rechaza lo que cambia la estructura', () => {
+    // Un DROP TABLE se lleva por delante mas que cualquier DELETE.
     rechaza('DROP TABLE socios');
+    rechaza('CREATE TABLE copia AS SELECT * FROM socios');
+    rechaza('ALTER TABLE socios ADD x NUMBER');
     rechaza('GRANT ALL ON socios TO public');
-    rechaza('CALL corresponsales.p_borra_todo()');
-    rechaza('EXEC sp_borra_todo');
+    rechaza('SELECT * INTO copia FROM socios');
   });
 
-  it('rechaza los bloques procedurales, que es como escribe Oracle', () => {
-    // La base de la cooperativa es Oracle y alli el bloque es la forma normal de
-    // escribir. Ninguno empieza por una palabra que detectSqlOperation conozca, asi que
-    // todos entraban.
-    rechaza("BEGIN UPDATE corresponsales.usuario SET estado='A'; COMMIT; END;");
-    rechaza('DECLARE n NUMBER; BEGIN DELETE FROM usuario; COMMIT; END;');
-    rechaza("BEGIN EXECUTE IMMEDIATE 'DROP TABLE socios'; END;");
-    rechaza("DO $$ BEGIN UPDATE socios SET estado='x'; END $$");
-  });
-
-  it('rechaza lo que escribe en otros motores', () => {
+  it('rechaza lo que mete filas aunque no lo diga su primera palabra', () => {
     rechaza("REPLACE INTO socios (id, cedula) VALUES (1,'x')");
+    rechaza("LOAD DATA INFILE '/tmp/x.csv' INTO TABLE socios");
     rechaza("COPY socios FROM '/tmp/x.csv' CSV");
-    rechaza('SET session_replication_role = replica');
-    rechaza('LOCK TABLE socios IN EXCLUSIVE MODE');
-    rechaza('VACUUM FULL socios');
   });
 
   it('rechaza lo que escribe aunque empiece por SELECT', () => {
-    // Las tres se leen como 'select' y las tres tocan la base.
     rechaza('WITH ido AS (DELETE FROM socios WHERE id = 1 RETURNING *) SELECT * FROM ido');
     rechaza("WITH u AS (UPDATE socios SET estado='x' RETURNING *) SELECT count(*) FROM u");
     rechaza('WITH i AS (INSERT INTO socios VALUES (1) RETURNING *) SELECT * FROM i');
-    rechaza('SELECT * INTO copia FROM socios');
-    rechaza('SELECT * FROM socios WHERE id = 1 FOR UPDATE');
   });
 
   it('mira todas las sentencias, no solo la primera', () => {
-    // «SELECT 1; DROP TABLE socios» pasaba entera porque solo se miraba la primera.
     rechaza('SELECT 1; DROP TABLE socios');
     rechaza("SELECT 1; UPDATE socios SET estado='x'");
     rechaza('(SELECT 1); DELETE FROM socios');
+  });
+
+  it('rechaza lo que no se puede leer, y dice por que', () => {
+    // No estan prohibidos: es que el UPDATE puede estar dentro del nombre, y la unica
+    // forma de saberlo seria ejecutarlos.
+    const motivo = /No se puede saber si eso cambia datos/;
+    assert.throws(() => asegurarSoloConsulta('BEGIN pkg.recalcular_saldos(); END;'), motivo);
+    assert.throws(() => asegurarSoloConsulta('CALL corresponsales.p_cerrar_mes()'), motivo);
+    assert.throws(() => asegurarSoloConsulta("BEGIN EXECUTE IMMEDIATE 'DROP TABLE x'; END;"), motivo);
+    assert.throws(() => asegurarSoloConsulta("DO $$ BEGIN UPDATE socios SET estado='x'; END $$"), motivo);
   });
 
   it('deja pasar las consultas complejas, que son la mayoria', () => {
@@ -263,9 +264,28 @@ describe('la puerta: solo pasa lo que es una consulta', () => {
     deja('SELECT 1; SELECT 2;');
   });
 
+  it('deja pasar las otras formas de leer', () => {
+    // Quedaban como «no se reconoce» y se rechazaban, aunque no tocan un dato. Un
+    // EXPLAIN es de las primeras cosas que escribe quien esta investigando algo.
+    deja('EXPLAIN SELECT * FROM socios');
+    deja('SHOW TABLES');
+    deja('DESCRIBE socios');
+    deja('TABLE socios');
+    deja('VALUES (1),(2)');
+    deja('COPY (SELECT * FROM socios) TO STDOUT');
+  });
+
+  it('deja pasar lo que no cambia datos aunque toque la sesion', () => {
+    // Bloquear de mas obliga a la gente a buscarle la vuelta a la herramienta.
+    deja('LOCK TABLE socios IN EXCLUSIVE MODE');
+    deja('VACUUM FULL socios');
+    deja("SET work_mem = '64MB'");
+    deja('ANALYZE socios');
+    // Toma candados, pero no cambia un solo dato.
+    deja('SELECT * FROM socios WHERE id = 1 FOR UPDATE');
+  });
+
   it('no confunde una palabra escrita con una orden', () => {
-    // El riesgo de apretar la puerta es frenar lecturas buenas, y entonces la gente le
-    // busca la vuelta a la herramienta. Se mira el texto sin literales ni comentarios.
     deja("SELECT * FROM logs WHERE accion = 'delete'");
     deja('SELECT updated_at, deleted_at FROM socios');
     deja('WITH delete_candidates AS (SELECT 1 AS x) SELECT * FROM delete_candidates');
